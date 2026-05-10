@@ -309,6 +309,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 if(MSVC)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
     add_compile_options(/Zc:__cplusplus /permissive-)
 endif()
 
@@ -913,13 +914,88 @@ endif()
 if(WIN32 AND MSVC)
     set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION ".")
     set(CMAKE_INSTALL_UCRT_LIBRARIES TRUE)
+    set(CMAKE_INSTALL_DEBUG_LIBRARIES FALSE)
 
     include(InstallRequiredSystemLibraries)
 
-    message(STATUS "MSVC runtime libraries:")
+    message(STATUS "MSVC runtime libraries from InstallRequiredSystemLibraries:")
     foreach(raad_runtime_lib IN LISTS CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS)
         message(STATUS "  ${raad_runtime_lib}")
     endforeach()
+
+    if(CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS)
+        install(FILES ${CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS}
+            CONFIGURATIONS Release RelWithDebInfo
+            DESTINATION "."
+        )
+    endif()
+
+    set(RAAD_MSVC_REDIST_ARCH "")
+    if(CMAKE_GENERATOR_PLATFORM MATCHES "^[Aa][Rr][Mm]64$")
+        set(RAAD_MSVC_REDIST_ARCH "arm64")
+    elseif(CMAKE_GENERATOR_PLATFORM MATCHES "^[Xx]64$|^[Ww]in64$|^[Aa][Mm][Dd]64$")
+        set(RAAD_MSVC_REDIST_ARCH "x64")
+    elseif(RAAD_TARGET_BUILD_ARCH STREQUAL "arm64")
+        set(RAAD_MSVC_REDIST_ARCH "arm64")
+    else()
+        set(RAAD_MSVC_REDIST_ARCH "x64")
+    endif()
+
+    set(RAAD_MSVC_REDIST_DLLS "")
+
+    if(DEFINED ENV{VCToolsRedistDir} AND NOT "$ENV{VCToolsRedistDir}" STREQUAL "")
+        file(TO_CMAKE_PATH "$ENV{VCToolsRedistDir}" RAAD_VC_REDIST_DIR)
+
+        file(GLOB RAAD_MSVC_CRT_DLLS
+            "${RAAD_VC_REDIST_DIR}/${RAAD_MSVC_REDIST_ARCH}/Microsoft.VC*.CRT/*.dll"
+        )
+
+        file(GLOB RAAD_MSVC_OPENMP_DLLS
+            "${RAAD_VC_REDIST_DIR}/${RAAD_MSVC_REDIST_ARCH}/Microsoft.VC*.OpenMP/*.dll"
+        )
+
+        list(APPEND RAAD_MSVC_REDIST_DLLS
+            ${RAAD_MSVC_CRT_DLLS}
+            ${RAAD_MSVC_OPENMP_DLLS}
+        )
+    endif()
+
+    if(NOT RAAD_MSVC_REDIST_DLLS AND DEFINED ENV{VCINSTALLDIR} AND NOT "$ENV{VCINSTALLDIR}" STREQUAL "")
+        file(TO_CMAKE_PATH "$ENV{VCINSTALLDIR}" RAAD_VC_INSTALL_DIR)
+
+        file(GLOB_RECURSE RAAD_MSVC_CRT_DLLS
+            "${RAAD_VC_INSTALL_DIR}/Redist/MSVC/*/${RAAD_MSVC_REDIST_ARCH}/Microsoft.VC*.CRT/*.dll"
+        )
+
+        file(GLOB_RECURSE RAAD_MSVC_OPENMP_DLLS
+            "${RAAD_VC_INSTALL_DIR}/Redist/MSVC/*/${RAAD_MSVC_REDIST_ARCH}/Microsoft.VC*.OpenMP/*.dll"
+        )
+
+        list(APPEND RAAD_MSVC_REDIST_DLLS
+            ${RAAD_MSVC_CRT_DLLS}
+            ${RAAD_MSVC_OPENMP_DLLS}
+        )
+    endif()
+
+    list(REMOVE_DUPLICATES RAAD_MSVC_REDIST_DLLS)
+
+    message(STATUS "RAAD MSVC redist arch: ${RAAD_MSVC_REDIST_ARCH}")
+    message(STATUS "RAAD explicit MSVC redist DLLs:")
+    foreach(raad_redist_dll IN LISTS RAAD_MSVC_REDIST_DLLS)
+        message(STATUS "  ${raad_redist_dll}")
+    endforeach()
+
+    if(RAAD_MSVC_REDIST_DLLS)
+        install(FILES ${RAAD_MSVC_REDIST_DLLS}
+            CONFIGURATIONS Release RelWithDebInfo
+            DESTINATION "."
+        )
+    else()
+        message(WARNING
+            "No explicit MSVC redist DLLs found. "
+            "Run CMake from a Visual Studio Developer shell or make sure VCToolsRedistDir is available."
+        )
+    endif()
 endif()
 
 include(GNUInstallDirs)
