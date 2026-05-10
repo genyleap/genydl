@@ -1,0 +1,267 @@
+name: RAAD CI
+
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS Apple Silicon
+          - name: macos-arm64
+            os: macos-14
+            qt_version: "6.11.0"
+            qt_arch: clang_64
+            target_arch: arm64
+            macos_deployment_target: "15.1"
+
+          # macOS Intel
+          # If this runner label is not available in your account,
+          # replace it with your available Intel macOS runner label.
+          - name: macos-x86_64
+            os: macos-15-intel
+            qt_version: "6.11.0"
+            qt_arch: clang_64
+            target_arch: x86_64
+            macos_deployment_target: "15.1"
+
+          # Windows Intel/AMD 64-bit
+          - name: windows-x64
+            os: windows-latest
+            qt_version: "6.10.3"
+            qt_arch: win64_msvc2022_64
+            cmake_arch: x64
+            target_arch: x86_64
+
+          # Windows ARM64
+          - name: windows-arm64
+            os: windows-11-arm
+            qt_version: "6.10.3"
+            qt_arch: win64_msvc2022_arm64
+            cmake_arch: ARM64
+            target_arch: arm64
+
+    env:
+      CMAKE_VERSION: "4.2.3"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ matrix.qt_version }}
+          arch: ${{ matrix.qt_arch }}
+          cache: true
+
+      - name: Install CMake
+        uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: ${{ env.CMAKE_VERSION }}
+
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew install ninja llvm
+
+      - name: Install Windows dependencies
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install -y ninja nsis 7zip
+
+      - name: Configure LLVM on macOS
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          LLVM_PREFIX="$(brew --prefix llvm)"
+
+          echo "CC=${LLVM_PREFIX}/bin/clang" >> "$GITHUB_ENV"
+          echo "CXX=${LLVM_PREFIX}/bin/clang++" >> "$GITHUB_ENV"
+          echo "CLANG_SCAN_DEPS=${LLVM_PREFIX}/bin/clang-scan-deps" >> "$GITHUB_ENV"
+          echo "${LLVM_PREFIX}/bin" >> "$GITHUB_PATH"
+
+          SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
+          echo "SDKROOT=${SDKROOT}" >> "$GITHUB_ENV"
+
+      - name: Print macOS tool versions
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "QT_ROOT_DIR=${QT_ROOT_DIR}"
+          echo "CC=${CC}"
+          echo "CXX=${CXX}"
+          echo "CLANG_SCAN_DEPS=${CLANG_SCAN_DEPS}"
+          echo "SDKROOT=${SDKROOT}"
+
+          "${CXX}" --version
+          "${CLANG_SCAN_DEPS}" --version
+          cmake --version
+          ninja --version
+          xcrun --sdk macosx --show-sdk-version
+
+      - name: Configure MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.cmake_arch }}
+
+      - name: Configure macOS
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="${QT_ROOT_DIR}" \
+            -DCMAKE_C_COMPILER="${CC}" \
+            -DCMAKE_CXX_COMPILER="${CXX}" \
+            -DCMAKE_CXX_SCAN_FOR_MODULES=ON \
+            -DCMAKE_CXX_COMPILER_CLANG_SCAN_DEPS="${CLANG_SCAN_DEPS}" \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET="${{ matrix.macos_deployment_target }}" \
+            -DRAAD_MACOS_DEPLOYMENT_TARGET="${{ matrix.macos_deployment_target }}" \
+            -DRAAD_USE_MODULES=ON \
+            -DRAAD_LLVM_AUTO_SCAN=ON \
+            -DRAAD_TARGET_ARCH="${{ matrix.target_arch }}" \
+            -DRAAD_TARGET_BUILD_ARCH="${{ matrix.target_arch }}" \
+            -DRAAD_MACOS_CODESIGN=ON \
+            -DRAAD_CODESIGN_IDENTITY="-"
+
+      - name: Configure Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cmake -S . -B build `
+            -G "Visual Studio 17 2022" -A "${{ matrix.cmake_arch }}" `
+            -DCMAKE_CONFIGURATION_TYPES="Release" `
+            -DCMAKE_PREFIX_PATH="${env:QT_ROOT_DIR}" `
+            -DCMAKE_CXX_SCAN_FOR_MODULES=ON `
+            -DRAAD_USE_MODULES=ON `
+            -DRAAD_TARGET_ARCH="${{ matrix.target_arch }}" `
+            -DRAAD_TARGET_BUILD_ARCH="${{ matrix.target_arch }}"
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Verify macOS deployment target
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APP="build/bin/Raad.app"
+
+          for f in \
+            "$APP/Contents/MacOS/Raad" \
+            "$APP/Contents/MacOS/RaadUpdaterHelper"
+          do
+            echo
+            echo "==== $f ===="
+
+            if [ ! -f "$f" ]; then
+              echo "ERROR: Missing expected executable: $f"
+              find "$APP/Contents/MacOS" -maxdepth 1 -type f -print || true
+              exit 1
+            fi
+
+            otool -l "$f" | grep -A5 LC_BUILD_VERSION || true
+
+            if otool -l "$f" | grep -A5 LC_BUILD_VERSION | grep -q "minos 26."; then
+              echo "ERROR: $f was built with macOS 26.x minimum target."
+              exit 1
+            fi
+          done
+
+      - name: Verify macOS bundle contents
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APP="build/bin/Raad.app"
+
+          test -d "$APP"
+          test -f "$APP/Contents/MacOS/Raad"
+          test -f "$APP/Contents/MacOS/RaadUpdaterHelper"
+
+          echo "Bundle contents:"
+          find "$APP/Contents" -maxdepth 3 -type f | sort | head -200
+
+      - name: Verify Windows build outputs
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          if (!(Test-Path "build\bin\Release\Raad.exe") -and !(Test-Path "build\bin\Raad.exe")) {
+            Write-Host "Could not find Raad.exe. Listing build/bin:"
+            if (Test-Path "build\bin") {
+              Get-ChildItem -Recurse "build\bin" | Select-Object -First 200 | Format-Table -AutoSize
+            }
+            exit 1
+          }
+
+          if (!(Test-Path "build\bin\Release\RaadUpdaterHelper.exe") -and !(Test-Path "build\bin\RaadUpdaterHelper.exe")) {
+            Write-Host "Could not find RaadUpdaterHelper.exe. Listing build/bin:"
+            if (Test-Path "build\bin") {
+              Get-ChildItem -Recurse "build\bin" | Select-Object -First 200 | Format-Table -AutoSize
+            }
+            exit 1
+          }
+
+      - name: Package
+        run: cpack --config build/CPackConfig.cmake -C Release
+
+      - name: Collect packages
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p artifacts
+
+          find build/final -type f -name "*.dmg" -exec cp {} artifacts/ \;
+          find build/final -type f -name "*.zip" -exec cp {} artifacts/ \;
+          find build/final -type f -name "*.exe" -exec cp {} artifacts/ \;
+          find build/final -type f -name "*.tar.gz" -exec cp {} artifacts/ \;
+          find build/final -type f -name "*.tgz" -exec cp {} artifacts/ \;
+
+          if [ -z "$(find artifacts -type f -print -quit)" ]; then
+            echo "No packages found. Listing recent build files:"
+            find build -maxdepth 6 -type f | sort | tail -300
+            exit 1
+          fi
+
+          ls -lah artifacts
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Raad-${{ matrix.name }}
+          path: artifacts/*
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: artifacts/*
+          fail_on_unmatched_files: true
+          generate_release_notes: true
