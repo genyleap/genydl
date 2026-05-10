@@ -51,19 +51,20 @@ T.AbstractButton {
             Layout.preferredWidth: 22
             text: control.iconGlyph
             visible: text.length > 0
-            font.family: FontSystem.getAwesomeLight.name
-            font.weight: Font.Light
+
+            font.family: FontSystem.getAwesomeSolid.name
+            font.weight: Font.Black
+
             font.pixelSize: control.child ? Typography.t2 : Typography.t1
             color: control.selected ? Colors.textPrimary : Colors.textSecondary
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
         }
-
         Text {
             Layout.fillWidth: true
             text: control.text
             font.pixelSize: control.child ? Typography.t2 : Typography.t1
-            font.weight: control.child ? Font.Light : Font.Medium
+            // font.weight: control.child ? Font.Light : Font.Medium
             color: control.selected ? Colors.textPrimary : Colors.textSecondary
             elide: Text.ElideRight
             verticalAlignment: Text.AlignVCenter
@@ -73,6 +74,7 @@ T.AbstractButton {
             visible: control.expandable
             text: "\uf078"
             font.family: FontSystem.getAwesomeSolid.name
+            font.weight: Font.Black
             font.pixelSize: Typography.t2
             color: Colors.textMuted
             verticalAlignment: Text.AlignVCenter

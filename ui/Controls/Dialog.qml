@@ -513,9 +513,9 @@ Dialog {
                 horizontalAlignment: Text.AlignLeft
                 verticalAlignment: Text.AlignVCenter
                 text: control.iconText
-                font.family: FontSystem.getAwesomeLight.name
+                font.family: FontSystem.getAwesomeSolid.name
+                font.weight: Font.Black
                 font.pixelSize: Typography.h2
-                font.weight: Font.Light
                 color: control.styleColor
             }
         }

@@ -52,9 +52,9 @@ T.Button {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: control.iconGlyph
                 visible: text.length > 0
-                font.family: FontSystem.getAwesomeLight.name
+                font.family: FontSystem.getAwesomeSolid.name
+                font.weight: Font.Black
                 font.pixelSize: 22
-                font.weight: Font.Light
                 color: Colors.accentPrimary
                 horizontalAlignment: Text.AlignHCenter
                 styleColor: Colors.accent

@@ -12,7 +12,7 @@ import QtQuick as T
 import Raad
 
 T.Text {
-    font.family: FontSystem.getContentFontRegular.name
+    font.family: FontSystem.getContentFont.name
     horizontalAlignment: Text.AlignLeft
     wrapMode: Text.WordWrap
     font.pixelSize: Typography.t2

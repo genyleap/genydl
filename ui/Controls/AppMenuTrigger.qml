@@ -33,7 +33,6 @@ Item {
         anchors.centerIn: parent
         text: control.text
         font.pixelSize: Typography.t2
-        font.weight: Font.Light
         color: control.active ? Colors.textPrimary : Colors.textSecondary
     }
 

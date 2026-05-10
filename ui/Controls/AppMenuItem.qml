@@ -31,6 +31,7 @@ MenuItem {
             visible: control.iconGlyph.length > 0
             text: control.iconGlyph
             font.family: FontSystem.getAwesomeSolid.name
+            font.weight: Font.Black
             font.pixelSize: Typography.t2
             color: control.enabled ? Colors.textSecondary : Colors.textMuted
             horizontalAlignment: Text.AlignHCenter
@@ -40,7 +41,6 @@ MenuItem {
         Text {
             text: control.text
             font.pixelSize: Typography.t2
-            font.weight: Font.Light
             color: control.enabled ? Colors.textPrimary : Colors.textMuted
             verticalAlignment: Text.AlignVCenter
         }
@@ -54,7 +54,6 @@ MenuItem {
         anchors.fill: parent
         anchors.leftMargin: parent.width / 1.1
         visible: !!control.subMenu
-        font.weight: Font.Light
         font.bold: false
         text: "\u203A"
         x: parent.width

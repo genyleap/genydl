@@ -54,6 +54,7 @@ T.Button {
         Text {
             text: control.iconGlyph
             font.family: FontSystem.getAwesomeSolid.name
+            font.weight: Font.Black
             font.pixelSize: Typography.h3
             color: Colors.textSecondary
             horizontalAlignment: Text.AlignHCenter
@@ -85,6 +86,7 @@ T.Button {
                 anchors.centerIn: parent
                 text: control.badgeGlyph
                 font.family: FontSystem.getAwesomeSolid.name
+                font.weight: Font.Black
                 font.pixelSize: Typography.h3
                 color: Colors.primary
             }
