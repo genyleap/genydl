@@ -4,96 +4,84 @@
 
 **Next-Gen, Ultra-Fast, and Reliable Download Manager**
 
-Raad is a modern, high-performance download manager built with modern **C++20** and **Qt 6**, designed for speed, reliability, and clean architecture — with future integration for **Geny token and blockchain-powered features**.
+Raad is a modern, high-performance download manager built with **C++23**, **Qt 6**, and **QML**, designed for speed, reliability, clean architecture, and a polished desktop experience — with future integration for the **Geny token ecosystem** and blockchain-powered features.
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
-![C++](https://img.shields.io/badge/C%2B%2B%20Version-20-blue.svg)
+![C++](https://img.shields.io/badge/C%2B%2B%20Version-23-blue.svg)
+![Qt](https://img.shields.io/badge/Qt-6.8%2B-brightgreen.svg)
 ![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen.svg)
 
-![5d3802f2-d94e-4b09-ba74-94910af8ff8c-d1](https://github.com/user-attachments/assets/1cb69065-2441-49e3-ad98-dceca633f97f)
+![Raad Preview](https://github.com/user-attachments/assets/1cb69065-2441-49e3-ad98-dceca633f97f)
 
 ## 🚧 Project Status
-> Raad is currently **under active development**.  
-> The core download engine is in progress, and the **graphical UI has not completed yet**.
 
+> Raad is currently under active development.  
+> Version **1.0.0** is the first milestone release, focused on the desktop UI, core download workflow, packaging, and runtime foundation.
 
 ## Highlights
-- Multi-segment downloads with resume, retry, mirror failover, and per-segment progress
-- Adaptive segment controller based on runtime/network and main resources like CPU, RAM and HDD/SSD Storage R/W speed conditions
-- Queue policies: concurrency, bandwidth caps, schedules, quotas, and domain routing
-- Per-task/global speed limits, proxy/auth/header/cookie/User-Agent controls, and optional insecure SSL
-- Checksum verification, session persistence, import/export, and post-download actions
-- Power-aware behavior, runtime telemetry, URL probe, and integrated update client
 
-## Highlights (Not Actually Implemented Yet)
+- Modern QML-based desktop interface
+- Multi-segment download engine foundation
+- Resume, pause, retry, cancel, and remove actions
+- Per-segment progress and download details window
+- Queue and category-based download organization
+- Adaptive segment controller foundation
+- Per-task and global speed limit foundation
+- Proxy, SSL, User-Agent, and network configuration foundation
+- Runtime dashboard for CPU, memory, disk, network, and transfer status
+- URL probe and integrated update client foundation
+- Session persistence, import/export, and post-download action foundation
+- Cross-platform packaging for macOS and Windows
+
+## Planned Features
 
 - Speed and network tester module
-- $Geny token and NFTs blockchain integration
-- Application store for better maintenance (To keep requirements and installed files up to date)
-- Auto platform and file detector
+- Geny token and NFT ecosystem integration
+- Application store for better maintenance and dependency updates
+- Auto platform and file type detector
 - Torrent and magnet backend support
-- Advanced remote terminal repo updater
-- Support YouTube and social multimedia features
+- Advanced remote terminal repository updater
+- YouTube and social media download support
+- More advanced mirror failover and checksum verification workflows
+
+## Shots
+<img width="1350" height="897" alt="Screenshot 2026-05-11 at 10 34 01" src="https://github.com/user-attachments/assets/f447ecdf-7acb-45ae-808e-7955d1c06634" />
+<img width="1316" height="869" alt="Screenshot 2026-05-11 at 10 34 14" src="https://github.com/user-attachments/assets/490fa9ad-a1b6-4c8c-ad85-c0caa8efc7c3" />
+<img width="1331" height="878" alt="Screenshot 2026-05-11 at 10 34 38" src="https://github.com/user-attachments/assets/f92dddab-f3a1-41d5-bd75-50a2fe1036d5" />
 
 ## Tech Stack
-- C++20 / CMake
-- Qt 6 (Core, Network, Concurrent, Quick, QuickControls2)
-- QML UI layer *(planned)*
 
+- C++23
+- CMake 3.28+
+- Qt 6.8+
+- Qt Quick / QML
+- Qt Core, Network, Concurrent, Gui, Quick, QuickControls2
+- C++20 Modules
 
 ## Requirements
+
 - CMake 3.28+
-- Qt 6.8+ *(tested with 6.10)*
-- A C++20-capable compiler
-- For C++20 modules:
-  - Clang + `clang-scan-deps` (LLVM toolchain)
+- Qt 6.8+
+- A C++23-capable compiler
+- For C++ modules:
+  - LLVM Clang + `clang-scan-deps` on macOS/Linux
+  - MSVC 2022 on Windows
 
-## Build (All Platforms)
-```bash
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
-cmake --build build
-````
+## Build
 
-
-## Modules and LLVM
-
-Raad uses **C++20 modules** by default.
-If your compiler does not fully support modules or `clang-scan-deps`, disable them:
+### macOS / Linux
 
 ```bash
-cmake -S . -B build -DRAAD_USE_MODULES=OFF
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release
 ```
 
-## Qt Discovery
+If GenyConnect helps you, consider supporting its continued development.
 
-If CMake cannot find Qt, set one of the following and reconfigure:
+## Crypto Donations
+GENY / ETH (ERC20)
+```0x6E99f7564d060AA141dcC47ede34379Bad0cDCCC```
+BTC
+```BC1Q2Q7G83V9UXATK0YSPFVCU3YDNMESEU3Y7P9J9N```
 
-```bash
-# Preferred
-- DQt6_DIR=/path/to/Qt/6.x.x/<platform>/lib/cmake/Qt6
-
-# Or
-- DCMAKE_PREFIX_PATH=/path/to/Qt/6.x.x/<platform>
-```
-
-## Run
-
-```bash
-./build/appraad
-```
-
-## Project Layout
-
-* `src/` — C++ core, download engine, and services
-* `ui/` — QML UI *(work in progress)*
-* `packaging/` — packaging assets and helpers
-
-## License
-
-MIT License — see `LICENSE`.
-
-## Status
-
-🚧 **Active development**
-Core features are being implemented.
-UI and user-facing components are planned for upcoming milestones.
+Your support keeps the project alive and evolving.
