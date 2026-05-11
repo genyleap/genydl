@@ -3751,155 +3751,170 @@ ApplicationWindow {
     header: Item {
         id: headerOne
         width: parent.width
-        height: 86
-
-        Layout.fillWidth: true
-        anchors.right: parent.right
+        height: 72
         anchors.left: parent.left
+        anchors.right: parent.right
 
-        ColumnLayout {
+        RowLayout {
             anchors.fill: parent
-            anchors.leftMargin: 14
-            anchors.rightMargin: 14
-            spacing: 10
+            anchors.leftMargin: 22
+            anchors.rightMargin: 18
+            anchors.topMargin: 8
+            anchors.bottomMargin: 8
+            spacing: 8
 
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 8
+            Rectangle {
+                Layout.preferredWidth: 110
+                Layout.preferredHeight: 38
+                Layout.alignment: Qt.AlignVCenter
+                radius: Metrics.innerRadius
+                color: Colors.lightShadow
+                clip: true
 
-                Item { Layout.preferredWidth: 5; }
+                RowLayout {
+                    anchors.centerIn: parent
+                    spacing: 10
 
-                Rectangle {
-                    Layout.preferredWidth: 110
-                    Layout.preferredHeight: 38
-                    radius: Metrics.innerRadius
-                    color: Colors.lightShadow
-                    clip: true
-                    RowLayout {
-                        anchors.centerIn: parent
-                        spacing: 10
-                        Controls.Text {
-                            font.family: FontSystem.getAwesomeSolid.name
-                            font.pixelSize: Typography.h2
-                            font.weight: Font.Bold
-                            color: Colors.warning
-                            text: "\ue0b7"
+                    Controls.Text {
+                        font.family: FontSystem.getAwesomeSolid.name
+                        font.pixelSize: Typography.h2
+                        font.weight: Font.Bold
+                        color: Colors.warning
+                        text: "\ue0b7"
+                    }
+
+                    Controls.Text {
+                        font.family: FontSystem.getContentFont.name
+                        font.pixelSize: Typography.h3
+                        color: Colors.textPrimary
+                        text: "RAAD"
+                    }
+                }
+
+            }
+
+            Item {
+
+                Layout.preferredWidth: 18
+
+            }
+
+            Row {
+                Layout.alignment: Qt.AlignVCenter
+                spacing: 2
+
+                Controls.AppMenuTrigger { text: "Actions"; menu: tasksTopMenu }
+                Controls.AppMenuTrigger { text: "File"; menu: fileTopMenu }
+                Controls.AppMenuTrigger { text: "Downloads"; menu: downloadsTopMenu }
+                Controls.AppMenuTrigger { text: "Configuration"; menu: configurationTopMenu }
+                Controls.AppMenuTrigger { text: "Help"; menu: helpTopMenu }
+
+            }
+
+            Item { Layout.fillWidth: true }
+
+            Rectangle {
+                Layout.preferredWidth: 512
+                Layout.preferredHeight: 58
+                Layout.maximumHeight: 58
+                Layout.alignment: Qt.AlignVCenter
+                radius: Metrics.innerRadius
+                color: Colors.backgroundActivated
+                border.width: 1
+                border.color: Colors.borderActivated
+                clip: true
+
+                gradient: LinearGradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.33; color: "transparent" }
+                    GradientStop { position: 1.0; color: Colors.backgroundItemActivated }
+
+                }
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.margins: 8
+                    spacing: 12
+
+                    Rectangle {
+                        Layout.preferredWidth: 42
+                        Layout.preferredHeight: 42
+                        Layout.alignment: Qt.AlignVCenter
+                        radius: 14
+                        color: "#001309"
+                        border.width: 1
+                        border.color: Colors.borderActivated
+                        clip: true
+
+                        Image {
+                            id: genyAdImage
+                            anchors.fill: parent
+                            anchors.margins: 7
+                            source: appRoot.genyTokenImageUrl
+                            fillMode: Image.PreserveAspectFit
+                            smooth: true
+                            asynchronous: true
+                            cache: true
                         }
 
-                        Controls.Text {
-                            font.family: FontSystem.getContentFont.name
-                            font.pixelSize: Typography.h3
+                        Text {
+                            anchors.centerIn: parent
+                            visible: genyAdImage.status !== Image.Ready
+                            text: "$GENY"
                             color: Colors.textPrimary
-                            text: "RAAD"
-                        }
-                    }
-                }
-
-                Item { Layout.preferredWidth: 15; }
-
-                Row {
-                    spacing: 2
-                    Controls.AppMenuTrigger { text: "Actions"; menu: tasksTopMenu }
-                    Controls.AppMenuTrigger { text: "File"; menu: fileTopMenu }
-                    Controls.AppMenuTrigger { text: "Downloads"; menu: downloadsTopMenu }
-                    Controls.AppMenuTrigger { text: "Configuration"; menu: configurationTopMenu }
-                    Controls.AppMenuTrigger { text: "Help"; menu: helpTopMenu }
-                }
-
-                Item { Layout.fillWidth: true }
-
-                Rectangle {
-                    Layout.preferredWidth: 512
-                    Layout.preferredHeight: 82
-                    radius: Metrics.innerRadius
-                    color: Colors.backgroundActivated
-                    border.width: 1
-                    border.color: Colors.borderActivated
-                    gradient: LinearGradient {
-                        orientation: Gradient.Horizontal
-                        GradientStop { position: 0.0; color: "transparent" }
-                        GradientStop { position: 0.33; color: "transparent" }
-                        GradientStop { position: 1.0; color: Colors.backgroundItemActivated }
-                    }
-
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.margins: 12
-                        spacing: 12
-
-                        Rectangle {
-                            Layout.preferredWidth: 58
-                            Layout.preferredHeight: 58
-                            radius: 18
-                            color: "#001309" //Colors.backgroundItemActivated
-                            border.width: 1
-                            border.color: Colors.borderActivated
-
-                            Image {
-                                id: genyAdImage
-                                anchors.fill: parent
-                                anchors.margins: 10
-                                source: appRoot.genyTokenImageUrl
-                                fillMode: Image.PreserveAspectFit
-                                smooth: true
-                                asynchronous: true
-                                cache: true
-                            }
-
-                            Text {
-                                anchors.centerIn: parent
-                                visible: genyAdImage.status !== Image.Ready
-                                text: "$GENY"
-                                color: Colors.textPrimary
-                                font.family: FontSystem.getTitleBoldFont.font.family
-                                font.bold: true
-                            }
+                            font.family: FontSystem.getTitleBoldFont.font.family
+                            font.pixelSize: Typography.t5
+                            font.bold: true
                         }
 
-                        ColumnLayout {
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 0
+                        Layout.alignment: Qt.AlignVCenter
+                        spacing: 0
+
+                        Text {
                             Layout.fillWidth: true
-                            Layout.minimumWidth: 0
-                            spacing: 1
+                            text: "GenyToken"
+                            color: Colors.textPrimary
+                            font.family: FontSystem.getTitleBoldFont.font.family
+                            font.pixelSize: Typography.t3
+                            font.bold: true
+                            elide: Text.ElideRight
+                        }
 
-                            Text {
-                                Layout.fillWidth: true
-                                text: "GenyToken"
-                                color: Colors.textPrimary
-                                font.family: FontSystem.getTitleBoldFont.font.family
-                                font.pixelSize: Typography.t2
-                                font.bold: true
-                                elide: Text.ElideRight
-                            }
+                        Text {
+                            Layout.fillWidth: true
+                            text: "256M fixed-supply ERC20 powering the Genyleap ecosystem."
+                            color: Colors.textSecondary
+                            font.family: FontSystem.getContentFontRegular.name
+                            font.pixelSize: Typography.t5
+                            elide: Text.ElideRight
+                        }
 
-                            Text {
-                                Layout.fillWidth: true
-                                text: "256M fixed-supply ERC20 powering the Genyleap ecosystem."
-                                color: Colors.textSecondary
-                                font.family: FontSystem.getContentFontRegular.name
-                                font.pixelSize: Typography.t4
-                                elide: Text.ElideRight
-                            }
-
-                            Text {
-                                Layout.fillWidth: true
-                                textFormat: Text.RichText
-                                text: "<a href=\"" + appRoot.genyleapWebsiteUrl + "\"><span style=\"color:#3a86ff;text-decoration:underline;\">"
-                                      + appRoot.genyleapWebsiteUrl + "</span></a>"
-                                onLinkActivated: appRoot.openExternalLink(link, "Opened Genyleap website")
-                                color: Colors.textAccent
-                                font.family: FontSystem.getContentFontRegular.name
-                                font.pixelSize: Typography.t4
-                                wrapMode: Text.WrapAnywhere
-                            }
+                        Text {
+                            Layout.fillWidth: true
+                            textFormat: Text.RichText
+                            text: "<a href=\"" + appRoot.genyleapWebsiteUrl + "\"><span style=\"color:#3a86ff;text-decoration:underline;\">"
+                                  + appRoot.genyleapWebsiteUrl + "</span></a>"
+                            onLinkActivated: appRoot.openExternalLink(link, "Opened Genyleap website")
+                            color: Colors.textAccent
+                            font.family: FontSystem.getContentFontRegular.name
+                            font.pixelSize: Typography.t5
+                            elide: Text.ElideRight
+                            wrapMode: Text.NoWrap
                         }
                     }
+                }
 
-                    MouseArea {
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: appRoot.openExternalLink(appRoot.genyleapWebsiteUrl, "Opened Genyleap website")
-                    }
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: appRoot.openExternalLink(appRoot.genyleapWebsiteUrl, "Opened Genyleap website")
                 }
             }
         }
@@ -5065,6 +5080,7 @@ ApplicationWindow {
                                                     Controls.Text {
                                                         text: "\uf15c"
                                                         font.family: FontSystem.getAwesomeSolid.name
+                                                        font.weight: Font.Black
                                                         font.pixelSize: Typography.t5
                                                         color: Colors.textSecondary
                                                     }
@@ -5090,6 +5106,7 @@ ApplicationWindow {
                                                         Controls.Text {
                                                             text: "\uf0e7"
                                                             font.family: FontSystem.getAwesomeSolid.name
+                                                            font.weight: Font.Black
                                                             font.pixelSize: Typography.t5
                                                             color: Colors.textSecondary
                                                         }
@@ -5178,6 +5195,7 @@ ApplicationWindow {
                                                     Controls.Text {
                                                         text: "\uf017"
                                                         font.family: FontSystem.getAwesomeSolid.name
+                                                        font.weight: Font.Black
                                                         font.pixelSize: Typography.t5
                                                         color: Colors.textSecondary
                                                     }
@@ -5194,6 +5212,7 @@ ApplicationWindow {
                                                     Controls.Text {
                                                         text: "\uf0ae"
                                                         font.family: FontSystem.getAwesomeSolid.name
+                                                        font.weight: Font.Black
                                                         font.pixelSize: Typography.t5
                                                         color: Colors.textSecondary
                                                     }
