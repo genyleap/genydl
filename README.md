@@ -44,6 +44,11 @@ Raad is a modern, high-performance download manager built with **C++23**, **Qt 6
 - YouTube and social media download support
 - More advanced mirror failover and checksum verification workflows
 
+## Shots
+<img width="1350" height="897" alt="Screenshot 2026-05-11 at 10 34 01" src="https://github.com/user-attachments/assets/f447ecdf-7acb-45ae-808e-7955d1c06634" />
+<img width="1316" height="869" alt="Screenshot 2026-05-11 at 10 34 14" src="https://github.com/user-attachments/assets/490fa9ad-a1b6-4c8c-ad85-c0caa8efc7c3" />
+<img width="1331" height="878" alt="Screenshot 2026-05-11 at 10 34 38" src="https://github.com/user-attachments/assets/f92dddab-f3a1-41d5-bd75-50a2fe1036d5" />
+
 ## Tech Stack
 
 - C++23
