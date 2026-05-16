@@ -216,28 +216,13 @@ jobs:
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
           else
-            VERSION="$(python3 - <<'PY'
-import re
-from pathlib import Path
-
-text = Path("CMakeLists.txt").read_text()
-
-def read_part(name: str) -> str:
-    match = re.search(rf"set\({name}\s+([0-9]+)\)", text)
-    if not match:
-        raise SystemExit(f"Missing {name}")
-    return match.group(1)
-
-print(".".join([
-    read_part("PROJECT_VERSION_MAJOR"),
-    read_part("PROJECT_VERSION_MINOR"),
-    read_part("PROJECT_VERSION_PATCH"),
-]))
-PY
-)"
+            VERSION_MAJOR="$(awk '/set\(PROJECT_VERSION_MAJOR / { gsub(/[^0-9]/, "", $0); print $0; exit }' CMakeLists.txt)"
+            VERSION_MINOR="$(awk '/set\(PROJECT_VERSION_MINOR / { gsub(/[^0-9]/, "", $0); print $0; exit }' CMakeLists.txt)"
+            VERSION_PATCH="$(awk '/set\(PROJECT_VERSION_PATCH / { gsub(/[^0-9]/, "", $0); print $0; exit }' CMakeLists.txt)"
+            VERSION="${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}"
           fi
 
-          if [[ -z "${VERSION}" ]]; then
+          if [[ -z "${VERSION}" || "${VERSION}" == ".." ]]; then
             echo "Could not detect project version."
             exit 1
           fi
@@ -268,6 +253,7 @@ PY
           codesign --remove-signature "$APP" || true
 
           echo "Ad-hoc signing nested Mach-O files..."
+
           while IFS= read -r file_path; do
             if file "$file_path" | grep -q "Mach-O"; then
               echo "Signing Mach-O: $file_path"
@@ -285,7 +271,7 @@ PY
           while IFS= read -r bundle_path; do
             echo "Signing bundle/plugin: $bundle_path"
             codesign --force --sign - "$bundle_path" || true
-          done < <(find "$APP/Contents" \( -name "*.bundle" -o -name "*.plugin" -o -name "*.appex" \) -type d | sort -r)
+          done < <(find "$APP/Contents" -type d | grep -E '\.(bundle|plugin|appex)$' | sort -r)
 
           echo "Signing main app..."
           codesign --force --deep --sign - "$APP"
