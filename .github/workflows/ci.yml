@@ -396,4 +396,4 @@ jobs:
         with:
           files: artifacts/*
           fail_on_unmatched_files: true
-          generate_release_notes: true
+          generate_release_notes: trues
