@@ -26,7 +26,7 @@ set(APP_NAME "${PROJECT_REAL_NAME}")
 
 set(PROJECT_VERSION_MAJOR 1)
 set(PROJECT_VERSION_MINOR 0)
-set(PROJECT_VERSION_PATCH 0)
+set(PROJECT_VERSION_PATCH 32)
 set(PROJECT_VERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH}")
 
 # -------------------------
@@ -869,7 +869,21 @@ if(APPLE AND RAAD_MACOS_POSTBUILD_DEPLOY)
         list(APPEND raad_macdeployqt_args "-no-strip")
     endif()
 
-    set(raad_codesign_common "--force" "--deep" "--sign" "${RAAD_CODESIGN_IDENTITY}")
+    if(RAAD_CODESIGN_IDENTITY STREQUAL "-")
+        set(raad_codesign_common
+            "--force"
+            "--deep"
+            "--sign" "${RAAD_CODESIGN_IDENTITY}"
+        )
+    else()
+        set(raad_codesign_common
+            "--force"
+            "--deep"
+            "--options" "runtime"
+            "--timestamp"
+            "--sign" "${RAAD_CODESIGN_IDENTITY}"
+        )
+    endif()
 
     set(raad_codesign_ent "")
 

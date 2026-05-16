@@ -27,8 +27,6 @@ jobs:
             macos_deployment_target: "15.1"
 
           # macOS Intel
-          # If this runner label is not available in your account,
-          # replace it with your available Intel macOS runner label.
           - name: macos-x86_64
             os: macos-15-intel
             qt_version: "6.11.0"
@@ -206,6 +204,139 @@ jobs:
           echo "Bundle contents:"
           find "$APP/Contents" -maxdepth 3 -type f | sort | head -200
 
+      - name: Re-sign macOS app ad-hoc and create DMG
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APP="build/bin/Raad.app"
+          OUT_DIR="build/final/macos-${{ matrix.target_arch }}"
+
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION_MAJOR="$(grep -E '^set$begin:math:text$PROJECT\_VERSION\_MAJOR \' CMakeLists\.txt \| sed \-E \'s\/\.\*PROJECT\_VERSION\_MAJOR \(\[0\-9\]\+\)\.\*\/\\1\/\'\)\"
+            VERSION\_MINOR\=\"\$\(grep \-E \'\^set\\\(PROJECT\_VERSION\_MINOR \' CMakeLists\.txt \| sed \-E \'s\/\.\*PROJECT\_VERSION\_MINOR \(\[0\-9\]\+\)\.\*\/\\1\/\'\)\"
+            VERSION\_PATCH\=\"\$\(grep \-E \'\^set\\\(PROJECT\_VERSION\_PATCH \' CMakeLists\.txt \| sed \-E \'s\/\.\*PROJECT\_VERSION\_PATCH \(\[0\-9\]\+\)\.\*\/\\1\/\'\)\"
+            VERSION\=\"\$\{VERSION\_MAJOR\}\.\$\{VERSION\_MINOR\}\.\$\{VERSION\_PATCH\}\"
+          fi
+
+          if \[\[ \-z \"\$\{VERSION\}\" \|\| \"\$\{VERSION\}\" \=\= \"\.\.\" \]\]\; then
+            echo \"Could not detect project version\.\"
+            exit 1
+          fi
+
+          DMG\_NAME\=\"Raad\-\$\{VERSION\}\-macos\-\$\{\{ matrix\.target\_arch \}\}\.dmg\"
+          DMG\_PATH\=\"\$\{OUT\_DIR\}\/\$\{DMG\_NAME\}\"
+
+          echo \"Package version\: \$\{VERSION\}\"
+
+          if \[\[ \! \-d \"\$APP\" \]\]\; then
+            echo \"App not found\: \$APP\"
+            exit 1
+          fi
+
+          mkdir \-p \"\$OUT\_DIR\"
+
+          echo \"Cleaning previous DMG\.\.\.\"
+          rm \-f \"\$DMG\_PATH\"
+
+          echo \"Cleaning extended attributes\.\.\.\"
+          xattr \-cr \"\$APP\" \|\| true
+
+          echo \"Fixing executable permissions\.\.\.\"
+          chmod \+x \"\$APP\/Contents\/MacOS\/Raad\" \|\| true
+          chmod \+x \"\$APP\/Contents\/MacOS\/RaadUpdaterHelper\" \|\| true
+
+          echo \"Removing old signatures from app bundle where possible\.\.\.\"
+          codesign \-\-remove\-signature \"\$APP\" \|\| true
+
+          echo \"Ad\-hoc signing nested Mach\-O files\.\.\.\"
+          while IFS\= read \-r file\_path\; do
+            if file \"\$file\_path\" \| grep \-q \"Mach\-O\"\; then
+              echo \"Signing Mach\-O\: \$file\_path\"
+              codesign \-\-force \-\-sign \- \"\$file\_path\" \|\| true
+            fi
+          done \< \<\(find \"\$APP\/Contents\" \-type f\)
+
+          echo \"Ad\-hoc signing frameworks\.\.\.\"
+          while IFS\= read \-r framework\_path\; do
+            echo \"Signing framework\: \$framework\_path\"
+            codesign \-\-force \-\-sign \- \"\$framework\_path\" \|\| true
+          done \< \<\(find \"\$APP\/Contents\" \-type d \-name \"\*\.framework\" \| sort \-r\)
+
+          echo \"Ad\-hoc signing bundles\/plugins\.\.\.\"
+          while IFS\= read \-r bundle\_path\; do
+            echo \"Signing bundle\/plugin\: \$bundle\_path\"
+            codesign \-\-force \-\-sign \- \"\$bundle\_path\" \|\| true
+          done \< \<\(find \"\$APP\/Contents\" \\\( \-name \"\*\.bundle\" \-o \-name \"\*\.plugin\" \-o \-name \"\*\.appex\" $end:math:text$ -type d | sort -r)
+
+          echo "Signing main app..."
+          codesign --force --deep --sign - "$APP"
+
+          echo "Verifying app signature..."
+          codesign --verify --deep --strict --verbose=4 "$APP"
+
+          echo "Gatekeeper check. Expected to fail without Developer ID/notarization:"
+          spctl --assess --type execute --verbose=4 "$APP" || true
+
+          echo "Creating clean DMG..."
+          STAGING="$(mktemp -d)"
+
+          cp -R "$APP" "$STAGING/Raad.app"
+          ln -s /Applications "$STAGING/Applications"
+
+          hdiutil create \
+            -volname "Raad" \
+            -srcfolder "$STAGING" \
+            -ov \
+            -format UDZO \
+            "$DMG_PATH"
+
+          rm -rf "$STAGING"
+
+          echo "Verifying DMG..."
+          hdiutil verify "$DMG_PATH"
+
+          echo "Created DMG:"
+          ls -lh "$DMG_PATH"
+
+      - name: Verify macOS package
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          DMG="$(find build/final -type f -name "*.dmg" | head -n 1)"
+
+          if [[ -z "$DMG" ]]; then
+            echo "No DMG found."
+            exit 1
+          fi
+
+          echo "Verifying DMG: $DMG"
+          hdiutil verify "$DMG"
+
+          MOUNT_DIR="$(mktemp -d)"
+          hdiutil attach "$DMG" -mountpoint "$MOUNT_DIR" -nobrowse -quiet
+
+          APP="$(find "$MOUNT_DIR" -maxdepth 2 -name "Raad.app" -type d | head -n 1)"
+
+          if [[ -z "$APP" ]]; then
+            echo "Raad.app not found inside DMG."
+            hdiutil detach "$MOUNT_DIR" -quiet || true
+            exit 1
+          fi
+
+          echo "Verifying app inside DMG: $APP"
+          codesign --verify --deep --strict --verbose=4 "$APP"
+
+          echo "Gatekeeper check. Expected to fail without Developer ID/notarization:"
+          spctl --assess --type execute --verbose=4 "$APP" || true
+
+          hdiutil detach "$MOUNT_DIR" -quiet
+
       - name: Verify Windows build outputs
         if: runner.os == 'Windows'
         shell: pwsh
@@ -229,6 +360,7 @@ jobs:
           }
 
       - name: Package
+        if: runner.os != 'macOS'
         run: cpack --config build/CPackConfig.cmake -C Release
 
       - name: Collect packages
