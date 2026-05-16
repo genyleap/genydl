@@ -216,61 +216,76 @@ jobs:
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
           else
-            VERSION_MAJOR="$(grep -E '^set$begin:math:text$PROJECT\_VERSION\_MAJOR \' CMakeLists\.txt \| sed \-E \'s\/\.\*PROJECT\_VERSION\_MAJOR \(\[0\-9\]\+\)\.\*\/\\1\/\'\)\"
-            VERSION\_MINOR\=\"\$\(grep \-E \'\^set\\\(PROJECT\_VERSION\_MINOR \' CMakeLists\.txt \| sed \-E \'s\/\.\*PROJECT\_VERSION\_MINOR \(\[0\-9\]\+\)\.\*\/\\1\/\'\)\"
-            VERSION\_PATCH\=\"\$\(grep \-E \'\^set\\\(PROJECT\_VERSION\_PATCH \' CMakeLists\.txt \| sed \-E \'s\/\.\*PROJECT\_VERSION\_PATCH \(\[0\-9\]\+\)\.\*\/\\1\/\'\)\"
-            VERSION\=\"\$\{VERSION\_MAJOR\}\.\$\{VERSION\_MINOR\}\.\$\{VERSION\_PATCH\}\"
+            VERSION="$(python3 - <<'PY'
+import re
+from pathlib import Path
+
+text = Path("CMakeLists.txt").read_text()
+
+def read_part(name: str) -> str:
+    match = re.search(rf"set\({name}\s+([0-9]+)\)", text)
+    if not match:
+        raise SystemExit(f"Missing {name}")
+    return match.group(1)
+
+print(".".join([
+    read_part("PROJECT_VERSION_MAJOR"),
+    read_part("PROJECT_VERSION_MINOR"),
+    read_part("PROJECT_VERSION_PATCH"),
+]))
+PY
+)"
           fi
 
-          if \[\[ \-z \"\$\{VERSION\}\" \|\| \"\$\{VERSION\}\" \=\= \"\.\.\" \]\]\; then
-            echo \"Could not detect project version\.\"
+          if [[ -z "${VERSION}" ]]; then
+            echo "Could not detect project version."
             exit 1
           fi
 
-          DMG\_NAME\=\"Raad\-\$\{VERSION\}\-macos\-\$\{\{ matrix\.target\_arch \}\}\.dmg\"
-          DMG\_PATH\=\"\$\{OUT\_DIR\}\/\$\{DMG\_NAME\}\"
+          DMG_NAME="Raad-${VERSION}-macos-${{ matrix.target_arch }}.dmg"
+          DMG_PATH="${OUT_DIR}/${DMG_NAME}"
 
-          echo \"Package version\: \$\{VERSION\}\"
+          echo "Package version: ${VERSION}"
 
-          if \[\[ \! \-d \"\$APP\" \]\]\; then
-            echo \"App not found\: \$APP\"
+          if [[ ! -d "$APP" ]]; then
+            echo "App not found: $APP"
             exit 1
           fi
 
-          mkdir \-p \"\$OUT\_DIR\"
+          mkdir -p "$OUT_DIR"
 
-          echo \"Cleaning previous DMG\.\.\.\"
-          rm \-f \"\$DMG\_PATH\"
+          echo "Cleaning previous DMG..."
+          rm -f "$DMG_PATH"
 
-          echo \"Cleaning extended attributes\.\.\.\"
-          xattr \-cr \"\$APP\" \|\| true
+          echo "Cleaning extended attributes..."
+          xattr -cr "$APP" || true
 
-          echo \"Fixing executable permissions\.\.\.\"
-          chmod \+x \"\$APP\/Contents\/MacOS\/Raad\" \|\| true
-          chmod \+x \"\$APP\/Contents\/MacOS\/RaadUpdaterHelper\" \|\| true
+          echo "Fixing executable permissions..."
+          chmod +x "$APP/Contents/MacOS/Raad" || true
+          chmod +x "$APP/Contents/MacOS/RaadUpdaterHelper" || true
 
-          echo \"Removing old signatures from app bundle where possible\.\.\.\"
-          codesign \-\-remove\-signature \"\$APP\" \|\| true
+          echo "Removing old signatures from app bundle where possible..."
+          codesign --remove-signature "$APP" || true
 
-          echo \"Ad\-hoc signing nested Mach\-O files\.\.\.\"
-          while IFS\= read \-r file\_path\; do
-            if file \"\$file\_path\" \| grep \-q \"Mach\-O\"\; then
-              echo \"Signing Mach\-O\: \$file\_path\"
-              codesign \-\-force \-\-sign \- \"\$file\_path\" \|\| true
+          echo "Ad-hoc signing nested Mach-O files..."
+          while IFS= read -r file_path; do
+            if file "$file_path" | grep -q "Mach-O"; then
+              echo "Signing Mach-O: $file_path"
+              codesign --force --sign - "$file_path" || true
             fi
-          done \< \<\(find \"\$APP\/Contents\" \-type f\)
+          done < <(find "$APP/Contents" -type f)
 
-          echo \"Ad\-hoc signing frameworks\.\.\.\"
-          while IFS\= read \-r framework\_path\; do
-            echo \"Signing framework\: \$framework\_path\"
-            codesign \-\-force \-\-sign \- \"\$framework\_path\" \|\| true
-          done \< \<\(find \"\$APP\/Contents\" \-type d \-name \"\*\.framework\" \| sort \-r\)
+          echo "Ad-hoc signing frameworks..."
+          while IFS= read -r framework_path; do
+            echo "Signing framework: $framework_path"
+            codesign --force --sign - "$framework_path" || true
+          done < <(find "$APP/Contents" -type d -name "*.framework" | sort -r)
 
-          echo \"Ad\-hoc signing bundles\/plugins\.\.\.\"
-          while IFS\= read \-r bundle\_path\; do
-            echo \"Signing bundle\/plugin\: \$bundle\_path\"
-            codesign \-\-force \-\-sign \- \"\$bundle\_path\" \|\| true
-          done \< \<\(find \"\$APP\/Contents\" \\\( \-name \"\*\.bundle\" \-o \-name \"\*\.plugin\" \-o \-name \"\*\.appex\" $end:math:text$ -type d | sort -r)
+          echo "Ad-hoc signing bundles/plugins..."
+          while IFS= read -r bundle_path; do
+            echo "Signing bundle/plugin: $bundle_path"
+            codesign --force --sign - "$bundle_path" || true
+          done < <(find "$APP/Contents" \( -name "*.bundle" -o -name "*.plugin" -o -name "*.appex" \) -type d | sort -r)
 
           echo "Signing main app..."
           codesign --force --deep --sign - "$APP"
@@ -396,4 +411,4 @@ jobs:
         with:
           files: artifacts/*
           fail_on_unmatched_files: true
-          generate_release_notes: trues
+          generate_release_notes: true
