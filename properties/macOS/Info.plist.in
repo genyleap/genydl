@@ -9,11 +9,11 @@
     <key>CFBundleExecutable</key>
     <string>@APP_NAME@</string>
     <key>CFBundleGetInfoString</key>
-    <string>@RAAD_PACKAGE_SUMMARY@</string>
+    <string>@TONDAR_PACKAGE_SUMMARY@</string>
     <key>CFBundleIconFile</key>
-    <string>@RAAD_MACOS_ICON_FILE@</string>
+    <string>@TONDAR_MACOS_ICON_FILE@</string>
     <key>CFBundleIdentifier</key>
-    <string>@RAAD_BUNDLE_IDENTIFIER@</string>
+    <string>@TONDAR_BUNDLE_IDENTIFIER@</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
@@ -25,14 +25,14 @@
     <key>CFBundleVersion</key>
     <string>@PROJECT_VERSION@</string>
     <key>CFBundleSignature</key>
-    <string>RAAD</string>
+    <string>TONDAR</string>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.productivity</string>
     <key>LSMinimumSystemVersion</key>
-    <string>@RAAD_MACOS_DEPLOYMENT_TARGET@</string>
+    <string>@TONDAR_MACOS_DEPLOYMENT_TARGET@</string>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSHumanReadableCopyright</key>
-    <string>@RAAD_COPYRIGHT@</string>
+    <string>@TONDAR_COPYRIGHT@</string>
 </dict>
 </plist>

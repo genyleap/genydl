@@ -45,12 +45,12 @@ module;
 #include <sys/resource.h>
 #endif
 
-module raad.core.downloadmanager;
+module tondar.core.downloadmanager;
 
-import raad.utils.download_utils;
-import raad.utils.category_utils;
+import tondar.utils.download_utils;
+import tondar.utils.category_utils;
 
-namespace utils = raad::utils;
+namespace utils = tondar::utils;
 
 namespace {
 
@@ -58,7 +58,7 @@ QString defaultDownloadsFolderPath()
 {
     QString root = utils::normalizeFilePath(
         QDir(QStandardPaths::writableLocation(QStandardPaths::DownloadLocation))
-            .filePath(QStringLiteral("Raad")));
+            .filePath(QStringLiteral("Tondar")));
     if (root.isEmpty()) {
         root = utils::normalizeFilePath(QStandardPaths::writableLocation(QStandardPaths::DownloadLocation));
     }
@@ -163,6 +163,17 @@ qint64 currentProcessResidentBytes()
 #else
     return 0;
 #endif
+}
+
+QString normalizedQueuePostCompletionAction(const QString& action)
+{
+    const QString normalized = action.trimmed().toLower();
+    if (normalized == QStringLiteral("exit")
+        || normalized == QStringLiteral("sleep")
+        || normalized == QStringLiteral("shutdown")) {
+        return normalized;
+    }
+    return QStringLiteral("none");
 }
 
 } // namespace
@@ -706,6 +717,7 @@ void DownloadManager::onTaskFinishedWrapper(bool success) {
 
     m_taskSpeed[t] = 0;
     m_taskCompletedAt[t] = QDateTime::currentMSecsSinceEpoch();
+    const QString finishedQueue = m_taskQueue.value(t, defaultQueueName());
 
     const QString state = t->stateString();
     const QString name = QFileInfo(t->fileName()).fileName();
@@ -806,6 +818,7 @@ void DownloadManager::onTaskFinishedWrapper(bool success) {
     scheduleSave();
     startQueued();
     emit countsChanged();
+    maybeRunQueuePostCompletionAction(finishedQueue);
 }
 
 void DownloadManager::setMaxConcurrent(int v)
@@ -847,7 +860,7 @@ void DownloadManager::setTelemetryEnabled(bool enabled)
 void DownloadManager::setDefaultUserAgent(const QString& value)
 {
     const QString next = value.trimmed().isEmpty()
-        ? QStringLiteral("raad/1.0")
+        ? QStringLiteral("tondar/1.0")
         : value.trimmed();
     if (m_defaultUserAgent == next) return;
     m_defaultUserAgent = next;
@@ -922,6 +935,18 @@ int DownloadManager::completedCount() const
         if (m_model.isFinishedAt(i)) count++;
     }
     return count;
+}
+
+bool DownloadManager::hasActiveDownloads() const
+{
+    for (DownloaderTask* task : m_queue) {
+        if (!task) continue;
+        const QString state = task->stateString();
+        if (task->isRunning() || task->isIdle() || state == QStringLiteral("Paused")) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void DownloadManager::setGlobalMaxSpeed(qint64 v)
@@ -1045,6 +1070,7 @@ void DownloadManager::startQueued()
         }
 
         if (!best) break;
+        m_completedQueueActions.remove(bestQueue);
         applyTaskSpeed(best);
         best->start();
         running++;
@@ -1065,6 +1091,7 @@ void DownloadManager::removeDownloadWithOptions(int index, bool deleteFromDisk)
 {
     DownloaderTask* task = m_model.taskAt(index);
     if (!task) return;
+    const QString queueName = m_taskQueue.value(task, defaultQueueName());
     const QString filePath = utils::normalizeFilePath(task->fileName());
     const int configuredSegments = task->segments();
     const int effectiveSegments = task->effectiveSegments();
@@ -1098,6 +1125,8 @@ void DownloadManager::removeDownloadWithOptions(int index, bool deleteFromDisk)
     updateTotals();
     scheduleSave();
     startQueued();
+    emit countsChanged();
+    maybeRunQueuePostCompletionAction(queueName);
 }
 
 void DownloadManager::clearCompleted()
@@ -1705,7 +1734,7 @@ void DownloadManager::resetPersistentState()
     setPerHostMaxConcurrent(8);
     setPersistSensitiveOptions(false);
     setTelemetryEnabled(true);
-    setDefaultUserAgent(QStringLiteral("raad/1.0"));
+    setDefaultUserAgent(QStringLiteral("tondar/1.0"));
     setDefaultAllowInsecureSsl(false);
     setDefaultProxyHost(QString());
     setDefaultProxyPort(0);
@@ -1989,6 +2018,7 @@ void DownloadManager::setTaskQueue(int index, const QString& name)
     if (!task) return;
     const QString resolved = name.isEmpty() ? defaultQueueName() : name;
     if (!m_queues.contains(resolved)) createQueue(resolved);
+    m_completedQueueActions.remove(resolved);
     m_taskQueue[task] = resolved;
     m_model.updateMetadata(task, resolved, m_taskCategory.value(task));
     applyTaskSpeed(task);
@@ -2138,6 +2168,26 @@ qint64 DownloadManager::queueDownloadedToday(const QString& name) const
 {
     const QueueInfo* info = queueInfo(name);
     return info ? info->downloadedToday : 0;
+}
+
+QString DownloadManager::queuePostCompletionAction(const QString& name) const
+{
+    const QueueInfo* info = queueInfo(name);
+    if (!info || info->postCompletionAction.isEmpty()) {
+        return QStringLiteral("none");
+    }
+    return info->postCompletionAction;
+}
+
+void DownloadManager::setQueuePostCompletionAction(const QString& name, const QString& action)
+{
+    QueueInfo* info = queueInfo(name);
+    if (!info) return;
+    const QString normalized = normalizedQueuePostCompletionAction(action);
+    if (info->postCompletionAction == normalized) return;
+    info->postCompletionAction = normalized;
+    m_completedQueueActions.remove(name);
+    scheduleSave();
 }
 
 QString DownloadManager::defaultQueueName() const
@@ -2405,6 +2455,7 @@ DownloaderTask* DownloadManager::createTask(const QUrl& url,
     task->setProxyPassword(m_defaultProxyPassword);
     m_taskQueue[task] = queueName;
     m_taskCategory[task] = category;
+    m_completedQueueActions.remove(queueName);
     m_taskLastReceived[task] = 0;
     m_taskMaxSpeed[task] = 0;
     m_taskCompletedAt[task] = 0;
@@ -2493,6 +2544,7 @@ void DownloadManager::loadSession()
         info.endMinutes = obj.value("endMinutes").toInt(0);
         info.quotaEnabled = obj.value("quotaEnabled").toBool(false);
         info.quotaBytes = static_cast<qint64>(obj.value("quotaBytes").toDouble(0));
+        info.postCompletionAction = normalizedQueuePostCompletionAction(obj.value("postCompletionAction").toString());
         info.downloadedToday = static_cast<qint64>(obj.value("downloadedToday").toDouble(0));
         const QString dateStr = obj.value("lastResetDate").toString();
         info.lastResetDate = QDate::fromString(dateStr, Qt::ISODate);
@@ -2776,6 +2828,9 @@ void DownloadManager::saveSession()
         obj.insert("endMinutes", info.endMinutes);
         obj.insert("quotaEnabled", info.quotaEnabled);
         obj.insert("quotaBytes", static_cast<double>(info.quotaBytes));
+        obj.insert("postCompletionAction", info.postCompletionAction.isEmpty()
+                   ? QStringLiteral("none")
+                   : info.postCompletionAction);
         obj.insert("downloadedToday", static_cast<double>(info.downloadedToday));
         obj.insert("lastResetDate", info.lastResetDate.toString(Qt::ISODate));
         queues.append(obj);
@@ -3029,6 +3084,82 @@ bool DownloadManager::isQueueAllowed(const QueueInfo& info, const QTime& now) co
     if (info.scheduleEnabled && !isWithinSchedule(info, now)) return false;
     if (info.quotaEnabled && info.quotaBytes > 0 && info.downloadedToday >= info.quotaBytes) return false;
     return true;
+}
+
+void DownloadManager::maybeRunQueuePostCompletionAction(const QString& queueName)
+{
+    const QueueInfo* info = queueInfo(queueName);
+    if (!info) return;
+
+    const QString action = normalizedQueuePostCompletionAction(info->postCompletionAction);
+    if (action == QStringLiteral("none") || m_completedQueueActions.contains(queueName)) {
+        return;
+    }
+
+    bool hasAnyTask = false;
+    for (DownloaderTask* task : m_queue) {
+        if (!task || m_taskQueue.value(task, defaultQueueName()) != queueName) continue;
+        hasAnyTask = true;
+        const QString state = task->stateString();
+        if (task->isRunning() || task->isIdle() || state == QStringLiteral("Paused")) {
+            return;
+        }
+    }
+
+    if (!hasAnyTask) return;
+    m_completedQueueActions.insert(queueName);
+    executeQueuePostCompletionAction(action);
+}
+
+void DownloadManager::executeQueuePostCompletionAction(const QString& action)
+{
+    const QString normalized = normalizedQueuePostCompletionAction(action);
+    if (normalized == QStringLiteral("none")) return;
+
+    if (normalized == QStringLiteral("exit")) {
+        emit toastRequested(QStringLiteral("Queue completed. Exiting Tondar."), QStringLiteral("info"));
+        QTimer::singleShot(250, []() { QCoreApplication::quit(); });
+        return;
+    }
+
+    bool launched = false;
+    if (normalized == QStringLiteral("sleep")) {
+#if defined(Q_OS_MACOS)
+        launched = QProcess::startDetached(QStringLiteral("osascript"), QStringList{
+            QStringLiteral("-e"),
+            QStringLiteral("tell application \"System Events\" to sleep")
+        });
+#elif defined(Q_OS_WIN)
+        launched = QProcess::startDetached(QStringLiteral("rundll32.exe"), QStringList{
+            QStringLiteral("powrprof.dll,SetSuspendState"),
+            QStringLiteral("0"),
+            QStringLiteral("1"),
+            QStringLiteral("0")
+        });
+#elif defined(Q_OS_LINUX)
+        launched = QProcess::startDetached(QStringLiteral("systemctl"), QStringList{QStringLiteral("suspend")});
+#endif
+    } else if (normalized == QStringLiteral("shutdown")) {
+#if defined(Q_OS_MACOS)
+        launched = QProcess::startDetached(QStringLiteral("osascript"), QStringList{
+            QStringLiteral("-e"),
+            QStringLiteral("tell application \"System Events\" to shut down")
+        });
+#elif defined(Q_OS_WIN)
+        launched = QProcess::startDetached(QStringLiteral("shutdown"), QStringList{
+            QStringLiteral("/s"),
+            QStringLiteral("/t"),
+            QStringLiteral("0")
+        });
+#elif defined(Q_OS_LINUX)
+        launched = QProcess::startDetached(QStringLiteral("systemctl"), QStringList{QStringLiteral("poweroff")});
+#endif
+    }
+
+    emit toastRequested(launched
+                            ? QStringLiteral("Queue completed. Running system action.")
+                            : QStringLiteral("Queue completed, but the system action is unavailable."),
+                        launched ? QStringLiteral("info") : QStringLiteral("warning"));
 }
 
 void DownloadManager::enforceQueuePolicies()

@@ -19,13 +19,14 @@
  * @author      <a href='https://github.com/thecompez'>Kambiz Asadzadeh</a>
  * @since       09 Feb 2026
  * @copyright   Copyright (c) 2026 Genyleap. All rights reserved.
- * @license     https://github.com/genyleap/raad/blob/main/LICENSE.md
+ * @license     https://github.com/genyleap/tondar/blob/main/LICENSE.md
  */
 
 module;
 #include <QObject>
 #include <QHash>
 #include <QDate>
+#include <QSet>
 #include <QStringList>
 #include <QTimer>
 #include <QVector>
@@ -37,16 +38,16 @@ module;
 #include <QElapsedTimer>
 
 #ifndef Q_MOC_RUN
-export module raad.core.downloadmanager;
-import raad.core.downloadertask;
-import raad.core.downloadmodel;
-import raad.services.power_monitor;
+export module tondar.core.downloadmanager;
+import tondar.core.downloadertask;
+import tondar.core.downloadmodel;
+import tondar.services.power_monitor;
 #endif
 
 #ifdef Q_MOC_RUN
-#define RAAD_MODULE_EXPORT
+#define TONDAR_MODULE_EXPORT
 #else
-#define RAAD_MODULE_EXPORT export
+#define TONDAR_MODULE_EXPORT export
 #endif
 
 /**
@@ -63,7 +64,7 @@ import raad.services.power_monitor;
  * The class is designed to be UI-facing, policy-driven, and resilient
  * across application restarts via session persistence.
  */
-RAAD_MODULE_EXPORT class DownloadManager : public QObject {
+TONDAR_MODULE_EXPORT class DownloadManager : public QObject {
 
     Q_OBJECT
 
@@ -82,6 +83,9 @@ RAAD_MODULE_EXPORT class DownloadManager : public QObject {
     //!< @brief Number of completed downloads.
     Q_PROPERTY(int completedCount READ completedCount NOTIFY countsChanged)
 
+    //!< @brief Whether any downloads are currently active or waiting.
+    Q_PROPERTY(bool hasActiveDownloads READ hasActiveDownloads NOTIFY countsChanged)
+
     //!< @brief Ordered list of defined queue names.
     Q_PROPERTY(QStringList queueNames READ queueNames NOTIFY queuesChanged)
 
@@ -97,10 +101,10 @@ RAAD_MODULE_EXPORT class DownloadManager : public QObject {
     //!< @brief Aggregate total bytes expected across all tasks.
     Q_PROPERTY(qint64 totalSize READ totalSize NOTIFY totalsChanged)
 
-    //!< @brief Estimated RAAD process CPU load percentage.
+    //!< @brief Estimated TONDAR process CPU load percentage.
     Q_PROPERTY(qreal processCpuLoad READ processCpuLoad NOTIFY runtimeStatsChanged)
 
-    //!< @brief Estimated RAAD resident memory usage in bytes.
+    //!< @brief Estimated TONDAR resident memory usage in bytes.
     Q_PROPERTY(qint64 processMemoryBytes READ processMemoryBytes NOTIFY runtimeStatsChanged)
 
     //!< @brief Free bytes on the current downloads volume.
@@ -519,6 +523,20 @@ public:
     Q_INVOKABLE qint64 queueDownloadedToday(const QString& name) const;
 
     /**
+     * @brief Return the action performed after a queue fully completes.
+     * @param name Queue name.
+     * @return Action id: none, exit, sleep, or shutdown.
+     */
+    Q_INVOKABLE QString queuePostCompletionAction(const QString& name) const;
+
+    /**
+     * @brief Set the action performed after a queue fully completes.
+     * @param name Queue name.
+     * @param action Action id: none, exit, sleep, or shutdown.
+     */
+    Q_INVOKABLE void setQueuePostCompletionAction(const QString& name, const QString& action);
+
+    /**
      * @brief Return the default queue name.
      * @return Default queue name.
      */
@@ -654,6 +672,9 @@ public:
     //!< @brief Return the number of completed downloads.
     int completedCount() const;
 
+    //!< @brief Return whether downloads are active, queued, or paused.
+    bool hasActiveDownloads() const;
+
     //!< @brief Return the global max speed limit in bytes/sec.
     qint64 globalMaxSpeed() const { return m_globalMaxSpeed; }
 
@@ -672,10 +693,10 @@ public:
     //!< @brief Return aggregate total bytes.
     qint64 totalSize() const { return m_totalSize; }
 
-    //!< @brief Return estimated RAAD process CPU load percentage.
+    //!< @brief Return estimated TONDAR process CPU load percentage.
     qreal processCpuLoad() const { return m_processCpuLoad; }
 
-    //!< @brief Return estimated RAAD resident memory usage in bytes.
+    //!< @brief Return estimated TONDAR resident memory usage in bytes.
     qint64 processMemoryBytes() const { return m_processMemoryBytes; }
 
     //!< @brief Return free bytes for the downloads volume.
@@ -900,6 +921,7 @@ private:
         int endMinutes = 0;             //!< Schedule end time (minutes since midnight).
         bool quotaEnabled = false;      //!< Whether daily quota enforcement is enabled.
         qint64 quotaBytes = 0;          //!< Daily quota in bytes.
+        QString postCompletionAction;   //!< Action after the queue finishes.
         qint64 downloadedToday = 0;     //!< Bytes downloaded today.
         QDate lastResetDate;            //!< Date of last quota reset.
     };
@@ -961,6 +983,18 @@ private:
      * @return True if allowed.
      */
     bool isQueueAllowed(const QueueInfo& info, const QTime& now) const;
+
+    /**
+     * @brief Run a queue's configured action if the queue has completed.
+     * @param queueName Queue name.
+     */
+    void maybeRunQueuePostCompletionAction(const QString& queueName);
+
+    /**
+     * @brief Execute a queue post-completion action.
+     * @param action Action id.
+     */
+    void executeQueuePostCompletionAction(const QString& action);
 
     //!< @brief Load persisted session state.
     void loadSession();
@@ -1106,6 +1140,7 @@ private:
     QVector<DownloaderTask*> m_queue;                                               //!< Queue in insertion order.
     QHash<QString, QueueInfo> m_queues;                                             //!< Queue config map.
     QStringList m_queueOrder;                                                       //!< Queue ordering list.
+    QSet<QString> m_completedQueueActions;                                          //!< Queues whose finish action already ran.
     QHash<QString, QString> m_categoryFolders;                                      //!< Category folder mapping.
     QHash<QString, QString> m_domainRules;                                          //!< Host-to-queue mapping.
     QHash<QString, qint64> m_hostCooldownUntilMs;                                   //!< Per-host cooldown deadline.
@@ -1125,7 +1160,7 @@ private:
     int m_perHostMaxConcurrent = 8;                                                 //!< Max active downloads per host.
     bool m_persistSensitiveOptions = false;                                         //!< Persist sensitive network options.
     bool m_telemetryEnabled = true;                                                 //!< Telemetry stream toggle.
-    QString m_defaultUserAgent = QStringLiteral("raad/1.0");                        //!< Default User-Agent.
+    QString m_defaultUserAgent = QStringLiteral("tondar/1.0");                        //!< Default User-Agent.
     bool m_defaultAllowInsecureSsl = false;                                         //!< Default insecure SSL policy.
     QString m_defaultProxyHost;                                                     //!< Default proxy host.
     int m_defaultProxyPort = 0;                                                     //!< Default proxy port.
@@ -1134,8 +1169,8 @@ private:
     bool m_networkTestRunning = false;                                              //!< Network tester in-flight state.
     QString m_networkTestMessage;                                                   //!< Last network tester message.
     QString m_networkTestKind = QStringLiteral("muted");                            //!< Last network tester kind.
-    qreal m_processCpuLoad = 0.0;                                                   //!< RAAD process CPU load percentage.
-    qint64 m_processMemoryBytes = 0;                                                //!< RAAD process resident memory.
+    qreal m_processCpuLoad = 0.0;                                                   //!< TONDAR process CPU load percentage.
+    qint64 m_processMemoryBytes = 0;                                                //!< TONDAR process resident memory.
     qint64 m_diskFreeBytes = 0;                                                     //!< Free bytes on downloads volume.
     QString m_networkReachability = QStringLiteral("Unknown");                      //!< Cached reachability label.
     qreal m_averageActiveSegments = 0.0;                                            //!< Avg effective segments across active tasks.

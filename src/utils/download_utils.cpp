@@ -8,9 +8,9 @@ module;
 #include <QUrlQuery>
 #include <QtGlobal>
 
-module raad.utils.download_utils;
+module tondar.utils.download_utils;
 
-namespace raad::utils {
+namespace tondar::utils {
 
 static int checksumLengthForAlgo(const QString& algo)
 {
@@ -267,4 +267,4 @@ bool fileExistsPath(const QString& path)
     return info.exists() && info.isFile();
 }
 
-} // namespace raad::utils
+} // namespace tondar::utils

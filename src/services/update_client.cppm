@@ -24,7 +24,7 @@
  * @author      <a href='https://github.com/thecompez'>Kambiz Asadzadeh</a>
  * @since       09 Feb 2026
  * @copyright   Copyright (c) 2026 Genyleap. All rights reserved.
- * @license     https://github.com/genyleap/raad/blob/main/LICENSE.md
+ * @license     https://github.com/genyleap/tondar/blob/main/LICENSE.md
  */
 
 module;
@@ -37,12 +37,12 @@ module;
 #include <QJsonArray>
 #include <QJsonDocument>
 
-export module raad.services.update_client;
+export module tondar.services.update_client;
 
 #ifdef Q_MOC_RUN
-#define RAAD_MODULE_EXPORT
+#define TONDAR_MODULE_EXPORT
 #else
-#define RAAD_MODULE_EXPORT export
+#define TONDAR_MODULE_EXPORT export
 #endif
 
 /**
@@ -63,7 +63,7 @@ export module raad.services.update_client;
  * it prepares the update payload and exposes it to the host application
  * for final installation.
  */
-RAAD_MODULE_EXPORT class UpdateClient : public QObject {
+TONDAR_MODULE_EXPORT class UpdateClient : public QObject {
     Q_OBJECT
     //!< @brief Current application version.
     Q_PROPERTY(QString currentVersion READ currentVersion CONSTANT)
@@ -424,7 +424,7 @@ private:
     bool m_autoDownload = false;                             //!< Legacy auto-download toggle.
     QString m_updateMode = QStringLiteral("custom");         //!< Automatic or custom update mode.
     QString m_sourcePreference = QStringLiteral("auto");     //!< Source preference.
-    QString m_githubRepo = QStringLiteral("genyleap/raad");  //!< Default GitHub repo.
+    QString m_githubRepo = QStringLiteral("genyleap/tondar");  //!< Default GitHub repo.
     QString m_manifestUrl;                                   //!< Website manifest URL.
 
     bool m_updateAvailable = false;                          //!< Update availability.

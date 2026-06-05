@@ -9,9 +9,9 @@ module;
 #include <QStringList>
 #include <QUrl>
 
-module raad.utils.category_utils;
+module tondar.utils.category_utils;
 
-namespace raad::utils {
+namespace tondar::utils {
 namespace {
 
 /*!
@@ -763,4 +763,4 @@ bool isKnownCategory(const DownloadCategory category)
     return categoryValues().contains(category);
 }
 
-} // namespace raad::utils
+} // namespace tondar::utils

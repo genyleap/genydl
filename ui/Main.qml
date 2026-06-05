@@ -1,11 +1,11 @@
 /*!
     \file        Main.qml
-    \brief       Implements the main application window for RAAD.
-    \details     This file defines the primary QML application shell, window structure, and top-level UI workflow for RAAD.
+    \brief       Implements the main application window for TONDAR.
+    \details     This file defines the primary QML application shell, window structure, and top-level UI workflow for TONDAR.
 
     \author      Kambiz Asadzadeh <https://github.com/thecompez>
     \copyright   Copyright (c) 2026 Genyleap. All rights reserved.
-    \license     https://github.com/genyleap/raad/blob/main/LICENSE.md
+    \license     https://github.com/genyleap/tondar/blob/main/LICENSE.md
 */
 
 import QtQuick
@@ -24,7 +24,7 @@ import "./Controls" as Controls
 
 import "utils.js" as Utils
 
-import Raad 1.0
+import Tondar 1.0
 
 ApplicationWindow {
     id: appRoot
@@ -32,7 +32,7 @@ ApplicationWindow {
 
     QtObject {
         id: appAttributes
-        property string name: "Raad - Internet Download Manager"
+        property string name: "Tondar - Internet Download Manager"
         property int width: 1280
         property int height: 800
         property int interiorWidth : appRoot.width
@@ -134,14 +134,16 @@ ApplicationWindow {
     readonly property var statusOptions: ["All", "Unfinished", "History", "Active", "Queued", "Paused", "Done", "Error", "Canceled"]
     readonly property var sortOptions: ["Name", "Status", "Received", "Total", "Queue", "Category"]
     readonly property var themeOptions: ["System", "Dark", "Light"]
+    readonly property var queuePostActionOptions: ["Do nothing", "Exit application", "Sleep", "Shutdown system"]
+    readonly property var queuePostActionIds: ["none", "exit", "sleep", "shutdown"]
     readonly property string donationAddress: "0x6E99f7564d060AA141dcC47ede34379Bad0cDCCC"
     readonly property string donationBaseExplorerUrl: "https://basescan.org/address/0x6E99f7564d060AA141dcC47ede34379Bad0cDCCC"
     readonly property string donationMainnetExplorerUrl: "https://etherscan.io/address/0x6E99f7564d060AA141dcC47ede34379Bad0cDCCC"
     readonly property string developerFarcasterUrl: "https://farcaster.xyz/compez.eth"
     readonly property string developerXUrl: "https://x.com/thecompez"
     readonly property string developerGithubUrl: "https://github.com/thecompez"
-    readonly property string projectRepositoryUrl: "https://github.com/genyleap/raad"
-    readonly property string projectLicenseUrl: "https://github.com/genyleap/raad?tab=MIT-1-ov-file#readme"
+    readonly property string projectRepositoryUrl: "https://github.com/genyleap/tondar"
+    readonly property string projectLicenseUrl: "https://github.com/genyleap/tondar?tab=MIT-1-ov-file#readme"
     readonly property string qtOpenSourceUrl: "https://doc.qt.io/qt-6/licensing.html"
     readonly property string genyleapWebsiteUrl: "https://genyleap.com"
     readonly property string genyleapSupportUrl: "https://genyleap.com/support"
@@ -227,6 +229,8 @@ ApplicationWindow {
     function confirmRemovePending() { return Utils.confirmRemovePending.apply(this, arguments) }
     function executeRowAction() { return Utils.executeRowAction.apply(this, arguments) }
     function submitDownload() { return Utils.submitDownload.apply(this, arguments) }
+    function downloadPathForAsset() { return Utils.downloadPathForAsset.apply(this, arguments) }
+    function submitGitHubReleaseAssets() { return Utils.submitGitHubReleaseAssets.apply(this, arguments) }
     function rebuildDownloadTableRows() { return Utils.rebuildDownloadTableRows.apply(this, arguments) }
     function scheduleRebuildDownloadTableRows() { return Utils.scheduleRebuildDownloadTableRows.apply(this, arguments) }
     function addDownloadFromInputs() { return Utils.addDownloadFromInputs.apply(this, arguments) }
@@ -257,6 +261,34 @@ ApplicationWindow {
             return
         Qt.openUrlExternally(url)
         appRoot.appendNotification(label && label.length > 0 ? label : "Opened link", url, "info")
+    }
+    function minutesToClockText(minutes) {
+        const total = Math.max(0, Math.min(1439, Number(minutes) || 0))
+        const hour = Math.floor(total / 60)
+        const minute = total % 60
+        return String(hour).padStart(2, "0") + ":" + String(minute).padStart(2, "0")
+    }
+    function clockTextToMinutes(text, fallback) {
+        const raw = String(text || "").trim().toLowerCase()
+        const match = raw.match(/^(\d{1,2})(?::(\d{1,2}))?\s*(am|pm)?$/)
+        if (!match)
+            return fallback
+        var hour = Number(match[1])
+        const minute = match[2] === undefined ? 0 : Number(match[2])
+        if (minute < 0 || minute > 59)
+            return fallback
+        if (match[3] === "am") {
+            if (hour === 12) hour = 0
+        } else if (match[3] === "pm") {
+            if (hour < 12) hour += 12
+        }
+        if (hour < 0 || hour > 23)
+            return fallback
+        return hour * 60 + minute
+    }
+    function queuePostActionIndex(action) {
+        const idx = queuePostActionIds.indexOf(action && action.length > 0 ? action : "none")
+        return idx >= 0 ? idx : 0
     }
     function copyToClipboard(value, label) {
         if (!value || value.length === 0)
@@ -343,6 +375,17 @@ ApplicationWindow {
         property bool savedSortAscending: true
         property int savedThemeMode: 0
         property int savedDownloadsViewMode: 0
+        property bool keepRunningInBackground: true
+        property bool showRuntimeFooter: true
+    }
+
+    onClosing: function(close) {
+        if (!appController.requestWindowClose(downloadManager.hasActiveDownloads)) {
+            close.accepted = false
+            if (!appController.trayAvailable) {
+                backgroundCloseDialog.open()
+            }
+        }
     }
 
     QQD.FileDialog {
@@ -368,14 +411,28 @@ ApplicationWindow {
     }
 
     Controls.Dialog {
+        id: backgroundCloseDialog
+        title: "Downloads still running"
+        type: "warning"
+        desc: "Tondar can keep downloads active after the window is closed."
+        message: appController.trayAvailable
+                 ? "Use the tray icon to restore the main window or exit the application."
+                 : "This system does not expose a tray icon right now. Use Exit to stop the application, or cancel and keep the window open."
+        standardButtons: Dialog.Cancel | Dialog.Discard
+        cancelTextOverride: "Keep Open"
+        discardTextOverride: "Exit Tondar"
+        onDiscarded: appController.quitApplication()
+    }
+
+    Controls.Dialog {
         id: aboutDialog
         width: Math.min(appRoot.width - 60, 620)
         height: 520
 
-        title: "About Raad"
+        title: "About Tondar"
         type: "info"
-        desc: "Raad Download Manager"
-        message: "Raad provides segmented downloading, queue control, adaptive segment scheduling, runtime policies, and update delivery in a desktop workflow."
+        desc: "Tondar Download Manager"
+        message: "Tondar provides segmented downloading, queue control, adaptive segment scheduling, runtime policies, and update delivery in a desktop workflow."
 
         standardButtons: Dialog.Close
 
@@ -407,10 +464,10 @@ ApplicationWindow {
                         border.color: Colors.borderActivated
 
                         Image {
-                            id: raadAboutImage
+                            id: tondarAboutImage
                             anchors.fill: parent
                             anchors.margins: 8
-                            source: "qrc:/Raad.png"
+                            source: "qrc:/Tondar.png"
                             // fillMode: Image.PreserveAspectFit
                             smooth: true
                             asynchronous: true
@@ -419,8 +476,8 @@ ApplicationWindow {
 
                         Text {
                             anchors.centerIn: parent
-                            visible: raadAboutImage.status !== Image.Ready
-                            text: "RAAD"
+                            visible: tondarAboutImage.status !== Image.Ready
+                            text: "TONDAR"
                             color: Colors.textPrimary
                             font.family: FontSystem.getTitleBoldFont.font.family
                             font.pixelSize: Typography.t2
@@ -435,7 +492,7 @@ ApplicationWindow {
 
                         Text {
                             Layout.fillWidth: true
-                            text: "Raad Download Manager"
+                            text: "Tondar Download Manager"
                             color: Colors.textPrimary
                             font.family: FontSystem.getTitleBoldFont.font.family
                             font.pixelSize: Typography.h4
@@ -461,7 +518,7 @@ ApplicationWindow {
                 rowSpacing: 8
 
                 Controls.Label { text: "Name" }
-                Controls.Label { text: "Raad Download Manager" }
+                Controls.Label { text: "Tondar Download Manager" }
                 Controls.Label { text: "Version" }
                 Controls.Label { text: Qt.application.version }
                 Controls.Label { text: "Framework" }
@@ -682,7 +739,7 @@ ApplicationWindow {
         title: "Support & Community"
         type: "info"
         desc: "Official Genyleap resources"
-        message: "Production links for RAAD, Genyleap, and the developer profile."
+        message: "Production links for TONDAR, Genyleap, and the developer profile."
 
         ColumnLayout {
             Layout.fillWidth: true
@@ -712,7 +769,7 @@ ApplicationWindow {
 
                         Text {
                             anchors.centerIn: parent
-                            text: "RAAD"
+                            text: "TONDAR"
                             color: Colors.textPrimary
                             font.family: FontSystem.getTitleBoldFont.font.family
                             font.pixelSize: Typography.t2
@@ -784,7 +841,7 @@ ApplicationWindow {
                                 }
 
                                 Text {
-                                    text: "Genyleap Labs home for RAAD and ecosystem updates."
+                                    text: "Genyleap Labs home for TONDAR and ecosystem updates."
                                     color: Colors.textSecondary
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t3
@@ -840,7 +897,7 @@ ApplicationWindow {
                                 }
 
                                 Text {
-                                    text: "Main open source repository for RAAD."
+                                    text: "Main open source repository for TONDAR."
                                     color: Colors.textSecondary
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t3
@@ -851,7 +908,7 @@ ApplicationWindow {
                                     textFormat: Text.RichText
                                     text: "<a href=\"" + appRoot.projectRepositoryUrl + "\"><span style=\"color:#3a86ff;text-decoration:underline;\">"
                                           + appRoot.projectRepositoryUrl + "</span></a>"
-                                    onLinkActivated: appRoot.openExternalLink(link, "Opened RAAD repository")
+                                    onLinkActivated: appRoot.openExternalLink(link, "Opened TONDAR repository")
                                     color: Colors.textAccent
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t2
@@ -1113,7 +1170,7 @@ ApplicationWindow {
         title: "License & Open Source"
         type: "info"
         desc: "MIT License and source access"
-        message: "RAAD is distributed under the MIT License. Review the repository and full license text below."
+        message: "TONDAR is distributed under the MIT License. Review the repository and full license text below."
 
         ColumnLayout {
             Layout.fillWidth: true
@@ -1157,7 +1214,7 @@ ApplicationWindow {
                                 }
 
                                 Text {
-                                    text: "Main source repository for RAAD."
+                                    text: "Main source repository for TONDAR."
                                     color: Colors.textSecondary
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t3
@@ -1168,7 +1225,7 @@ ApplicationWindow {
                                     textFormat: Text.RichText
                                     text: "<a href=\"" + appRoot.projectRepositoryUrl + "\"><span style=\"color:#3a86ff;text-decoration:underline;\">"
                                           + appRoot.projectRepositoryUrl + "</span></a>"
-                                    onLinkActivated: appRoot.openExternalLink(link, "Opened RAAD repository")
+                                    onLinkActivated: appRoot.openExternalLink(link, "Opened TONDAR repository")
                                     color: Colors.textAccent
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t2
@@ -1267,7 +1324,7 @@ ApplicationWindow {
                                 }
 
                                 Text {
-                                    text: "RAAD is built with Qt " + Qt.version + ". Review the official Qt open source licensing page."
+                                    text: "TONDAR is built with Qt " + Qt.version + ". Review the official Qt open source licensing page."
                                     color: Colors.textSecondary
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t3
@@ -1347,7 +1404,7 @@ ApplicationWindow {
         height: 520
         title: "Donate"
         type: "info"
-        desc: "Support RAAD on Base and Ethereum MainNet"
+        desc: "Support TONDAR on Base and Ethereum MainNet"
         message: "Use the ERC20 donation address below on both supported networks."
 
         ColumnLayout {
@@ -1597,21 +1654,9 @@ ApplicationWindow {
                         border.width: 1
                         border.color: Colors.borderActivated
 
-                        Image {
-                            id: genyTokenHeroImage
-                            anchors.fill: parent
-                            anchors.margins: 14
-                            source: appRoot.genyTokenImageUrl
-                            fillMode: Image.PreserveAspectFit
-                            smooth: true
-                            asynchronous: true
-                            cache: true
-                        }
-
                         Text {
                             anchors.centerIn: parent
-                            visible: genyTokenHeroImage.status !== Image.Ready
-                            text: "$GENY"
+                            text: "$" + appRoot.genyTokenSymbol
                             color: Colors.textPrimary
                             font.family: FontSystem.getTitleBoldFont.font.family
                             font.pixelSize: Typography.t2
@@ -2138,6 +2183,20 @@ ApplicationWindow {
                 addDialogErrorLabel.text = "Torrent/magnet is not supported in backend yet. Use an HTTP/HTTPS/FTP URL."
                 return
             }
+            if (githubReleaseService.isReleaseUrl(addDialogUrlField.text)) {
+                appRoot.addDefaultOutputPath = addDialogPathField.text.trim()
+                appRoot.addDefaultQueue = addDialogQueueCombo.currentText
+                appRoot.addDefaultCategory = addDialogCategoryCombo.currentText
+                appRoot.addDefaultSegments = addDialogSegmentsSpin.value
+                appRoot.addDefaultAdaptive = addDialogAdaptiveSwitch.checked
+                appRoot.addDefaultStartPaused = addDialogPausedSwitch.checked
+
+                githubReleaseService.clear()
+                githubReleaseAssetPicker.open()
+                githubReleaseService.fetchRelease(addDialogUrlField.text)
+                addUrlPopup.close()
+                return
+            }
             const added = appRoot.submitDownload(
                             addDialogUrlField.text,
                             addDialogPathField.text,
@@ -2163,6 +2222,31 @@ ApplicationWindow {
         }
 
 
+    }
+
+    Controls.GitHubReleaseAssetPicker {
+        id: githubReleaseAssetPicker
+        releaseInfo: githubReleaseService.release
+        assets: githubReleaseService.assets
+        loading: githubReleaseService.loading
+        errorText: githubReleaseService.errorMessage
+
+        onAddSelected: function(selectedAssets) {
+            const added = appRoot.submitGitHubReleaseAssets(
+                            selectedAssets,
+                            appRoot.addDefaultOutputPath,
+                            appRoot.addDefaultQueue,
+                            appRoot.addDefaultCategory,
+                            appRoot.addDefaultStartPaused,
+                            appRoot.addDefaultSegments,
+                            appRoot.addDefaultAdaptive
+                            )
+            if (added > 0) {
+                appRoot.appendNotification("GitHub release assets added",
+                                           added + " asset" + (added === 1 ? "" : "s") + " added to the download queue.",
+                                           "success")
+            }
+        }
     }
 
     Drawer {
@@ -2251,11 +2335,26 @@ ApplicationWindow {
                                     }
                                 }
 
+                                Controls.Label { text: "Close behavior" }
+                                Controls.Switch {
+                                    checked: uiSettings.keepRunningInBackground
+                                    onCheckedChanged: {
+                                        uiSettings.keepRunningInBackground = checked
+                                        appController.keepRunningInBackground = checked
+                                    }
+                                }
+
+                                Controls.Label { text: "Runtime footer" }
+                                Controls.Switch {
+                                    checked: uiSettings.showRuntimeFooter
+                                    onCheckedChanged: uiSettings.showRuntimeFooter = checked
+                                }
+
                                 Controls.Label {
                                     Layout.columnSpan: 2
                                     Layout.fillWidth: true
                                     wrapMode: Text.WordWrap
-                                    text: "System follows the OS appearance. Dark and Light force the application theme."
+                                    text: "System follows the OS appearance. Closing the window can keep downloads active in the tray when background mode is enabled."
                                 }
                             }
                         }
@@ -2274,7 +2373,7 @@ ApplicationWindow {
                                     Layout.fillWidth: true
                                     wrapMode: Text.WordWrap
                                     color: Colors.textMuted
-                                    text: "Restore RAAD defaults and clear persisted session/configuration state without deleting downloaded files."
+                                    text: "Restore TONDAR defaults and clear persisted session/configuration state without deleting downloaded files."
                                 }
 
                                 RowLayout {
@@ -2334,10 +2433,11 @@ ApplicationWindow {
                                             queueDialogMaxConcurrent.value = downloadManager.queueMaxConcurrent(q)
                                             queueDialogMaxSpeed.value = Math.round(downloadManager.queueMaxSpeed(q) / (1024 * 1024))
                                             queueDialogSchedule.checked = downloadManager.queueScheduleEnabled(q)
-                                            queueDialogStart.value = downloadManager.queueScheduleStartMinutes(q)
-                                            queueDialogEnd.value = downloadManager.queueScheduleEndMinutes(q)
+                                            queueDialogStartTime.text = appRoot.minutesToClockText(downloadManager.queueScheduleStartMinutes(q))
+                                            queueDialogEndTime.text = appRoot.minutesToClockText(downloadManager.queueScheduleEndMinutes(q))
                                             queueDialogQuota.checked = downloadManager.queueQuotaEnabled(q)
                                             queueDialogQuotaBytes.value = Math.round(downloadManager.queueQuotaBytes(q) / (1024 * 1024 * 1024))
+                                            queueDialogPostAction.currentIndex = appRoot.queuePostActionIndex(downloadManager.queuePostCompletionAction(q))
                                         }
                                     }
                                     Controls.Button {
@@ -2348,10 +2448,11 @@ ApplicationWindow {
                                             downloadManager.setQueueMaxConcurrent(q, queueDialogMaxConcurrent.value)
                                             downloadManager.setQueueMaxSpeed(q, queueDialogMaxSpeed.value * 1024 * 1024)
                                             downloadManager.setQueueScheduleEnabled(q, queueDialogSchedule.checked)
-                                            downloadManager.setQueueScheduleStartMinutes(q, queueDialogStart.value)
-                                            downloadManager.setQueueScheduleEndMinutes(q, queueDialogEnd.value)
+                                            downloadManager.setQueueScheduleStartMinutes(q, appRoot.clockTextToMinutes(queueDialogStartTime.text, downloadManager.queueScheduleStartMinutes(q)))
+                                            downloadManager.setQueueScheduleEndMinutes(q, appRoot.clockTextToMinutes(queueDialogEndTime.text, downloadManager.queueScheduleEndMinutes(q)))
                                             downloadManager.setQueueQuotaEnabled(q, queueDialogQuota.checked)
                                             downloadManager.setQueueQuotaBytes(q, queueDialogQuotaBytes.value * 1024 * 1024 * 1024)
+                                            downloadManager.setQueuePostCompletionAction(q, appRoot.queuePostActionIds[Math.max(0, queueDialogPostAction.currentIndex)])
                                         }
                                     }
                                 }
@@ -2420,16 +2521,30 @@ ApplicationWindow {
                                     Controls.SpinBox { id: queueDialogMaxConcurrent; from: 1; to: 64; value: 2 }
                                     Controls.Label { text: "Queue speed (MB/s)" }
                                     Controls.SpinBox { id: queueDialogMaxSpeed; from: 0; to: 4096; value: 0 }
-                                    Controls.Label { text: "Enable schedule" }
+                                    Controls.Label { text: "Run on schedule" }
                                     Controls.Switch { id: queueDialogSchedule }
-                                    Controls.Label { text: "Start minute" }
-                                    Controls.SpinBox { id: queueDialogStart; from: 0; to: 1439; value: 0 }
-                                    Controls.Label { text: "End minute" }
-                                    Controls.SpinBox { id: queueDialogEnd; from: 0; to: 1439; value: 0 }
+                                    Controls.Label { text: "Start time" }
+                                    Controls.TextField {
+                                        id: queueDialogStartTime
+                                        placeholderText: "02:00 AM"
+                                        text: "00:00"
+                                    }
+                                    Controls.Label { text: "End time" }
+                                    Controls.TextField {
+                                        id: queueDialogEndTime
+                                        placeholderText: "07:00 AM"
+                                        text: "00:00"
+                                    }
                                     Controls.Label { text: "Enable quota" }
                                     Controls.Switch { id: queueDialogQuota }
                                     Controls.Label { text: "Quota (GB/day)" }
                                     Controls.SpinBox { id: queueDialogQuotaBytes; from: 0; to: 100000; value: 0 }
+                                    Controls.Label { text: "After queue finishes" }
+                                    Controls.ComboBox {
+                                        id: queueDialogPostAction
+                                        Layout.preferredWidth: 220
+                                        model: appRoot.queuePostActionOptions
+                                    }
                                 }
                             }
                         }
@@ -2658,7 +2773,7 @@ ApplicationWindow {
 
     Shortcut { sequence: "Ctrl+I"; context: Qt.ApplicationShortcut; onActivated: importDialog.open() }
     Shortcut { sequence: "Ctrl+E"; context: Qt.ApplicationShortcut; onActivated: exportDialog.open() }
-    Shortcut { sequence: "Ctrl+Q"; context: Qt.ApplicationShortcut; onActivated: Qt.quit() }
+    Shortcut { sequence: "Ctrl+Q"; context: Qt.ApplicationShortcut; onActivated: appController.quitApplication() }
     Shortcut { sequence: "Ctrl+Shift+P"; context: Qt.ApplicationShortcut; onActivated: downloadManager.pauseAll() }
     Shortcut { sequence: "Ctrl+Shift+R"; context: Qt.ApplicationShortcut; onActivated: downloadManager.resumeAll() }
     Shortcut { sequence: "Ctrl+Shift+T"; context: Qt.ApplicationShortcut; onActivated: downloadManager.retryFailed() }
@@ -2669,6 +2784,8 @@ ApplicationWindow {
         AppGlobals.appPalette = palette
         AppGlobals.appWindow = appRoot
         AppGlobals.rtl = appRootObjects.isLeftToRight ? false : true
+        appController.setMainWindow(appRoot)
+        appController.keepRunningInBackground = uiSettings.keepRunningInBackground
 
         pageIndex = 0
         queueFilter = uiSettings.savedQueueFilter
@@ -3621,7 +3738,7 @@ ApplicationWindow {
                     Controls.Label {
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
-                        text: "Remove the selected download from RAAD?"
+                        text: "Remove the selected download from TONDAR?"
                     }
 
                     Controls.CheckBox {
@@ -3659,7 +3776,7 @@ ApplicationWindow {
             Controls.Label {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
-                text: "A newer version of RAAD is available."
+                text: "A newer version of TONDAR is available."
             }
 
             Controls.Label {
@@ -3698,7 +3815,7 @@ ApplicationWindow {
             Controls.Label {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
-                text: "Restore RAAD to its default configuration?"
+                text: "Restore TONDAR to its default configuration?"
             }
 
             Controls.Label {
@@ -3734,8 +3851,8 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 text: appRoot.pendingRemoveRows.length > 1
-                      ? "Remove " + appRoot.pendingRemoveRows.length + " selected downloads from RAAD?"
-                      : "Remove the selected download from RAAD?"
+                      ? "Remove " + appRoot.pendingRemoveRows.length + " selected downloads from TONDAR?"
+                      : "Remove the selected download from TONDAR?"
             }
 
             Controls.CheckBox {
@@ -3764,8 +3881,8 @@ ApplicationWindow {
             spacing: 8
 
             Rectangle {
-                Layout.preferredWidth: 110
-                Layout.preferredHeight: 38
+                Layout.preferredWidth: 128
+                Layout.preferredHeight: 42
                 Layout.alignment: Qt.AlignVCenter
                 radius: Metrics.innerRadius
                 color: Colors.lightShadow
@@ -3774,6 +3891,8 @@ ApplicationWindow {
                 RowLayout {
                     anchors.centerIn: parent
                     spacing: 10
+
+                    Item { Layout.preferredWidth: 5; }
 
                     Controls.Text {
                         font.family: FontSystem.getAwesomeSolid.name
@@ -3787,8 +3906,10 @@ ApplicationWindow {
                         font.family: FontSystem.getContentFont.name
                         font.pixelSize: Typography.h3
                         color: Colors.textPrimary
-                        text: "RAAD"
+                        text: "TONDAR"
                     }
+
+                    Item { Layout.preferredWidth: 5; }
                 }
 
             }
@@ -3847,21 +3968,9 @@ ApplicationWindow {
                         border.color: Colors.borderActivated
                         clip: true
 
-                        Image {
-                            id: genyAdImage
-                            anchors.fill: parent
-                            anchors.margins: 7
-                            source: appRoot.genyTokenImageUrl
-                            fillMode: Image.PreserveAspectFit
-                            smooth: true
-                            asynchronous: true
-                            cache: true
-                        }
-
                         Text {
                             anchors.centerIn: parent
-                            visible: genyAdImage.status !== Image.Ready
-                            text: "$GENY"
+                            text: "$" + appRoot.genyTokenSymbol
                             color: Colors.textPrimary
                             font.family: FontSystem.getTitleBoldFont.font.family
                             font.pixelSize: Typography.t5
@@ -3936,7 +4045,7 @@ ApplicationWindow {
             Controls.AppMenuItem { text: "Retry Failed"; iconGlyph: "\uf01e"; onTriggered: downloadManager.retryFailed() }
             Controls.AppMenuItem { text: "Cancel All"; iconGlyph: "\uf057"; onTriggered: downloadManager.cancelAll() }
             Controls.AppMenuSeparator {}
-            Controls.AppMenuItem { text: "Exit"; iconGlyph: "\uf08b"; onTriggered: Qt.quit() }
+            Controls.AppMenuItem { text: "Exit"; iconGlyph: "\uf08b"; onTriggered: appController.quitApplication() }
         }
 
         Controls.AppMenu {
@@ -4096,17 +4205,17 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             contentWidth: availableWidth
+                            contentHeight: sidebarContent.implicitHeight
                             ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
                             ColumnLayout {
+                                id: sidebarContent
                                 width: sidebarScroll.availableWidth
-                                Layout.fillWidth: true
-                                Layout.fillHeight: true
 
                                 Controls.GroupBox {
                                     id: navigationTree
                                     Layout.fillWidth: true
-                                    Layout.preferredHeight: navigationTreeContent.implicitHeight + 18
+                                    Layout.preferredHeight: navigationTreeContent.implicitHeight + topPadding + bottomPadding
                                     hasBorder: false
                                     hasShadow: false
 
@@ -4333,13 +4442,74 @@ ApplicationWindow {
                                             }
                                         }
 
+                                        Rectangle {
+                                            Layout.fillWidth: true
+                                            Layout.topMargin: 6
+                                            Layout.bottomMargin: 6
+                                            height: 1
+                                            color: Colors.lineBorderActivated
+                                        }
+
+                                        Controls.SidebarTreeItem {
+                                            Layout.fillWidth: true
+                                            text: "Queues"
+                                            iconGlyph: "\uf0ca"
+                                            selected: appRoot.queueFilter !== "All Queues"
+                                            expandable: true
+                                            expanded: appRoot.sidebarQueuesExpanded
+                                            onClicked: appRoot.sidebarQueuesExpanded = !appRoot.sidebarQueuesExpanded
+                                        }
+
+                                        Item {
+                                            Layout.fillWidth: true
+                                            implicitHeight: sidebarQueueChildren.implicitHeight
+                                            height: appRoot.sidebarQueuesExpanded ? implicitHeight : 0
+                                            opacity: appRoot.sidebarQueuesExpanded ? 1 : 0
+                                            visible: height > 0 || opacity > 0
+                                            clip: true
+
+                                            Behavior on height { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                                            Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
+
+                                            ColumnLayout {
+                                                id: sidebarQueueChildren
+                                                anchors.left: parent.left
+                                                anchors.right: parent.right
+                                                anchors.top: parent.top
+                                                spacing: 4
+
+                                                Controls.SidebarTreeItem {
+                                                    Layout.fillWidth: true
+                                                    child: true
+                                                    text: "All Queues"
+                                                    iconGlyph: "\uf03a"
+                                                    selected: appRoot.queueFilter === "All Queues"
+                                                    onClicked: appRoot.setQueueScope("All Queues")
+                                                }
+                                                Repeater {
+                                                    model: downloadManager.queueNames
+                                                    delegate: Controls.SidebarTreeItem {
+                                                        required property string modelData
+                                                        Layout.fillWidth: true
+                                                        child: true
+                                                        text: modelData
+                                                        iconGlyph: "\uf07b"
+                                                        selected: appRoot.queueFilter === modelData
+                                                        onClicked: appRoot.setQueueScope(modelData)
+                                                    }
+                                                }
+                                            }
+                                        }
+
                                     }
                                 }
 
                                 Controls.GroupBox {
                                     id: queueTree
+                                    visible: false
                                     Layout.fillWidth: true
-                                    Layout.preferredHeight: queueTreeContent.implicitHeight + 18
+                                    Layout.preferredHeight: 0
+                                    Layout.maximumHeight: 0
                                     hasBorder: false
                                     hasShadow: false
 
@@ -4403,10 +4573,12 @@ ApplicationWindow {
 
                         Controls.GroupBox {
                             id: runtimeCard
+                            visible: false
                             Layout.fillWidth: true
                             Layout.fillHeight: false
                             hasBorder: true
-                            Layout.preferredHeight: runtimeCardContent.implicitHeight + 48
+                            Layout.preferredHeight: 0
+                            Layout.maximumHeight: 0
                             readonly property real transferRatio: downloadManager.totalSize > 0
                                                                   ? Math.min(1.0, downloadManager.totalReceived / downloadManager.totalSize)
                                                                   : 0.0
@@ -5360,24 +5532,48 @@ ApplicationWindow {
                         }
 
                         GroupBox {
+                            id: runtimeFooter
+                            visible: uiSettings.showRuntimeFooter
                             Layout.fillWidth: true
                             Layout.preferredHeight: 42
+                            readonly property real transferRatio: downloadManager.totalSize > 0
+                                                                  ? Math.min(1.0, downloadManager.totalReceived / downloadManager.totalSize)
+                                                                  : 0.0
 
                             RowLayout {
                                 anchors.fill: parent
                                 anchors.leftMargin: Metrics.padding
                                 anchors.rightMargin: Metrics.padding
+                                spacing: 14
 
                                 Controls.Label {
                                     text: "Visible: "
                                           + downloadManager.model.filteredCount(appRoot.queueFilter, appRoot.statusFilter, appRoot.categoryFilter, appRoot.searchText)
                                 }
-                                Controls.Label { text: "Total speed: " + appRoot.formatSpeed(downloadManager.totalSpeed) }
+                                Controls.Label { text: "Speed: " + appRoot.formatSpeed(downloadManager.totalSpeed) }
                                 Controls.Label {
-                                    text: "Overall: "
-                                          + (downloadManager.totalSize > 0
-                                             ? (100 * downloadManager.totalReceived / downloadManager.totalSize).toFixed(1)
-                                             : "0.0") + "%"
+                                    text: "Transfer: " + Math.round(runtimeFooter.transferRatio * 100) + "%"
+                                }
+                                Controls.Label {
+                                    text: "CPU: " + downloadManager.processCpuLoad.toFixed(1) + "%"
+                                }
+                                Controls.Label {
+                                    text: "Mem: " + appRoot.formatBytes(downloadManager.processMemoryBytes)
+                                }
+                                Controls.Label {
+                                    text: "Disk: " + appRoot.formatBytes(downloadManager.diskFreeBytes)
+                                }
+                                Controls.Label {
+                                    text: downloadManager.networkReachability
+                                    color: downloadManager.networkReachability === "Online"
+                                           ? Colors.success
+                                           : (downloadManager.networkReachability === "Offline"
+                                              ? Colors.error
+                                              : Colors.warning)
+                                }
+                                Controls.Label {
+                                    text: downloadManager.onBattery ? "Battery" : "AC"
+                                    color: downloadManager.onBattery ? Colors.warning : Colors.success
                                 }
                                 Controls.Label {
                                     text: "Selected: "
@@ -5499,20 +5695,35 @@ ApplicationWindow {
                             Label { text: "Max speed (MB/s)" }
                             SpinBox { id: queueSpeedSpin; from: 0; to: 4096; value: 0 }
 
-                            Label { text: "Enable schedule" }
+                            Label { text: "Run on schedule" }
                             Switch { id: queueScheduleSwitch }
 
-                            Label { text: "Start minute" }
-                            SpinBox { id: queueStartSpin; from: 0; to: 1439; value: 0 }
+                            Label { text: "Start time" }
+                            TextField {
+                                id: queueStartTimeField
+                                placeholderText: "02:00 AM"
+                                text: "00:00"
+                            }
 
-                            Label { text: "End minute" }
-                            SpinBox { id: queueEndSpin; from: 0; to: 1439; value: 0 }
+                            Label { text: "End time" }
+                            TextField {
+                                id: queueEndTimeField
+                                placeholderText: "07:00 AM"
+                                text: "00:00"
+                            }
 
                             Label { text: "Enable quota" }
                             Switch { id: queueQuotaSwitch }
 
                             Label { text: "Quota (GB/day)" }
                             SpinBox { id: queueQuotaSpin; from: 0; to: 100000; value: 0 }
+
+                            Label { text: "After queue finishes" }
+                            ComboBox {
+                                id: queuePostActionCombo
+                                Layout.preferredWidth: 220
+                                model: appRoot.queuePostActionOptions
+                            }
 
                             Label { text: "Downloaded today" }
                             Label {
@@ -5823,7 +6034,7 @@ ApplicationWindow {
                             Label {
                                 Layout.fillWidth: true
                                 wrapMode: Text.Wrap
-                                text: "Restore RAAD defaults and clear persisted session/configuration state without deleting downloaded files."
+                                text: "Restore TONDAR defaults and clear persisted session/configuration state without deleting downloaded files."
                             }
 
                             RowLayout {

@@ -17,7 +17,7 @@
  * @author      <a href='https://github.com/thecompez'>Kambiz Asadzadeh</a>
  * @since       09 Feb 2026
  * @copyright   Copyright (c) 2026 Genyleap. All rights reserved.
- * @license     https://github.com/genyleap/raad/blob/main/LICENSE.md
+ * @license     https://github.com/genyleap/tondar/blob/main/LICENSE.md
  */
 
 module;
@@ -28,14 +28,14 @@ module;
 #include <QVector>
 
 #ifndef Q_MOC_RUN
-export module raad.core.downloadmodel;
-import raad.core.downloadertask;
+export module tondar.core.downloadmodel;
+import tondar.core.downloadertask;
 #endif
 
 #ifdef Q_MOC_RUN
-#define RAAD_MODULE_EXPORT
+#define TONDAR_MODULE_EXPORT
 #else
-#define RAAD_MODULE_EXPORT export
+#define TONDAR_MODULE_EXPORT export
 #endif
 
 /**
@@ -44,7 +44,7 @@ import raad.core.downloadertask;
  * Holds UI-relevant metadata derived from a DownloaderTask instance.
  * This structure is intentionally kept simple and is owned by DownloadModel.
  */
-RAAD_MODULE_EXPORT struct DownloadItem {
+TONDAR_MODULE_EXPORT struct DownloadItem {
 
     //!< @brief Display file name or target path.
     QString fileName;
@@ -77,7 +77,7 @@ RAAD_MODULE_EXPORT struct DownloadItem {
  * The model listens to signals emitted by DownloaderTask instances
  * and updates rows accordingly.
  */
-RAAD_MODULE_EXPORT class DownloadModel : public QAbstractTableModel {
+TONDAR_MODULE_EXPORT class DownloadModel : public QAbstractTableModel {
     Q_OBJECT
 
 public:

@@ -19,7 +19,7 @@
  * @author      <a href='https://github.com/thecompez'>Kambiz Asadzadeh</a>
  * @since       09 Feb 2026
  * @copyright   Copyright (c) 2026 Genyleap. All rights reserved.
- * @license     https://github.com/genyleap/raad/blob/main/LICENSE.md
+ * @license     https://github.com/genyleap/tondar/blob/main/LICENSE.md
  */
 
 module;
@@ -36,13 +36,13 @@ module;
 #include <QVariantList>
 
 #ifndef Q_MOC_RUN
-export module raad.core.downloadertask;
+export module tondar.core.downloadertask;
 #endif
 
 #ifdef Q_MOC_RUN
-#define RAAD_MODULE_EXPORT
+#define TONDAR_MODULE_EXPORT
 #else
-#define RAAD_MODULE_EXPORT export
+#define TONDAR_MODULE_EXPORT export
 #endif
 
 /**
@@ -61,7 +61,7 @@ export module raad.core.downloadertask;
  * global or queue-level policies; those are handled by higher-level
  * orchestrators such as DownloadManager.
  */
-RAAD_MODULE_EXPORT class DownloaderTask : public QObject {
+TONDAR_MODULE_EXPORT class DownloaderTask : public QObject {
 
     Q_OBJECT
 
@@ -822,7 +822,7 @@ private:
     int m_proxyPort = 0;                    //!< Proxy port.
     QString m_proxyUser;                    //!< Proxy user.
     QString m_proxyPassword;                //!< Proxy password.
-    QString m_userAgent = QStringLiteral("raad/1.0"); //!< Request User-Agent.
+    QString m_userAgent = QStringLiteral("tondar/1.0"); //!< Request User-Agent.
     bool m_allowInsecureSsl = false;        //!< Ignore SSL errors.
     int m_priority = 100;                   //!< Task priority.
     bool m_adaptiveSegmentsEnabled = true;  //!< Adaptive segment controller toggle.

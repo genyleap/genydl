@@ -17,11 +17,11 @@ module;
 #include <QElapsedTimer>
 #include <ctime>
 
-module raad.core.downloadertask;
+module tondar.core.downloadertask;
 
-import raad.utils.download_utils;
+import tondar.utils.download_utils;
 
-namespace utils = raad::utils;
+namespace utils = tondar::utils;
 
 DownloaderTask::DownloaderTask(const QUrl& url,
                                const QString& filePath,
@@ -304,7 +304,7 @@ void DownloaderTask::setProxyPassword(const QString& value)
 void DownloaderTask::setUserAgent(const QString& value)
 {
     const QString next = value.trimmed().isEmpty()
-        ? QStringLiteral("raad/1.0")
+        ? QStringLiteral("tondar/1.0")
         : value.trimmed();
     if (m_userAgent == next) return;
     m_userAgent = next;

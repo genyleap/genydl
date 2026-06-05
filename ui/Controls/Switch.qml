@@ -1,18 +1,18 @@
 /*!
     \file        Switch.qml
-    \brief       Implements the Switch QML component for RAAD.
-    \details     This file contains the Switch user interface component used by the RAAD desktop application.
+    \brief       Implements the Switch QML component for TONDAR.
+    \details     This file contains the Switch user interface component used by the TONDAR desktop application.
 
     \author      Kambiz Asadzadeh <https://github.com/thecompez>
     \copyright   Copyright (c) 2026 Genyleap. All rights reserved.
-    \license     https://github.com/genyleap/raad/blob/main/LICENSE.md
+    \license     https://github.com/genyleap/tondar/blob/main/LICENSE.md
 */
 
 import QtQuick
 import QtQuick.Controls.Basic as T
 import QtQuick.Effects
 
-import Raad
+import Tondar
 
 T.Switch {
     id: control

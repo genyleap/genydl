@@ -1,11 +1,11 @@
 /*!
     \file        utils.js
-    \brief       Provides shared JavaScript helper functions for RAAD QML.
+    \brief       Provides shared JavaScript helper functions for TONDAR QML.
     \details     This file contains application-level helper logic used by Main.qml for formatting, filtering, selection, queue actions, and download workflows.
 
     \author      Kambiz Asadzadeh <https://github.com/thecompez>
     \copyright   Copyright (c) 2026 Genyleap. All rights reserved.
-    \license     https://github.com/genyleap/raad/blob/main/LICENSE.md
+    \license     https://github.com/genyleap/tondar/blob/main/LICENSE.md
 */
 
 function formatBytes(value) {
@@ -356,7 +356,7 @@ function shareSelectedTargets() {
         return
     downloadManager.copyText(urls.join("\n"))
     var body = encodeURIComponent(urls.join("\n"))
-    Qt.openUrlExternally("mailto:?subject=RAAD%20Downloads&body=" + body)
+    Qt.openUrlExternally("mailto:?subject=TONDAR%20Downloads&body=" + body)
     downloadManager.showToast("Share links copied", "info")
 }
 
@@ -550,6 +550,46 @@ function submitDownload(url, output, queueName, categoryName, startPaused, segme
     return true
 }
 
+function downloadPathForAsset(output, fileName) {
+    const safeName = (fileName || "").trim()
+    const rawBase = (output || documentsFolder || "").trim()
+    const base = rawBase.startsWith("file://") ? decodeURIComponent(rawBase.slice(7)) : rawBase
+    if (safeName.length === 0 || base.length === 0) {
+        return base
+    }
+    if (base.endsWith("/") || base.endsWith("\\")) {
+        return base + safeName
+    }
+    return base + "/" + safeName
+}
+
+function submitGitHubReleaseAssets(assets, output, queueName, categoryName, startPaused, segments, adaptive) {
+    if (!assets || assets.length === 0) {
+        return 0
+    }
+
+    var added = 0
+    for (var i = 0; i < assets.length; ++i) {
+        const asset = assets[i]
+        const url = asset && asset.downloadUrl !== undefined ? String(asset.downloadUrl) : ""
+        const name = asset && asset.name !== undefined ? String(asset.name) : ""
+        if (url.length === 0 || name.length === 0) {
+            continue
+        }
+
+        if (submitDownload(url,
+                           downloadPathForAsset(output, name),
+                           queueName,
+                           categoryName,
+                           startPaused,
+                           segments,
+                           adaptive)) {
+            ++added
+        }
+    }
+    return added
+}
+
 function rebuildDownloadTableRows() {
     var rows = []
     const count = downloadManager.taskCount()
@@ -646,10 +686,11 @@ function loadQueueEditor() {
     queueConcurrentSpin.value = downloadManager.queueMaxConcurrent(queueEditorName)
     queueSpeedSpin.value = Math.round(downloadManager.queueMaxSpeed(queueEditorName) / (1024 * 1024))
     queueScheduleSwitch.checked = downloadManager.queueScheduleEnabled(queueEditorName)
-    queueStartSpin.value = downloadManager.queueScheduleStartMinutes(queueEditorName)
-    queueEndSpin.value = downloadManager.queueScheduleEndMinutes(queueEditorName)
+    queueStartTimeField.text = appRoot.minutesToClockText(downloadManager.queueScheduleStartMinutes(queueEditorName))
+    queueEndTimeField.text = appRoot.minutesToClockText(downloadManager.queueScheduleEndMinutes(queueEditorName))
     queueQuotaSwitch.checked = downloadManager.queueQuotaEnabled(queueEditorName)
     queueQuotaSpin.value = Math.round(downloadManager.queueQuotaBytes(queueEditorName) / (1024 * 1024 * 1024))
+    queuePostActionCombo.currentIndex = appRoot.queuePostActionIndex(downloadManager.queuePostCompletionAction(queueEditorName))
 }
 
 function applyQueueEditor() {
@@ -659,10 +700,11 @@ function applyQueueEditor() {
     downloadManager.setQueueMaxConcurrent(queueEditorName, queueConcurrentSpin.value)
     downloadManager.setQueueMaxSpeed(queueEditorName, queueSpeedSpin.value * 1024 * 1024)
     downloadManager.setQueueScheduleEnabled(queueEditorName, queueScheduleSwitch.checked)
-    downloadManager.setQueueScheduleStartMinutes(queueEditorName, queueStartSpin.value)
-    downloadManager.setQueueScheduleEndMinutes(queueEditorName, queueEndSpin.value)
+    downloadManager.setQueueScheduleStartMinutes(queueEditorName, appRoot.clockTextToMinutes(queueStartTimeField.text, downloadManager.queueScheduleStartMinutes(queueEditorName)))
+    downloadManager.setQueueScheduleEndMinutes(queueEditorName, appRoot.clockTextToMinutes(queueEndTimeField.text, downloadManager.queueScheduleEndMinutes(queueEditorName)))
     downloadManager.setQueueQuotaEnabled(queueEditorName, queueQuotaSwitch.checked)
     downloadManager.setQueueQuotaBytes(queueEditorName, queueQuotaSpin.value * 1024 * 1024 * 1024)
+    downloadManager.setQueuePostCompletionAction(queueEditorName, appRoot.queuePostActionIds[Math.max(0, queuePostActionCombo.currentIndex)])
 }
 
 function createQueueFromEditor(name) {

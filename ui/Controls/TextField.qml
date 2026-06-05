@@ -1,17 +1,17 @@
 /*!
     \file        TextField.qml
-    \brief       Implements the TextField QML component for RAAD.
-    \details     This file contains the TextField user interface component used by the RAAD desktop application.
+    \brief       Implements the TextField QML component for TONDAR.
+    \details     This file contains the TextField user interface component used by the TONDAR desktop application.
 
     \author      Kambiz Asadzadeh <https://github.com/thecompez>
     \copyright   Copyright (c) 2026 Genyleap. All rights reserved.
-    \license     https://github.com/genyleap/raad/blob/main/LICENSE.md
+    \license     https://github.com/genyleap/tondar/blob/main/LICENSE.md
 */
 
 import QtQuick
 import QtQuick.Controls as T
 
-import Raad // Colors, Metrics
+import Tondar // Colors, Metrics
 
 T.TextField {
     id: control

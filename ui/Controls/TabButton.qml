@@ -1,18 +1,18 @@
 /*!
     \file        TabButton.qml
-    \brief       Implements the TabButton QML component for RAAD.
-    \details     This file contains the TabButton user interface component used by the RAAD desktop application.
+    \brief       Implements the TabButton QML component for TONDAR.
+    \details     This file contains the TabButton user interface component used by the TONDAR desktop application.
 
     \author      Kambiz Asadzadeh <https://github.com/thecompez>
     \copyright   Copyright (c) 2026 Genyleap. All rights reserved.
-    \license     https://github.com/genyleap/raad/blob/main/LICENSE.md
+    \license     https://github.com/genyleap/tondar/blob/main/LICENSE.md
 */
 
 import QtQuick
 import QtQuick as QQ
 import QtQuick.Templates as T
 
-import Raad // Colors, Metrics
+import Tondar // Colors, Metrics
 
 T.TabButton {
     id: control

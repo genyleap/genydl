@@ -1,4 +1,4 @@
-module Raad.Controls
+module Tondar.Controls
 
 Button 1.0 Button.qml
 Card 1.0 Card.qml
@@ -19,6 +19,7 @@ AppMenuSeparator 1.0 AppMenuSeparator.qml
 AppMenuTrigger 1.0 AppMenuTrigger.qml
 CommandActionButton 1.0 CommandActionButton.qml
 CommandAddUrlButton 1.0 CommandAddUrlButton.qml
+GitHubReleaseAssetPicker 1.0 GitHubReleaseAssetPicker.qml
 SidebarTreeItem 1.0 SidebarTreeItem.qml
 AddDownloadDialog 1.0 AddDownloadDialog.qml
 DownloadDelegate 1.0 DownloadDelegate.qml

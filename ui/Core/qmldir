@@ -1,4 +1,4 @@
-module Raad
+module Tondar
 
 singleton AppGlobals 1.0 AppGlobals.qml
 singleton Colors 1.0 Colors.qml

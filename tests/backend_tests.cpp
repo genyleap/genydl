@@ -1,10 +1,12 @@
 #include <QtTest/QtTest>
 
-import raad.utils.version_utils;
-import raad.utils.download_utils;
-import raad.utils.category_utils;
+import tondar.utils.version_utils;
+import tondar.utils.download_utils;
+import tondar.utils.category_utils;
+import tondar.services.github_release_service;
 
-namespace utils = raad::utils;
+namespace utils = tondar::utils;
+namespace github = tondar::github;
 
 class BackendTests final : public QObject
 {
@@ -18,6 +20,12 @@ private slots:
     void extractChecksumFromText();
     void normalizeHost();
     void detectCategory();
+    void parseGitHubReleaseTagUrl();
+    void parseGitHubReleaseLatestUrl();
+    void rejectNonGitHubReleaseUrl();
+    void parseGitHubReleaseJsonWithAssets();
+    void parseGitHubReleaseJsonWithEmptyAssets();
+    void mapGitHubApiErrors();
 };
 
 void BackendTests::compareVersions_data()
@@ -70,12 +78,12 @@ void BackendTests::extractChecksumFromText()
                                             "27ae41e4649b934ca495991b7852b855");
     const QString text = QStringLiteral(
         "cafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe  other.pkg\n"
-        "%1  raad-1.0.1-macos.dmg\n"
-        "SHA256(raad-1.0.1-windows.exe)= 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\n")
+        "%1  tondar-1.0.1-macos.dmg\n"
+        "SHA256(tondar-1.0.1-windows.exe)= 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\n")
                              .arg(checksum);
 
     QCOMPARE(utils::extractChecksumFromText(text,
-                                            QStringLiteral("raad-1.0.1-macos.dmg"),
+                                            QStringLiteral("tondar-1.0.1-macos.dmg"),
                                             QStringLiteral("SHA256")),
              checksum);
     QCOMPARE(utils::extractChecksumFromText(QStringLiteral("sha256:%1").arg(checksum),
@@ -95,6 +103,111 @@ void BackendTests::detectCategory()
     QCOMPARE(utils::toString(utils::detectCategory(QStringLiteral("movie.mkv"))), QStringLiteral("Video"));
     QCOMPARE(utils::toString(utils::detectCategory(QStringLiteral("archive.tar.gz"))), QStringLiteral("Archives"));
     QCOMPARE(utils::toString(utils::detectCategory(QStringLiteral("unknown.customext"))), QStringLiteral("Other"));
+}
+
+void BackendTests::parseGitHubReleaseTagUrl()
+{
+    const auto parsed = github::parseReleaseUrl(QStringLiteral("https://github.com/genyleap/GenyConnect/releases/tag/v1.4.768"));
+    QVERIFY(parsed.has_value());
+    QCOMPARE(parsed->owner, QStringLiteral("genyleap"));
+    QCOMPARE(parsed->repo, QStringLiteral("GenyConnect"));
+    QCOMPARE(parsed->tag, QStringLiteral("v1.4.768"));
+    QCOMPARE(static_cast<int>(parsed->kind), static_cast<int>(github::ReleaseRequestKind::Tag));
+    QCOMPARE(github::apiUrlForRequest(*parsed).toString(),
+             QStringLiteral("https://api.github.com/repos/genyleap/GenyConnect/releases/tags/v1.4.768"));
+}
+
+void BackendTests::parseGitHubReleaseLatestUrl()
+{
+    const auto parsed = github::parseReleaseUrl(QStringLiteral("https://github.com/owner/repo/releases/latest"));
+    QVERIFY(parsed.has_value());
+    QCOMPARE(parsed->owner, QStringLiteral("owner"));
+    QCOMPARE(parsed->repo, QStringLiteral("repo"));
+    QCOMPARE(parsed->tag, QString());
+    QCOMPARE(static_cast<int>(parsed->kind), static_cast<int>(github::ReleaseRequestKind::Latest));
+    QCOMPARE(github::apiUrlForRequest(*parsed).toString(),
+             QStringLiteral("https://api.github.com/repos/owner/repo/releases/latest"));
+}
+
+void BackendTests::rejectNonGitHubReleaseUrl()
+{
+    QVERIFY(!github::parseReleaseUrl(QStringLiteral("https://example.com/file.zip")).has_value());
+    QVERIFY(!github::parseReleaseUrl(QStringLiteral("https://github.com/owner/repo/archive/refs/tags/v1.zip")).has_value());
+    QVERIFY(!github::parseReleaseUrl(QStringLiteral("https://github.com/owner/repo/releases")).has_value());
+}
+
+void BackendTests::parseGitHubReleaseJsonWithAssets()
+{
+    const QByteArray json = R"JSON(
+{
+  "name": "Version 1.4.768",
+  "tag_name": "v1.4.768",
+  "published_at": "2026-06-01T12:34:56Z",
+  "body": "Release notes",
+  "repository": {
+    "name": "GenyConnect",
+    "owner": { "login": "genyleap" }
+  },
+  "assets": [
+    {
+      "name": "GenyConnect-10.dmg",
+      "size": 2048,
+      "browser_download_url": "https://github.com/genyleap/GenyConnect/releases/download/v1.4.768/GenyConnect-10.dmg",
+      "content_type": "application/octet-stream",
+      "download_count": 3,
+      "created_at": "2026-06-01T12:35:00Z",
+      "updated_at": "2026-06-01T12:36:00Z"
+    },
+    {
+      "name": "GenyConnect-2.dmg",
+      "size": 1024,
+      "browser_download_url": "https://github.com/genyleap/GenyConnect/releases/download/v1.4.768/GenyConnect-2.dmg",
+      "content_type": "application/x-apple-diskimage",
+      "download_count": 7
+    }
+  ]
+}
+)JSON";
+
+    QString error;
+    const auto release = github::parseReleaseJson(json, &error);
+    QVERIFY2(release.has_value(), qPrintable(error));
+    QCOMPARE(release->name, QStringLiteral("Version 1.4.768"));
+    QCOMPARE(release->tagName, QStringLiteral("v1.4.768"));
+    QCOMPARE(release->repositoryName(), QStringLiteral("genyleap/GenyConnect"));
+    QCOMPARE(release->assets.size(), 2);
+    QCOMPARE(release->assets.at(0).name, QStringLiteral("GenyConnect-2.dmg"));
+    QCOMPARE(release->assets.at(1).name, QStringLiteral("GenyConnect-10.dmg"));
+    QCOMPARE(release->assets.at(0).size, 1024);
+    QCOMPARE(release->assets.at(0).downloadCount, 7);
+}
+
+void BackendTests::parseGitHubReleaseJsonWithEmptyAssets()
+{
+    const QByteArray json = R"JSON(
+{
+  "name": "No assets",
+  "tag_name": "v2.0.0",
+  "published_at": "2026-06-01T12:34:56Z",
+  "assets": []
+}
+)JSON";
+
+    QString error;
+    const auto release = github::parseReleaseJson(json, &error);
+    QVERIFY2(release.has_value(), qPrintable(error));
+    QCOMPARE(release->tagName, QStringLiteral("v2.0.0"));
+    QCOMPARE(release->assets.size(), 0);
+}
+
+void BackendTests::mapGitHubApiErrors()
+{
+    QCOMPARE(github::userFriendlyApiError(404, QByteArray(), false),
+             QStringLiteral("GitHub repository or release was not found."));
+    QCOMPARE(github::userFriendlyApiError(403, QByteArray(), true),
+             QStringLiteral("GitHub API rate limit reached. Try again later or configure a GitHub token when token support is enabled."));
+    QCOMPARE(github::userFriendlyApiError(500, QByteArray(R"JSON({"message":"server side problem"})JSON"), false),
+             QStringLiteral("GitHub API error: server side problem"));
 }
 
 QTEST_MAIN(BackendTests)

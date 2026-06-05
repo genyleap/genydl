@@ -1,11 +1,11 @@
 /*!
     \file        HorizontalLine.qml
-    \brief       Implements the HorizontalLine QML component for RAAD.
-    \details     This file contains the HorizontalLine user interface component used by the RAAD desktop application.
+    \brief       Implements the HorizontalLine QML component for TONDAR.
+    \details     This file contains the HorizontalLine user interface component used by the TONDAR desktop application.
 
     \author      Kambiz Asadzadeh <https://github.com/thecompez>
     \copyright   Copyright (c) 2026 Genyleap. All rights reserved.
-    \license     https://github.com/genyleap/raad/blob/main/LICENSE.md
+    \license     https://github.com/genyleap/tondar/blob/main/LICENSE.md
 */
 
 // Copyright (C) 2022 The Genyleap.
@@ -15,7 +15,7 @@
 import QtQuick
 import QtQuick.Layouts
 
-import Raad
+import Tondar
 
 ColumnLayout {
 

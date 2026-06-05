@@ -9,7 +9,7 @@ module;
 #include <QFile>
 #endif
 
-module raad.services.power_monitor;
+module tondar.services.power_monitor;
 
 bool PowerMonitor::isOnBattery(bool fallback) const
 {

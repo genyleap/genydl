@@ -10,7 +10,7 @@ module;
 #include <QVector>
 #include <QtGlobal>
 
-module raad.core.downloadmodel;
+module tondar.core.downloadmodel;
 
 DownloadModel::DownloadModel(QObject *parent) : QAbstractTableModel(parent) {}
 

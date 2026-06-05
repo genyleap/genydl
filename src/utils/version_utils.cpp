@@ -1,9 +1,9 @@
 module;
 #include <QVersionNumber>
 
-module raad.utils.version_utils;
+module tondar.utils.version_utils;
 
-namespace raad::utils {
+namespace tondar::utils {
 
 struct ParsedVersion {
     QVersionNumber base;
@@ -41,4 +41,4 @@ int compareVersions(const QString& a, const QString& b)
     return va.prerelease ? -1 : 1;
 }
 
-} // namespace raad::utils
+} // namespace tondar::utils

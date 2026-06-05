@@ -1,4 +1,4 @@
-#include <QGuiApplication>
+#include <QApplication>
 #include <QCoreApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -12,8 +12,10 @@
 #include <QIcon>
 #include <QUrl>
 
-import raad.core.downloadmanager;
-import raad.services.update_client;
+import tondar.core.downloadmanager;
+import tondar.core.appcontroller;
+import tondar.services.github_release_service;
+import tondar.services.update_client;
 
 #ifndef APP_VERSION
 #define APP_VERSION "0.1.0"
@@ -83,11 +85,11 @@ inline void configureGraphicsBackend()
 
 auto main(int argc, char *argv[]) -> int
 {
-    QGuiApplication app(argc, argv);
+    QApplication app(argc, argv);
     QCoreApplication::setOrganizationName(QStringLiteral("Genyleap"));
-    QCoreApplication::setApplicationName(QStringLiteral("Raad"));
+    QCoreApplication::setApplicationName(QStringLiteral("Tondar"));
     QCoreApplication::setApplicationVersion(QStringLiteral(APP_VERSION));
-    app.setWindowIcon(QIcon(QStringLiteral(":/Raad.png")));
+    app.setWindowIcon(QIcon(QStringLiteral(":/Tondar.png")));
     QQuickStyle::setStyle("Basic");
 
     ::configureGraphicsBackend();
@@ -95,6 +97,8 @@ auto main(int argc, char *argv[]) -> int
     // Create DownloadManager instance
     DownloadManager manager;
     UpdateClient updateClient;
+    GitHubReleaseService githubReleaseService;
+    AppController appController(&manager);
 
     const QString appDir = QCoreApplication::applicationDirPath();
     const QString fontFileName = QStringLiteral("fa-solid-900.ttf");
@@ -120,7 +124,9 @@ auto main(int argc, char *argv[]) -> int
     // Expose the manager to QML
     engine.rootContext()->setContextProperty("downloadManager", &manager);
     engine.rootContext()->setContextProperty("updateClient", &updateClient);
-    QString downloadsRoot = QDir(QStandardPaths::writableLocation(QStandardPaths::DownloadLocation)).filePath(QStringLiteral("Raad"));
+    engine.rootContext()->setContextProperty("githubReleaseService", &githubReleaseService);
+    engine.rootContext()->setContextProperty("appController", &appController);
+    QString downloadsRoot = QDir(QStandardPaths::writableLocation(QStandardPaths::DownloadLocation)).filePath(QStringLiteral("Tondar"));
     if (downloadsRoot.isEmpty()) {
         downloadsRoot = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
     }
@@ -138,10 +144,12 @@ auto main(int argc, char *argv[]) -> int
         &app,
         []() { QCoreApplication::exit(-1); },
         Qt::QueuedConnection);
-    engine.loadFromModule("Raad", "Main");
+    engine.loadFromModule("Tondar", "Main");
 
     if (engine.rootObjects().isEmpty())
         return -1;
+
+    appController.setMainWindow(engine.rootObjects().first());
 
     return app.exec();
 }

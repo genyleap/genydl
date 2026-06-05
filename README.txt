@@ -1,14 +1,14 @@
-RAAD - Internet Download Manager
+TONDAR - Internet Download Manager
 ================================
 
-RAAD is a modern, fast, and reliable download manager built with C++ and Qt.
+TONDAR is a modern, fast, and reliable download manager built with C++ and Qt.
 
 It supports segmented downloads, resume/retry, queues, speed limits, proxy settings,
 runtime monitoring, and an integrated update workflow.
 
 Project Status
 --------------
-RAAD is currently under active development.
+TONDAR is currently under active development.
 Some features may be experimental or not fully available yet.
 
 Basic Features
@@ -30,7 +30,7 @@ Website:
 https://genyleap.com
 
 Repository:
-https://github.com/genyleap/raad
+https://github.com/genyleap/tondar
 
 Support:
 support@genyleap.com

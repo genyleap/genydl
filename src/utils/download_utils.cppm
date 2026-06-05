@@ -12,7 +12,7 @@
  * @author      <a href='https://github.com/thecompez'>Kambiz Asadzadeh</a>
  * @since       09 Feb 2026
  * @copyright   Copyright (c) 2026 Genyleap. All rights reserved.
- * @license     https://github.com/genyleap/raad/blob/main/LICENSE.md
+ * @license     https://github.com/genyleap/tondar/blob/main/LICENSE.md
  */
 
 module;
@@ -21,16 +21,16 @@ module;
 #include <QtGlobal>
 
 #ifndef Q_MOC_RUN
-export module raad.utils.download_utils;
+export module tondar.utils.download_utils;
 #endif
 
 #ifdef Q_MOC_RUN
-#define RAAD_MODULE_EXPORT
+#define TONDAR_MODULE_EXPORT
 #else
-#define RAAD_MODULE_EXPORT export
+#define TONDAR_MODULE_EXPORT export
 #endif
 
-RAAD_MODULE_EXPORT namespace raad::utils {
+TONDAR_MODULE_EXPORT namespace tondar::utils {
 
 /**
  * @brief Normalizes a local filesystem path or file URL.
@@ -167,4 +167,4 @@ QString uniqueFilePath(const QString& path);
  */
 bool fileExistsPath(const QString& path);
 
-} // namespace raad::utils
+} // namespace tondar::utils
