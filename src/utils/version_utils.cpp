@@ -1,9 +1,9 @@
 module;
 #include <QVersionNumber>
 
-module tondar.utils.version_utils;
+module genydl.utils.version_utils;
 
-namespace tondar::utils {
+namespace genydl::utils {
 
 struct ParsedVersion {
     QVersionNumber base;
@@ -41,4 +41,4 @@ int compareVersions(const QString& a, const QString& b)
     return va.prerelease ? -1 : 1;
 }
 
-} // namespace tondar::utils
+} // namespace genydl::utils

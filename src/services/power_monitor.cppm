@@ -18,19 +18,19 @@
  * @author      <a href='https://github.com/thecompez'>Kambiz Asadzadeh</a>
  * @since       09 Feb 2026
  * @copyright   Copyright (c) 2026 Genyleap. All rights reserved.
- * @license     https://github.com/genyleap/tondar/blob/main/LICENSE.md
+ * @license     https://github.com/genyleap/genydl/blob/main/LICENSE.md
  */
 
 module;
 
 #ifndef Q_MOC_RUN
-export module tondar.services.power_monitor;
+export module genydl.services.power_monitor;
 #endif
 
 #ifdef Q_MOC_RUN
-#define TONDAR_MODULE_EXPORT
+#define GENYDL_MODULE_EXPORT
 #else
-#define TONDAR_MODULE_EXPORT export
+#define GENYDL_MODULE_EXPORT export
 #endif
 
 /**
@@ -42,7 +42,7 @@ export module tondar.services.power_monitor;
  *
  * This class is intentionally minimal and side-effect free.
  */
-TONDAR_MODULE_EXPORT class PowerMonitor {
+GENYDL_MODULE_EXPORT class PowerMonitor {
 public:
     /**
      * @brief Determines whether the system is currently running on battery power.

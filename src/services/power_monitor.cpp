@@ -9,7 +9,7 @@ module;
 #include <QFile>
 #endif
 
-module tondar.services.power_monitor;
+module genydl.services.power_monitor;
 
 bool PowerMonitor::isOnBattery(bool fallback) const
 {

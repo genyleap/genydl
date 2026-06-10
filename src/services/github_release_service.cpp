@@ -10,7 +10,7 @@ module;
 #include <QStringList>
 #include <algorithm>
 
-module tondar.services.github_release_service;
+module genydl.services.github_release_service;
 
 namespace {
 
@@ -58,7 +58,47 @@ QString apiErrorMessageFromBody(const QByteArray& responseBody)
 
 } // namespace
 
-namespace tondar::github {
+namespace genydl::github {
+
+bool RepositoryRequest::isValid() const
+{
+    return !owner.isEmpty() && !repo.isEmpty();
+}
+
+QString RepositoryRequest::repositoryName() const
+{
+    return owner + QLatin1Char('/') + repo;
+}
+
+bool RepositoryInfo::isValid() const
+{
+    return !owner.isEmpty() && !repo.isEmpty();
+}
+
+QString RepositoryInfo::repositoryName() const
+{
+    return owner + QLatin1Char('/') + repo;
+}
+
+QVariantMap RepositoryInfo::toVariantMap() const
+{
+    return {
+        {QStringLiteral("owner"), owner},
+        {QStringLiteral("repo"), repo},
+        {QStringLiteral("repository"), repositoryName()},
+        {QStringLiteral("fullName"), fullName.isEmpty() ? repositoryName() : fullName},
+        {QStringLiteral("description"), description},
+        {QStringLiteral("avatarUrl"), avatarUrl.toString()},
+        {QStringLiteral("htmlUrl"), htmlUrl.toString()},
+        {QStringLiteral("homepageUrl"), homepageUrl.toString()},
+        {QStringLiteral("language"), language},
+        {QStringLiteral("licenseName"), licenseName},
+        {QStringLiteral("licenseSpdxId"), licenseSpdxId},
+        {QStringLiteral("stars"), stars},
+        {QStringLiteral("forks"), forks},
+        {QStringLiteral("watchers"), watchers}
+    };
+}
 
 bool ReleaseRequest::isValid() const
 {
@@ -81,7 +121,8 @@ QVariantMap ReleaseAsset::toVariantMap() const
         {QStringLiteral("contentType"), contentType},
         {QStringLiteral("downloadCount"), downloadCount},
         {QStringLiteral("createdAt"), createdAt},
-        {QStringLiteral("updatedAt"), updatedAt}
+        {QStringLiteral("updatedAt"), updatedAt},
+        {QStringLiteral("digest"), digest}
     };
 }
 
@@ -93,16 +134,20 @@ QString ReleaseInfo::repositoryName() const
 QVariantMap ReleaseInfo::toVariantMap() const
 {
     return {
+        {QStringLiteral("id"), id},
         {QStringLiteral("owner"), owner},
         {QStringLiteral("repo"), repo},
         {QStringLiteral("repository"), repositoryName()},
         {QStringLiteral("name"), name},
         {QStringLiteral("tagName"), tagName},
         {QStringLiteral("body"), body},
+        {QStringLiteral("htmlUrl"), htmlUrl.toString()},
         {QStringLiteral("publishedAt"), publishedAt},
         {QStringLiteral("publishedText"), publishedAt.isValid()
              ? publishedAt.toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm"))
-             : QString()}
+             : QString()},
+        {QStringLiteral("prerelease"), prerelease},
+        {QStringLiteral("draft"), draft}
     };
 }
 
@@ -113,6 +158,29 @@ QVariantList ReleaseInfo::assetsToVariantList() const
     for (const ReleaseAsset& asset : assets) {
         list.append(asset.toVariantMap());
     }
+    return list;
+}
+
+QVariantList ReleaseInfo::sourceAssetsToVariantList() const
+{
+    QVariantList list;
+    const QString stem = (repo.isEmpty() ? QStringLiteral("source") : repo)
+        + (tagName.isEmpty() ? QString() : (QLatin1Char('-') + tagName));
+
+    auto makeSource = [&](const QUrl& url, const QString& suffix, const QString& contentType) {
+        if (!url.isValid() || url.isEmpty()) return;
+        QVariantMap map;
+        map.insert(QStringLiteral("name"), stem + suffix);
+        map.insert(QStringLiteral("size"), 0);              // unknown; GitHub omits it
+        map.insert(QStringLiteral("downloadUrl"), url.toString());
+        map.insert(QStringLiteral("contentType"), contentType);
+        map.insert(QStringLiteral("downloadCount"), 0);
+        map.insert(QStringLiteral("isSource"), true);       // flag for the UI
+        list.append(map);
+    };
+
+    makeSource(zipballUrl, QStringLiteral("-source.zip"), QStringLiteral("application/zip"));
+    makeSource(tarballUrl, QStringLiteral("-source.tar.gz"), QStringLiteral("application/gzip"));
     return list;
 }
 
@@ -158,6 +226,40 @@ std::optional<ReleaseRequest> parseReleaseUrl(const QString& value)
     return std::nullopt;
 }
 
+std::optional<RepositoryRequest> parseRepositoryUrl(const QString& value)
+{
+    const QUrl url(value.trimmed());
+    if (!url.isValid()) {
+        return std::nullopt;
+    }
+
+    const QString scheme = url.scheme().toLower();
+    const QString host = url.host().toLower();
+    if (scheme != QStringLiteral("https") || host != QStringLiteral("github.com")) {
+        return std::nullopt;
+    }
+
+    const QStringList segments = url.path().split(QLatin1Char('/'), Qt::SkipEmptyParts);
+    if (segments.size() < 2) {
+        return std::nullopt;
+    }
+    if (segments.size() > 4) {
+        return std::nullopt;
+    }
+    if (segments.size() >= 3 && segments.at(2) != QStringLiteral("releases")) {
+        return std::nullopt;
+    }
+    if (segments.size() == 4 && segments.at(3) != QStringLiteral("latest")) {
+        return std::nullopt;
+    }
+
+    RepositoryRequest request;
+    request.owner = QUrl::fromPercentEncoding(segments.at(0).toUtf8());
+    request.repo = QUrl::fromPercentEncoding(segments.at(1).toUtf8());
+    request.originalUrl = value.trimmed();
+    return request.isValid() ? std::optional<RepositoryRequest>(request) : std::nullopt;
+}
+
 QUrl apiUrlForRequest(const ReleaseRequest& request)
 {
     if (!request.isValid()) {
@@ -173,6 +275,38 @@ QUrl apiUrlForRequest(const ReleaseRequest& request)
 
     return QUrl(base + QStringLiteral("tags/")
                 + QString::fromUtf8(QUrl::toPercentEncoding(request.tag, QByteArray(), "/")));
+}
+
+QUrl repositoryApiUrlForRepository(const RepositoryRequest& request)
+{
+    if (!request.isValid()) {
+        return {};
+    }
+    return QUrl(QStringLiteral("https://api.github.com/repos/%1/%2")
+                    .arg(QString::fromUtf8(QUrl::toPercentEncoding(request.owner, QByteArray(), "/")),
+                         QString::fromUtf8(QUrl::toPercentEncoding(request.repo, QByteArray(), "/"))));
+}
+
+QUrl latestReleaseApiUrlForRepository(const RepositoryRequest& request)
+{
+    if (!request.isValid()) {
+        return {};
+    }
+    const QString base = QStringLiteral("https://api.github.com/repos/%1/%2/releases/latest")
+                             .arg(QString::fromUtf8(QUrl::toPercentEncoding(request.owner, QByteArray(), "/")),
+                                  QString::fromUtf8(QUrl::toPercentEncoding(request.repo, QByteArray(), "/")));
+    return QUrl(base);
+}
+
+QUrl releasesApiUrlForRepository(const RepositoryRequest& request)
+{
+    if (!request.isValid()) {
+        return {};
+    }
+    const QString base = QStringLiteral("https://api.github.com/repos/%1/%2/releases")
+                             .arg(QString::fromUtf8(QUrl::toPercentEncoding(request.owner, QByteArray(), "/")),
+                                  QString::fromUtf8(QUrl::toPercentEncoding(request.repo, QByteArray(), "/")));
+    return QUrl(base);
 }
 
 QString humanSize(qint64 bytes)
@@ -245,10 +379,16 @@ std::optional<ReleaseInfo> parseReleaseJson(const QByteArray& data, QString* err
 
     const QJsonObject object = doc.object();
     ReleaseInfo release;
+    release.id = jsonInteger64(object, QStringLiteral("id"));
     release.name = jsonString(object, QStringLiteral("name"));
     release.tagName = jsonString(object, QStringLiteral("tag_name"));
     release.body = jsonString(object, QStringLiteral("body"));
+    release.htmlUrl = QUrl(jsonString(object, QStringLiteral("html_url")));
     release.publishedAt = jsonDateTime(object, QStringLiteral("published_at"));
+    release.prerelease = object.value(QStringLiteral("prerelease")).toBool(false);
+    release.draft = object.value(QStringLiteral("draft")).toBool(false);
+    release.tarballUrl = QUrl(jsonString(object, QStringLiteral("tarball_url")));
+    release.zipballUrl = QUrl(jsonString(object, QStringLiteral("zipball_url")));
 
     const QJsonObject repoObject = object.value(QStringLiteral("repository")).toObject();
     release.owner = repoObject.value(QStringLiteral("owner")).toObject().value(QStringLiteral("login")).toString();
@@ -270,6 +410,7 @@ std::optional<ReleaseInfo> parseReleaseJson(const QByteArray& data, QString* err
         asset.downloadCount = static_cast<int>(jsonInteger64(assetObject, QStringLiteral("download_count")));
         asset.createdAt = jsonDateTime(assetObject, QStringLiteral("created_at"));
         asset.updatedAt = jsonDateTime(assetObject, QStringLiteral("updated_at"));
+        asset.digest = jsonString(assetObject, QStringLiteral("digest"));
 
         if (!asset.name.isEmpty() && asset.downloadUrl.isValid()) {
             release.assets.push_back(asset);
@@ -286,7 +427,101 @@ std::optional<ReleaseInfo> parseReleaseJson(const QByteArray& data, QString* err
     return release;
 }
 
-} // namespace tondar::github
+std::optional<RepositoryInfo> parseRepositoryJson(const QByteArray& data, QString* errorMessage)
+{
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("GitHub returned malformed repository data.");
+        }
+        return std::nullopt;
+    }
+
+    const QJsonObject object = doc.object();
+    RepositoryInfo info;
+    info.owner = object.value(QStringLiteral("owner")).toObject().value(QStringLiteral("login")).toString();
+    info.repo = jsonString(object, QStringLiteral("name"));
+    info.fullName = jsonString(object, QStringLiteral("full_name"));
+    info.description = jsonString(object, QStringLiteral("description"));
+    info.avatarUrl = QUrl(object.value(QStringLiteral("owner")).toObject().value(QStringLiteral("avatar_url")).toString());
+    info.htmlUrl = QUrl(jsonString(object, QStringLiteral("html_url")));
+    info.homepageUrl = QUrl(jsonString(object, QStringLiteral("homepage")));
+    info.language = jsonString(object, QStringLiteral("language"));
+    const QJsonObject license = object.value(QStringLiteral("license")).toObject();
+    info.licenseName = license.value(QStringLiteral("name")).toString();
+    info.licenseSpdxId = license.value(QStringLiteral("spdx_id")).toString();
+    info.stars = static_cast<int>(jsonInteger64(object, QStringLiteral("stargazers_count")));
+    info.forks = static_cast<int>(jsonInteger64(object, QStringLiteral("forks_count")));
+    info.watchers = static_cast<int>(jsonInteger64(object, QStringLiteral("watchers_count")));
+
+    if (!info.isValid()) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("GitHub repository metadata is missing owner or repository name.");
+        }
+        return std::nullopt;
+    }
+    return info;
+}
+
+std::optional<ReleaseInfo> parseLatestReleaseFromListJson(const QByteArray& data,
+                                                          bool includePrereleases,
+                                                          QString* errorMessage)
+{
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("GitHub returned malformed release list data.");
+        }
+        return std::nullopt;
+    }
+
+    const QJsonArray releases = doc.array();
+    std::optional<ReleaseInfo> latest;
+    for (const QJsonValue& value : releases) {
+        if (!value.isObject()) {
+            continue;
+        }
+
+        const QJsonDocument releaseDoc(value.toObject());
+        auto release = parseReleaseJson(releaseDoc.toJson(QJsonDocument::Compact), errorMessage);
+        if (!release) {
+            return std::nullopt;
+        }
+        if (release->draft) {
+            continue;
+        }
+        if (release->prerelease && !includePrereleases) {
+            continue;
+        }
+        if (!latest || isNewerRelease(*release, *latest)) {
+            latest = *release;
+        }
+    }
+
+    if (!latest && errorMessage) {
+        *errorMessage = QStringLiteral("This repository does not publish matching releases.");
+    }
+    return latest;
+}
+
+bool isNewerRelease(const ReleaseInfo& candidate, const ReleaseInfo& known)
+{
+    if (candidate.publishedAt.isValid() && known.publishedAt.isValid()
+        && candidate.publishedAt != known.publishedAt) {
+        return candidate.publishedAt > known.publishedAt;
+    }
+    if (candidate.id > 0 && known.id > 0 && candidate.id != known.id) {
+        return candidate.id > known.id;
+    }
+    if (known.tagName.isEmpty()) {
+        return !candidate.tagName.isEmpty();
+    }
+    return false;
+}
+
+} // namespace genydl::github
 
 GitHubReleaseService::GitHubReleaseService(QObject* parent)
     : QObject(parent)
@@ -330,18 +565,18 @@ void GitHubReleaseService::setGithubToken(const QString& token)
 
 bool GitHubReleaseService::isReleaseUrl(const QString& value) const
 {
-    return tondar::github::parseReleaseUrl(value).has_value();
+    return genydl::github::parseReleaseUrl(value).has_value();
 }
 
 QString GitHubReleaseService::apiUrlFor(const QString& value) const
 {
-    const auto request = tondar::github::parseReleaseUrl(value);
-    return request ? tondar::github::apiUrlForRequest(*request).toString() : QString();
+    const auto request = genydl::github::parseReleaseUrl(value);
+    return request ? genydl::github::apiUrlForRequest(*request).toString() : QString();
 }
 
 void GitHubReleaseService::fetchRelease(const QString& value)
 {
-    const auto request = tondar::github::parseReleaseUrl(value);
+    const auto request = genydl::github::parseReleaseUrl(value);
     if (!request) {
         finishWithError(QStringLiteral("This is not a supported GitHub release URL."));
         return;
@@ -357,8 +592,9 @@ void GitHubReleaseService::fetchRelease(const QString& value)
     setErrorMessage(QString());
     setLoading(true);
 
-    QNetworkRequest networkRequest(tondar::github::apiUrlForRequest(*request));
+    QNetworkRequest networkRequest(genydl::github::apiUrlForRequest(*request));
     networkRequest.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+    networkRequest.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
     networkRequest.setTransferTimeout(kRequestTimeoutMs);
     networkRequest.setRawHeader("User-Agent", userAgent().toUtf8());
     networkRequest.setRawHeader("Accept", "application/vnd.github+json");
@@ -377,26 +613,28 @@ void GitHubReleaseService::fetchRelease(const QString& value)
         }
 
         const int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        const QByteArray responseBody = reply->readAll();
+        // Guard against reading a transport-failed (closed) socket — that logs
+        // "QSslSocket: device not open". HTTP error statuses keep it open.
+        const QByteArray responseBody = reply->isOpen() ? reply->readAll() : QByteArray();
         const bool rateLimitExhausted = reply->rawHeader("X-RateLimit-Remaining") == QByteArray("0");
         const QNetworkReply::NetworkError networkError = reply->error();
         reply->deleteLater();
 
         if (networkError != QNetworkReply::NoError) {
             const QString message = statusCode >= 400
-                ? tondar::github::userFriendlyApiError(statusCode, responseBody, rateLimitExhausted)
+                ? genydl::github::userFriendlyApiError(statusCode, responseBody, rateLimitExhausted)
                 : networkErrorMessage(networkError, replyGuard ? replyGuard->errorString() : QStringLiteral("request failed"));
             finishWithError(message);
             return;
         }
 
         if (statusCode >= 400) {
-            finishWithError(tondar::github::userFriendlyApiError(statusCode, responseBody, rateLimitExhausted));
+            finishWithError(genydl::github::userFriendlyApiError(statusCode, responseBody, rateLimitExhausted));
             return;
         }
 
         QString parseError;
-        auto release = tondar::github::parseReleaseJson(responseBody, &parseError);
+        auto release = genydl::github::parseReleaseJson(responseBody, &parseError);
         if (!release) {
             finishWithError(parseError.isEmpty() ? QStringLiteral("GitHub returned malformed release data.") : parseError);
             return;
@@ -448,7 +686,7 @@ void GitHubReleaseService::setErrorMessage(const QString& value)
     emit errorMessageChanged();
 }
 
-void GitHubReleaseService::setReleaseInfo(const tondar::github::ReleaseInfo& info)
+void GitHubReleaseService::setReleaseInfo(const genydl::github::ReleaseInfo& info)
 {
     const QVariantMap release = info.toVariantMap();
     const QVariantList assets = info.assetsToVariantList();
@@ -487,7 +725,7 @@ QString GitHubReleaseService::userAgent() const
     const QString version = QCoreApplication::applicationVersion().isEmpty()
         ? QStringLiteral("0.1.0")
         : QCoreApplication::applicationVersion();
-    return QStringLiteral("TondarDownloadManager/%1").arg(version);
+    return QStringLiteral("GenyDLDownloadManager/%1").arg(version);
 }
 
 QString GitHubReleaseService::networkErrorMessage(QNetworkReply::NetworkError error, const QString& detail) const

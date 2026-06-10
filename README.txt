@@ -1,14 +1,14 @@
-TONDAR - Internet Download Manager
+GENYDL - Internet Download Manager
 ================================
 
-TONDAR is a modern, fast, and reliable download manager built with C++ and Qt.
+GENYDL is a modern, fast, and reliable download manager built with C++ and Qt.
 
 It supports segmented downloads, resume/retry, queues, speed limits, proxy settings,
 runtime monitoring, and an integrated update workflow.
 
 Project Status
 --------------
-TONDAR is currently under active development.
+GENYDL is currently under active development.
 Some features may be experimental or not fully available yet.
 
 Basic Features
@@ -30,7 +30,7 @@ Website:
 https://genyleap.com
 
 Repository:
-https://github.com/genyleap/tondar
+https://github.com/genyleap/genydl
 
 Support:
 support@genyleap.com

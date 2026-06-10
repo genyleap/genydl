@@ -1,11 +1,11 @@
 /*!
     \file        Button.qml
-    \brief       Implements the Button QML component for TONDAR.
-    \details     This file contains the Button user interface component used by the TONDAR desktop application.
+    \brief       Implements the Button QML component for GENYDL.
+    \details     This file contains the Button user interface component used by the GENYDL desktop application.
 
     \author      Kambiz Asadzadeh <https://github.com/thecompez>
     \copyright   Copyright (c) 2026 Genyleap. All rights reserved.
-    \license     https://github.com/genyleap/tondar/blob/main/LICENSE.md
+    \license     https://github.com/genyleap/genydl/blob/main/LICENSE.md
 */
 
 import QtQuick
@@ -13,7 +13,7 @@ import QtQuick.Controls.Basic as T
 import QtQuick.Layouts
 import QtQuick.Effects
 
-import Tondar
+import GenyDL
 
 T.Button {
     id: control
@@ -48,10 +48,29 @@ T.Button {
             return false
     }
 
-    width: (setIconEnd || setIconBegin) ? 110 * 1.5 : 86
-    implicitHeight: 38
+    readonly property bool isSmall: sizeType === "small"
+    readonly property int labelFontSize: isSmall ? Typography.t3 : Typography.t2
+
+    implicitHeight: isSmall ? 30 : 38
     Layout.fillWidth: false
-    implicitWidth: 110
+
+    // Buttons size to their label so text never wraps or clips. A minimum keeps
+    // short labels comfortable; icon slots reserve room for begin/end glyphs.
+    readonly property int labelPadding: isSmall ? 14 : 20
+    readonly property int iconSlot: isSmall ? 18 : 24
+    implicitWidth: Math.max(
+        (setIconEnd || setIconBegin) ? (isSmall ? 72 : 96) : (isSmall ? 60 : 86),
+        Math.ceil(buttonLabelMetrics.width) + labelPadding * 2
+            + ((setIconBegin && setIconBegin.length > 0 ? 1 : 0)
+             + (setIconEnd && setIconEnd.length > 0 ? 1 : 0)) * iconSlot)
+
+    TextMetrics {
+        id: buttonLabelMetrics
+        font.family: FontSystem.getTitleBoldFont.font.family
+        font.pixelSize: control.labelFontSize
+        font.bold: control.isBold
+        text: control.text
+    }
 
     opacity: control.enabled ? 1 : 0.5
 
@@ -63,7 +82,7 @@ T.Button {
             visible: (!control.setIconEnd || !control.setIconBegin)
             text: control.text
             font.family: FontSystem.getTitleBoldFont.font.family
-            font.pixelSize: Typography.t2
+            font.pixelSize: control.labelFontSize
             font.bold: control.isBold ? Font.Bold : Font.Normal
             font.weight: control.isBold ? Font.Bold : Font.Normal
             verticalAlignment: Text.AlignVCenter

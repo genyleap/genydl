@@ -21,8 +21,8 @@ on run argv
                 end if
             end if
 
-            if exists item "Tondar.app" of container window then
-                set position of item "Tondar.app" of container window to {170, 210}
+            if exists item "GenyDL.app" of container window then
+                set position of item "GenyDL.app" of container window to {170, 210}
             end if
 
             if exists item "Applications" of container window then

@@ -1,11 +1,11 @@
 /*!
     \file        SpinBox.qml
-    \brief       Implements the SpinBox QML component for TONDAR.
-    \details     This file contains the SpinBox user interface component used by the TONDAR desktop application.
+    \brief       Implements the SpinBox QML component for GENYDL.
+    \details     This file contains the SpinBox user interface component used by the GENYDL desktop application.
 
     \author      Kambiz Asadzadeh <https://github.com/thecompez>
     \copyright   Copyright (c) 2026 Genyleap. All rights reserved.
-    \license     https://github.com/genyleap/tondar/blob/main/LICENSE.md
+    \license     https://github.com/genyleap/genydl/blob/main/LICENSE.md
 */
 
 import QtQuick
@@ -13,7 +13,7 @@ import QtQuick.Controls
 import QtQuick.Templates as T
 import QtQuick.Effects
 
-import Tondar
+import GenyDL
 
 T.SpinBox {
     id: control

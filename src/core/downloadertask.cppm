@@ -19,7 +19,7 @@
  * @author      <a href='https://github.com/thecompez'>Kambiz Asadzadeh</a>
  * @since       09 Feb 2026
  * @copyright   Copyright (c) 2026 Genyleap. All rights reserved.
- * @license     https://github.com/genyleap/tondar/blob/main/LICENSE.md
+ * @license     https://github.com/genyleap/genydl/blob/main/LICENSE.md
  */
 
 module;
@@ -36,13 +36,13 @@ module;
 #include <QVariantList>
 
 #ifndef Q_MOC_RUN
-export module tondar.core.downloadertask;
+export module genydl.core.downloadertask;
 #endif
 
 #ifdef Q_MOC_RUN
-#define TONDAR_MODULE_EXPORT
+#define GENYDL_MODULE_EXPORT
 #else
-#define TONDAR_MODULE_EXPORT export
+#define GENYDL_MODULE_EXPORT export
 #endif
 
 /**
@@ -61,7 +61,7 @@ export module tondar.core.downloadertask;
  * global or queue-level policies; those are handled by higher-level
  * orchestrators such as DownloadManager.
  */
-TONDAR_MODULE_EXPORT class DownloaderTask : public QObject {
+GENYDL_MODULE_EXPORT class DownloaderTask : public QObject {
 
     Q_OBJECT
 
@@ -169,6 +169,15 @@ TONDAR_MODULE_EXPORT class DownloaderTask : public QObject {
 
     //!< @brief Task priority (higher value = earlier scheduling).
     Q_PROPERTY(int priority READ priority WRITE setPriority NOTIFY priorityChanged)
+
+    //!< @brief Whether this task is a BitTorrent download (always false for HTTP).
+    Q_PROPERTY(bool isTorrent READ isTorrent CONSTANT)
+
+    //!< @brief Storage/source network label (empty = standard web). e.g. "IPFS".
+    Q_PROPERTY(QString storageNetwork READ storageNetwork WRITE setStorageNetwork NOTIFY storageInfoChanged)
+
+    //!< @brief Content address for content-addressed networks (e.g. an IPFS CID).
+    Q_PROPERTY(QString contentId READ contentId WRITE setContentId NOTIFY storageInfoChanged)
 
     //!< @brief Whether adaptive segment controller is enabled.
     Q_PROPERTY(bool adaptiveSegmentsEnabled READ adaptiveSegmentsEnabled WRITE setAdaptiveSegmentsEnabled NOTIFY adaptiveSegmentsChanged)
@@ -564,6 +573,27 @@ public:
     //!< @brief Return task priority.
     int priority() const { return m_priority; }
 
+    //!< @brief HTTP tasks are never torrents.
+    bool isTorrent() const { return false; }
+
+    //!< @brief Return the storage/source network label (empty = standard web).
+    QString storageNetwork() const { return m_storageNetwork; }
+
+    /**
+     * @brief Set the storage/source network label.
+     * @param value Network label, e.g. "IPFS".
+     */
+    void setStorageNetwork(const QString& value);
+
+    //!< @brief Return the content address (e.g. IPFS CID), if any.
+    QString contentId() const { return m_contentId; }
+
+    /**
+     * @brief Set the content address.
+     * @param value Content identifier (e.g. an IPFS CID).
+     */
+    void setContentId(const QString& value);
+
     /**
      * @brief Set task priority.
      * @param value Priority value (higher starts sooner).
@@ -726,6 +756,9 @@ signals:
     //!< @brief Emitted when structured error state changes.
     void errorStateChanged();
 
+    //!< @brief Emitted when storage network or content address changes.
+    void storageInfoChanged();
+
 private slots:
     //!< @brief Handle completion of a segment.
     void onSegmentFinished();
@@ -822,9 +855,11 @@ private:
     int m_proxyPort = 0;                    //!< Proxy port.
     QString m_proxyUser;                    //!< Proxy user.
     QString m_proxyPassword;                //!< Proxy password.
-    QString m_userAgent = QStringLiteral("tondar/1.0"); //!< Request User-Agent.
+    QString m_userAgent = QStringLiteral("genydl/1.0"); //!< Request User-Agent.
     bool m_allowInsecureSsl = false;        //!< Ignore SSL errors.
     int m_priority = 100;                   //!< Task priority.
+    QString m_storageNetwork;               //!< Storage/source network label (empty = web).
+    QString m_contentId;                    //!< Content address (e.g. IPFS CID).
     bool m_adaptiveSegmentsEnabled = true;  //!< Adaptive segment controller toggle.
     int m_adaptiveTarget = 0;               //!< Adaptive segment target.
     QString m_errorCategory;                //!< Last error category.

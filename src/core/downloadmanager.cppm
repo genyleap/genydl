@@ -19,13 +19,14 @@
  * @author      <a href='https://github.com/thecompez'>Kambiz Asadzadeh</a>
  * @since       09 Feb 2026
  * @copyright   Copyright (c) 2026 Genyleap. All rights reserved.
- * @license     https://github.com/genyleap/tondar/blob/main/LICENSE.md
+ * @license     https://github.com/genyleap/genydl/blob/main/LICENSE.md
  */
 
 module;
 #include <QObject>
 #include <QHash>
 #include <QDate>
+#include <QDateTime>
 #include <QSet>
 #include <QStringList>
 #include <QTimer>
@@ -38,16 +39,19 @@ module;
 #include <QElapsedTimer>
 
 #ifndef Q_MOC_RUN
-export module tondar.core.downloadmanager;
-import tondar.core.downloadertask;
-import tondar.core.downloadmodel;
-import tondar.services.power_monitor;
+export module genydl.core.downloadmanager;
+import genydl.core.downloadertask;
+import genydl.core.downloadmodel;
+import genydl.core.torrenttask;
+import genydl.services.power_monitor;
+import genydl.services.torrent_session;
+import genydl.services.gateway_service;
 #endif
 
 #ifdef Q_MOC_RUN
-#define TONDAR_MODULE_EXPORT
+#define GENYDL_MODULE_EXPORT
 #else
-#define TONDAR_MODULE_EXPORT export
+#define GENYDL_MODULE_EXPORT export
 #endif
 
 /**
@@ -64,7 +68,7 @@ import tondar.services.power_monitor;
  * The class is designed to be UI-facing, policy-driven, and resilient
  * across application restarts via session persistence.
  */
-TONDAR_MODULE_EXPORT class DownloadManager : public QObject {
+GENYDL_MODULE_EXPORT class DownloadManager : public QObject {
 
     Q_OBJECT
 
@@ -101,10 +105,10 @@ TONDAR_MODULE_EXPORT class DownloadManager : public QObject {
     //!< @brief Aggregate total bytes expected across all tasks.
     Q_PROPERTY(qint64 totalSize READ totalSize NOTIFY totalsChanged)
 
-    //!< @brief Estimated TONDAR process CPU load percentage.
+    //!< @brief Estimated GENYDL process CPU load percentage.
     Q_PROPERTY(qreal processCpuLoad READ processCpuLoad NOTIFY runtimeStatsChanged)
 
-    //!< @brief Estimated TONDAR resident memory usage in bytes.
+    //!< @brief Estimated GENYDL resident memory usage in bytes.
     Q_PROPERTY(qint64 processMemoryBytes READ processMemoryBytes NOTIFY runtimeStatsChanged)
 
     //!< @brief Free bytes on the current downloads volume.
@@ -161,12 +165,25 @@ TONDAR_MODULE_EXPORT class DownloadManager : public QObject {
     //!< @brief Default proxy password used for new tasks and network tests.
     Q_PROPERTY(QString defaultProxyPassword READ defaultProxyPassword WRITE setDefaultProxyPassword NOTIFY networkDefaultsChanged)
 
+    //!< @brief Whether the BitTorrent engine is available in this build.
+    Q_PROPERTY(bool torrentAvailable READ torrentAvailable CONSTANT)
+
+    //!< @brief Global seed-ratio limit for torrents (0 = seed indefinitely).
+    Q_PROPERTY(double torrentSeedRatio READ torrentSeedRatio WRITE setTorrentSeedRatio NOTIFY torrentPolicyChanged)
+
+    //!< @brief Global seed-time limit in minutes for torrents (0 = unlimited).
+    Q_PROPERTY(int torrentSeedTimeMinutes READ torrentSeedTimeMinutes WRITE setTorrentSeedTimeMinutes NOTIFY torrentPolicyChanged)
+
 public:
     /**
      * @brief Construct a new download manager.
-     * @param parent Optional parent QObject.
+     * @param torrentSession Optional TorrentSession for BitTorrent support.
+     * @param gatewayService Optional GatewayService for IPFS gateway selection.
+     * @param parent         Optional parent QObject.
      */
-    explicit DownloadManager(QObject* parent = nullptr);
+    explicit DownloadManager(TorrentSession* torrentSession = nullptr,
+                             GatewayService* gatewayService = nullptr,
+                             QObject* parent = nullptr);
 
     /**
      * @brief Add a download with basic arguments.
@@ -204,6 +221,47 @@ public:
      * @param options Extra options map (headers, mirrors, auth, etc.).
      */
     Q_INVOKABLE void addDownloadAdvancedWithExtras(const QString &urlStr, const QString &filePath, const QString &queueName, const QString &category, bool startPaused, const QVariantMap& options);
+
+    /**
+     * @brief Add a BitTorrent download from a magnet URI or .torrent file path.
+     * @param source     Magnet URI (starts with "magnet:") or absolute .torrent path.
+     * @param savePath   Destination directory (defaults to general downloads folder).
+     * @param queueName  Queue to assign the task to.
+     * @param category   Category label.
+     * @param startPaused Whether to add the torrent in paused state.
+     */
+    Q_INVOKABLE void addTorrentDownload(const QString& source,
+                                        const QString& savePath,
+                                        const QString& queueName,
+                                        const QString& category,
+                                        bool startPaused = false);
+
+    /**
+     * @brief Expose the TorrentSession so QML can read global torrent stats.
+     * @return Pointer to the TorrentSession, or nullptr when unavailable.
+     */
+    Q_INVOKABLE TorrentSession* torrentSession() const;
+
+    //!< @brief Whether BitTorrent support is available.
+    bool torrentAvailable() const;
+
+    //!< @brief Return the global seed-ratio limit.
+    double torrentSeedRatio() const { return m_torrentSeedRatio; }
+
+    /**
+     * @brief Set the global seed-ratio limit and apply it to the session.
+     * @param ratio Upload/download ratio (0 = seed indefinitely).
+     */
+    void setTorrentSeedRatio(double ratio);
+
+    //!< @brief Return the global seed-time limit in minutes.
+    int torrentSeedTimeMinutes() const { return m_torrentSeedTimeMinutes; }
+
+    /**
+     * @brief Set the global seed-time limit and apply it to the session.
+     * @param minutes Minutes to keep seeding (0 = unlimited).
+     */
+    void setTorrentSeedTimeMinutes(int minutes);
 
     /**
      * @brief Remove a download at the given row index.
@@ -488,6 +546,22 @@ public:
     Q_INVOKABLE void setQueueScheduleEndMinutes(const QString& name, int minutes);
 
     /**
+     * @brief Whether the queue uses an absolute datetime window (calendar) rather
+     *        than a daily clock window.
+     */
+    Q_INVOKABLE bool queueScheduleUseDates(const QString& name) const;
+    Q_INVOKABLE void setQueueScheduleUseDates(const QString& name, bool useDates);
+
+    /**
+     * @brief Absolute schedule window start/end as ISO-8601 strings (local time).
+     *        Empty string clears the bound.
+     */
+    Q_INVOKABLE QString queueScheduleStart(const QString& name) const;
+    Q_INVOKABLE void setQueueScheduleStart(const QString& name, const QString& isoDateTime);
+    Q_INVOKABLE QString queueScheduleEnd(const QString& name) const;
+    Q_INVOKABLE void setQueueScheduleEnd(const QString& name, const QString& isoDateTime);
+
+    /**
      * @brief Check if quota enforcement is enabled for a queue.
      * @param name Queue name.
      * @return True if enabled.
@@ -693,10 +767,10 @@ public:
     //!< @brief Return aggregate total bytes.
     qint64 totalSize() const { return m_totalSize; }
 
-    //!< @brief Return estimated TONDAR process CPU load percentage.
+    //!< @brief Return estimated GENYDL process CPU load percentage.
     qreal processCpuLoad() const { return m_processCpuLoad; }
 
-    //!< @brief Return estimated TONDAR resident memory usage in bytes.
+    //!< @brief Return estimated GENYDL resident memory usage in bytes.
     qint64 processMemoryBytes() const { return m_processMemoryBytes; }
 
     //!< @brief Return free bytes for the downloads volume.
@@ -872,6 +946,9 @@ signals:
     //!< @brief Emits structured backend event payloads.
     void backendEvent(const QString& name, const QVariantMap& payload);
 
+    //!< @brief Emitted when torrent seeding policy changes.
+    void torrentPolicyChanged();
+
 
 private slots:
     /**
@@ -917,8 +994,11 @@ private:
         int maxConcurrent = 2;          //!< Maximum concurrent downloads.
         qint64 maxSpeed = 0;            //!< Maximum speed (bytes/sec), 0 = unlimited.
         bool scheduleEnabled = false;   //!< Whether time-based scheduling is enabled.
-        int startMinutes = 0;           //!< Schedule start time (minutes since midnight).
-        int endMinutes = 0;             //!< Schedule end time (minutes since midnight).
+        int startMinutes = 0;           //!< Daily schedule start time (minutes since midnight).
+        int endMinutes = 0;             //!< Daily schedule end time (minutes since midnight).
+        bool scheduleUseDates = false;  //!< Use an absolute datetime window instead of a daily clock window.
+        QDateTime scheduleStart;        //!< Absolute window start (when scheduleUseDates).
+        QDateTime scheduleEnd;          //!< Absolute window end (when scheduleUseDates).
         bool quotaEnabled = false;      //!< Whether daily quota enforcement is enabled.
         qint64 quotaBytes = 0;          //!< Daily quota in bytes.
         QString postCompletionAction;   //!< Action after the queue finishes.
@@ -1052,6 +1132,23 @@ private:
     DownloaderTask* addDownloadInternal(const QString &urlStr, const QString &filePath, const QString &queueName, const QString &category, bool startPaused, const QVariantMap* options);
 
     /**
+     * @brief Add an IPFS download (ipfs://, /ipfs/<cid>, or bare CID).
+     *
+     * Resolves the CID to an ordered list of gateway URLs (reused as mirrors for
+     * failover), tags the task with its storage network and content address, and
+     * enables content-address verification when the CID is a raw sha2-256 block.
+     *
+     * @param urlStr     Raw IPFS reference.
+     * @param filePath   Target path or folder.
+     * @param queueName  Queue name.
+     * @param category   Category name.
+     * @param startPaused Whether to start paused.
+     * @param options    Optional extras map.
+     * @return Created task instance, or null on failure.
+     */
+    DownloaderTask* addIpfsInternal(const QString &urlStr, const QString &filePath, const QString &queueName, const QString &category, bool startPaused, const QVariantMap* options);
+
+    /**
      * @brief Apply extra options to a task.
      * @param task Task instance.
      * @param options Options map.
@@ -1160,7 +1257,7 @@ private:
     int m_perHostMaxConcurrent = 8;                                                 //!< Max active downloads per host.
     bool m_persistSensitiveOptions = false;                                         //!< Persist sensitive network options.
     bool m_telemetryEnabled = true;                                                 //!< Telemetry stream toggle.
-    QString m_defaultUserAgent = QStringLiteral("tondar/1.0");                        //!< Default User-Agent.
+    QString m_defaultUserAgent = QStringLiteral("genydl/1.0");                        //!< Default User-Agent.
     bool m_defaultAllowInsecureSsl = false;                                         //!< Default insecure SSL policy.
     QString m_defaultProxyHost;                                                     //!< Default proxy host.
     int m_defaultProxyPort = 0;                                                     //!< Default proxy port.
@@ -1169,8 +1266,8 @@ private:
     bool m_networkTestRunning = false;                                              //!< Network tester in-flight state.
     QString m_networkTestMessage;                                                   //!< Last network tester message.
     QString m_networkTestKind = QStringLiteral("muted");                            //!< Last network tester kind.
-    qreal m_processCpuLoad = 0.0;                                                   //!< TONDAR process CPU load percentage.
-    qint64 m_processMemoryBytes = 0;                                                //!< TONDAR process resident memory.
+    qreal m_processCpuLoad = 0.0;                                                   //!< GENYDL process CPU load percentage.
+    qint64 m_processMemoryBytes = 0;                                                //!< GENYDL process resident memory.
     qint64 m_diskFreeBytes = 0;                                                     //!< Free bytes on downloads volume.
     QString m_networkReachability = QStringLiteral("Unknown");                      //!< Cached reachability label.
     qreal m_averageActiveSegments = 0.0;                                            //!< Avg effective segments across active tasks.
@@ -1181,6 +1278,34 @@ private:
     QString m_sessionBackupPath;                                                    //!< Backup session path.
     QString m_telemetryPath;                                                        //!< Telemetry NDJSON path.
     PowerMonitor m_powerMonitor;                                                    //!< Power state helper.
+
+    // ---- Decentralized storage ----
+    GatewayService* m_gatewayService = nullptr;                                     //!< Optional IPFS gateway pool / health monitor.
+
+    // ---- BitTorrent ----
+    TorrentSession* m_torrentSession = nullptr;                                     //!< Optional libtorrent session.
+    QVector<TorrentTask*> m_torrentQueue;                                           //!< All torrent tasks in insertion order.
+    QHash<TorrentTask*, qint64> m_torrentSpeed;                                     //!< Per-torrent current speed.
+    QHash<TorrentTask*, qint64> m_torrentReceived;                                  //!< Per-torrent received bytes.
+    QHash<TorrentTask*, qint64> m_torrentTotal;                                     //!< Per-torrent total bytes.
+    QHash<TorrentTask*, qint64> m_torrentCompletedAt;                               //!< Per-torrent completion time.
+    QHash<TorrentTask*, QString> m_torrentTaskQueue;                                //!< Per-torrent queue name.
+    QHash<TorrentTask*, QString> m_torrentTaskCategory;                             //!< Per-torrent category.
+    QHash<TorrentTask*, QString> m_torrentSource;                                   //!< Per-torrent persistent re-add source (magnet or saved .torrent path).
+    QString m_torrentDir;                                                           //!< Folder holding persisted .torrent copies for restore.
+    double m_torrentSeedRatio = 0.0;                                                //!< Global seed-ratio limit (0 = unlimited).
+    int m_torrentSeedTimeMinutes = 0;                                               //!< Global seed-time limit in minutes (0 = unlimited).
+
+    /**
+     * @brief Internal torrent-add implementation.
+     * @return Created TorrentTask, or nullptr on failure.
+     */
+    TorrentTask* addTorrentInternal(const QString& source, const QString& savePath,
+                                    const QString& queueName, const QString& category,
+                                    bool startPaused);
+
+    //!< @brief Slot connected to TorrentTask::finished for torrent tasks.
+    void onTorrentTaskFinished(bool success);
 };
 
 #include "downloadmanager.moc"

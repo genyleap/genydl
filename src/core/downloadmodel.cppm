@@ -17,7 +17,7 @@
  * @author      <a href='https://github.com/thecompez'>Kambiz Asadzadeh</a>
  * @since       09 Feb 2026
  * @copyright   Copyright (c) 2026 Genyleap. All rights reserved.
- * @license     https://github.com/genyleap/tondar/blob/main/LICENSE.md
+ * @license     https://github.com/genyleap/genydl/blob/main/LICENSE.md
  */
 
 module;
@@ -28,23 +28,25 @@ module;
 #include <QVector>
 
 #ifndef Q_MOC_RUN
-export module tondar.core.downloadmodel;
-import tondar.core.downloadertask;
+export module genydl.core.downloadmodel;
+import genydl.core.downloadertask;
+import genydl.core.torrenttask;
 #endif
 
 #ifdef Q_MOC_RUN
-#define TONDAR_MODULE_EXPORT
+#define GENYDL_MODULE_EXPORT
 #else
-#define TONDAR_MODULE_EXPORT export
+#define GENYDL_MODULE_EXPORT export
 #endif
 
 /**
  * @brief Lightweight data container representing a single download row.
  *
- * Holds UI-relevant metadata derived from a DownloaderTask instance.
- * This structure is intentionally kept simple and is owned by DownloadModel.
+ * Holds UI-relevant metadata derived from either a DownloaderTask (HTTP) or
+ * a TorrentTask (BitTorrent) instance.  Exactly one of the two task pointers
+ * is non-null at any time; use isTorrent() to distinguish them.
  */
-TONDAR_MODULE_EXPORT struct DownloadItem {
+GENYDL_MODULE_EXPORT struct DownloadItem {
 
     //!< @brief Display file name or target path.
     QString fileName;
@@ -55,8 +57,11 @@ TONDAR_MODULE_EXPORT struct DownloadItem {
     //!< @brief Category label used for grouping and filtering.
     QString category;
 
-    //!< @brief Pointer to the underlying download task.
+    //!< @brief Pointer to the underlying HTTP download task (null for torrents).
     DownloaderTask* task = nullptr;
+
+    //!< @brief Pointer to the underlying torrent task (null for HTTP tasks).
+    TorrentTask* torrentTask = nullptr;
 
     //!< @brief Number of bytes received so far.
     qint64 received = 0;
@@ -66,6 +71,15 @@ TONDAR_MODULE_EXPORT struct DownloadItem {
 
     //!< @brief Indicates whether the download has finished (for history view).
     bool finished = false;
+
+    //!< @brief True when this row represents a BitTorrent download.
+    bool isTorrent() const { return torrentTask != nullptr; }
+
+    //!< @brief Returns the active task as a QObject* regardless of type.
+    QObject* anyTask() const {
+        if (task) return static_cast<QObject*>(task);
+        return static_cast<QObject*>(torrentTask);
+    }
 };
 
 /**
@@ -77,7 +91,7 @@ TONDAR_MODULE_EXPORT struct DownloadItem {
  * The model listens to signals emitted by DownloaderTask instances
  * and updates rows accordingly.
  */
-TONDAR_MODULE_EXPORT class DownloadModel : public QAbstractTableModel {
+GENYDL_MODULE_EXPORT class DownloadModel : public QAbstractTableModel {
     Q_OBJECT
 
 public:
@@ -202,19 +216,42 @@ public:
     Q_INVOKABLE int filteredCount(const QString& queueFilter,
                                   const QString& statusFilter,
                                   const QString& categoryFilter,
-                                  const QString& searchText) const;
+                                  const QString& searchText,
+                                  const QString& sourceFilter = QString()) const;
 
     /**
-     * @brief Returns the task associated with a given row.
+     * @brief Adds a BitTorrent download task to the model.
+     * @param task      Pointer to the torrent task.
+     * @param queueName Logical queue name.
+     * @param category  Category label.
+     */
+    void addTorrentDownload(TorrentTask* task,
+                            const QString& queueName,
+                            const QString& category);
+
+    /**
+     * @brief Returns the HTTP task associated with a given row (null for torrents).
      */
     DownloaderTask* taskAt(int index) const;
 
     /**
-     * @brief Returns the current row index for a task.
+     * @brief Returns the torrent task associated with a given row (null for HTTP tasks).
+     */
+    TorrentTask* torrentTaskAt(int index) const;
+
+    /**
+     * @brief Returns the current row index for an HTTP task.
      * @param task Task pointer.
      * @return Row index, or -1 when not present.
      */
     int indexOfTask(DownloaderTask* task) const;
+
+    /**
+     * @brief Returns the current row index for a torrent task.
+     * @param task Task pointer.
+     * @return Row index, or -1 when not present.
+     */
+    int indexOfTorrentTask(TorrentTask* task) const;
 
     /**
      * @brief Checks whether the download at the given index has finished.
@@ -245,6 +282,11 @@ private slots:
      * @brief Refreshes row state-dependent roles when a task state changes.
      */
     void onTaskStateChanged();
+
+    // ---- Torrent-task counterparts ----
+    void onTorrentProgress(qint64 bytesReceived, qint64 bytesTotal);
+    void onTorrentFinished(bool success);
+    void onTorrentStateChanged();
 
 private:
     //!< @brief Internal storage for download items.

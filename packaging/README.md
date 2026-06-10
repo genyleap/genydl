@@ -12,9 +12,9 @@ single release object or a `releases` array (with `channel` selection).
   "version": "1.2.3",
   "notes": "Bug fixes and performance improvements.",
   "assets": [
-    { "name": "tondar-1.2.3-macos.dmg", "url": "https://example.com/tondar-1.2.3-macos.dmg", "platform": "macos", "arch": "arm64" },
-    { "name": "tondar-1.2.3-win-x64.exe", "url": "https://example.com/tondar-1.2.3-win-x64.exe", "platform": "windows", "arch": "x64" },
-    { "name": "tondar-1.2.3-linux.AppImage", "url": "https://example.com/tondar-1.2.3-linux.AppImage", "platform": "linux", "arch": "x64" }
+    { "name": "genydl-1.2.3-macos.dmg", "url": "https://example.com/genydl-1.2.3-macos.dmg", "platform": "macos", "arch": "arm64" },
+    { "name": "genydl-1.2.3-win-x64.exe", "url": "https://example.com/genydl-1.2.3-win-x64.exe", "platform": "windows", "arch": "x64" },
+    { "name": "genydl-1.2.3-linux.AppImage", "url": "https://example.com/genydl-1.2.3-linux.AppImage", "platform": "linux", "arch": "x64" }
   ]
 }
 ```
@@ -22,8 +22,8 @@ single release object or a `releases` array (with `channel` selection).
 ```json
 {
   "releases": [
-    { "channel": "stable", "version": "1.2.3", "notes": "Stable release", "assets": [ { "name": "tondar-1.2.3-win-x64.exe", "url": "https://example.com/tondar-1.2.3-win-x64.exe" } ] },
-    { "channel": "beta", "version": "1.3.0-beta.1", "notes": "Beta release", "assets": [ { "name": "tondar-1.3.0-beta.1-win-x64.exe", "url": "https://example.com/tondar-1.3.0-beta.1-win-x64.exe" } ] }
+    { "channel": "stable", "version": "1.2.3", "notes": "Stable release", "assets": [ { "name": "genydl-1.2.3-win-x64.exe", "url": "https://example.com/genydl-1.2.3-win-x64.exe" } ] },
+    { "channel": "beta", "version": "1.3.0-beta.1", "notes": "Beta release", "assets": [ { "name": "genydl-1.3.0-beta.1-win-x64.exe", "url": "https://example.com/genydl-1.3.0-beta.1-win-x64.exe" } ] }
   ]
 }
 ```

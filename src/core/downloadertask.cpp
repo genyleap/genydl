@@ -17,11 +17,11 @@ module;
 #include <QElapsedTimer>
 #include <ctime>
 
-module tondar.core.downloadertask;
+module genydl.core.downloadertask;
 
-import tondar.utils.download_utils;
+import genydl.utils.download_utils;
 
-namespace utils = tondar::utils;
+namespace utils = genydl::utils;
 
 DownloaderTask::DownloaderTask(const QUrl& url,
                                const QString& filePath,
@@ -127,6 +127,20 @@ bool DownloaderTask::advanceMirror()
     }
     emit mirrorIndexChanged();
     return true;
+}
+
+void DownloaderTask::setStorageNetwork(const QString& value)
+{
+    if (m_storageNetwork == value) return;
+    m_storageNetwork = value;
+    emit storageInfoChanged();
+}
+
+void DownloaderTask::setContentId(const QString& value)
+{
+    if (m_contentId == value) return;
+    m_contentId = value;
+    emit storageInfoChanged();
 }
 
 void DownloaderTask::setChecksumAlgorithm(const QString& algo)
@@ -304,7 +318,7 @@ void DownloaderTask::setProxyPassword(const QString& value)
 void DownloaderTask::setUserAgent(const QString& value)
 {
     const QString next = value.trimmed().isEmpty()
-        ? QStringLiteral("tondar/1.0")
+        ? QStringLiteral("genydl/1.0")
         : value.trimmed();
     if (m_userAgent == next) return;
     m_userAgent = next;
@@ -1098,6 +1112,9 @@ void DownloaderTask::startSingleStream(bool resume)
 
     connect(reply, &QNetworkReply::readyRead, this, [this, replyPtr]() mutable {
         if (!replyPtr || replyPtr != m_singleReply) return;
+        // Guard against a readyRead that fires while the socket is being torn
+        // down (otherwise QSslSocket logs "device not open").
+        if (!replyPtr->isOpen() || replyPtr->bytesAvailable() <= 0) return;
         QByteArray data = replyPtr->readAll();
         sampleNetworkRead(data.size());
         // append to single buffer
@@ -1397,6 +1414,7 @@ void DownloaderTask::startSegment(Segment* segment)
 
     connect(reply, &QNetworkReply::readyRead, this, [this, segment, replyPtr]() mutable {
         if (!replyPtr || replyPtr != segment->reply) return;
+        if (!replyPtr->isOpen() || replyPtr->bytesAvailable() <= 0) return;
         QByteArray data = replyPtr->readAll();
         sampleNetworkRead(data.size());
         // append to segment buffer

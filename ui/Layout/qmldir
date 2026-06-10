@@ -1,4 +1,4 @@
-module Tondar.Layout
+module GenyDL.Layout
 
 Header 1.0 Header.qml
 Footer 1.0 Footer.qml

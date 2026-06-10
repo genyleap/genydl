@@ -1,14 +1,15 @@
 /*!
     \file        Main.qml
-    \brief       Implements the main application window for TONDAR.
-    \details     This file defines the primary QML application shell, window structure, and top-level UI workflow for TONDAR.
+    \brief       Implements the main application window for GENYDL.
+    \details     This file defines the primary QML application shell, window structure, and top-level UI workflow for GENYDL.
 
     \author      Kambiz Asadzadeh <https://github.com/thecompez>
     \copyright   Copyright (c) 2026 Genyleap. All rights reserved.
-    \license     https://github.com/genyleap/tondar/blob/main/LICENSE.md
+    \license     https://github.com/genyleap/genydl/blob/main/LICENSE.md
 */
 
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Effects
@@ -24,7 +25,7 @@ import "./Controls" as Controls
 
 import "utils.js" as Utils
 
-import Tondar 1.0
+import GenyDL 1.0
 
 ApplicationWindow {
     id: appRoot
@@ -32,7 +33,7 @@ ApplicationWindow {
 
     QtObject {
         id: appAttributes
-        property string name: "Tondar - Internet Download Manager"
+        property string name: "GenyDL - Internet Download Manager"
         property int width: 1280
         property int height: 800
         property int interiorWidth : appRoot.width
@@ -84,6 +85,7 @@ ApplicationWindow {
     property string queueFilter: "All Queues"
     property string statusFilter: "All"
     property string categoryFilter: "All"
+    property string sourceFilter: "All"
     property string searchText: ""
 
     property int sortIndex: 0
@@ -119,9 +121,17 @@ ApplicationWindow {
     property bool sidebarAllExpanded: true
     property bool sidebarUnfinishedExpanded: false
     property bool sidebarFinishedExpanded: false
+    property bool sidebarSourceExpanded: false
     property bool sidebarQueuesExpanded: true
     property var pendingRemoveRows: []
     property var tableRows: []
+    property var releaseAssetPickerReleaseInfo: ({})
+    property var releaseAssetPickerAssets: []
+    property var releaseAssetPickerSourceAssets: []
+    property bool releaseAssetPickerLoading: false
+    property string releaseAssetPickerError: ""
+    // Release Center app row that initiated the asset picker (-1 = ad-hoc URL, not tracked).
+    property int releaseAssetPickerAppIndex: -1
 
     readonly property bool hasSelection: selectedTask !== null
                                          && selectedTask !== undefined
@@ -142,8 +152,8 @@ ApplicationWindow {
     readonly property string developerFarcasterUrl: "https://farcaster.xyz/compez.eth"
     readonly property string developerXUrl: "https://x.com/thecompez"
     readonly property string developerGithubUrl: "https://github.com/thecompez"
-    readonly property string projectRepositoryUrl: "https://github.com/genyleap/tondar"
-    readonly property string projectLicenseUrl: "https://github.com/genyleap/tondar?tab=MIT-1-ov-file#readme"
+    readonly property string projectRepositoryUrl: "https://github.com/genyleap/genydl"
+    readonly property string projectLicenseUrl: "https://github.com/genyleap/genydl?tab=MIT-1-ov-file#readme"
     readonly property string qtOpenSourceUrl: "https://doc.qt.io/qt-6/licensing.html"
     readonly property string genyleapWebsiteUrl: "https://genyleap.com"
     readonly property string genyleapSupportUrl: "https://genyleap.com/support"
@@ -185,6 +195,70 @@ ApplicationWindow {
     readonly property int queueRole: Qt.UserRole + 8
     readonly property int categoryRole: Qt.UserRole + 9
 
+    // Release Center date display format. Persisted via settings UI.
+    // Release Center date display format, now persisted by the service.
+    // One of: "relative" | "datetime" | "day" | "month"
+    readonly property string releaseDateFormat: releaseCenterService.dateFormat
+
+    // Index of the app whose update was last announced (for notification clicks).
+    property int lastUpdateAppIndex: -1
+
+    function compactCount(value) { return Utils.compactCount(value) }
+    function formatReleaseDate(value) { return Utils.formatReleaseDate(value, appRoot.releaseDateFormat) }
+
+    // Open the GitHub asset picker for a tracked Release Center app (shared by the
+    // card, the details dialog, and the one-click update fallback).
+    function openAssetPickerForApp(app) {
+        appRoot.releaseAssetPickerAppIndex = (app && app.rowIndex !== undefined) ? app.rowIndex : -1
+        appRoot.releaseAssetPickerReleaseInfo = {
+            repository: app.repository,
+            owner: app.owner,
+            repo: app.repo,
+            displayName: app.displayName || app.repo,
+            name: app.latestReleaseName || app.latestTag,
+            tagName: app.latestTag,
+            body: app.latestBody || "",
+            htmlUrl: app.latestHtmlUrl || "",
+            publishedAt: app.latestPublishedAt,
+            publishedText: app.latestPublishedText || "",
+            description: app.description || "",
+            avatarUrl: app.avatarUrl || "",
+            homepageUrl: app.homepageUrl || "",
+            stars: app.stars || 0,
+            forks: app.forks || 0,
+            language: app.language || "",
+            licenseSpdxId: app.licenseSpdxId || ""
+        }
+        appRoot.releaseAssetPickerAssets = app.latestAssets || []
+        appRoot.releaseAssetPickerSourceAssets = app.latestSourceAssets || []
+        appRoot.releaseAssetPickerLoading = false
+        appRoot.releaseAssetPickerError = appRoot.releaseAssetPickerAssets.length > 0
+                ? "" : "This release does not publish downloadable assets."
+        githubReleaseAssetPicker.open()
+    }
+
+    // One-click update: auto-pick the asset matching this OS/arch and queue it
+    // directly. Falls back to the full picker when nothing matches confidently.
+    function startAppUpdate(app) {
+        if (!app || app.rowIndex === undefined || app.rowIndex < 0) {
+            openAssetPickerForApp(app); return
+        }
+        const picks = releaseCenterService.platformAssetsForApp(app.rowIndex)
+        if (!picks || picks.length === 0) {
+            openAssetPickerForApp(app); return
+        }
+        const added = appRoot.submitGitHubReleaseAssets(
+                        picks, appRoot.addDefaultOutputPath, appRoot.addDefaultQueue,
+                        appRoot.addDefaultCategory, appRoot.addDefaultStartPaused,
+                        appRoot.addDefaultSegments, appRoot.addDefaultAdaptive)
+        if (added > 0) {
+            appRoot.appendNotification("Updating " + (app.displayName || app.repo),
+                                       "Downloading " + picks[0].name + " …", "success")
+            releaseCenterService.markLatestKnown(app.rowIndex)
+            appRoot.pageIndex = 0   // show the download on Home
+        }
+    }
+
     function formatBytes() { return Utils.formatBytes.apply(this, arguments) }
     function formatSpeed() { return Utils.formatSpeed.apply(this, arguments) }
     function formatEta() { return Utils.formatEta.apply(this, arguments) }
@@ -195,6 +269,7 @@ ApplicationWindow {
     function setStatusScope() { return Utils.setStatusScope.apply(this, arguments) }
     function setCategoryScope() { return Utils.setCategoryScope.apply(this, arguments) }
     function setQueueScope() { return Utils.setQueueScope.apply(this, arguments) }
+    function setSourceScope() { return Utils.setSourceScope.apply(this, arguments) }
     function visibleTaskRows() { return Utils.visibleTaskRows.apply(this, arguments) }
     function visibleTaskCount() { return Utils.visibleTaskCount.apply(this, arguments) }
     function areAllVisibleChecked() { return Utils.areAllVisibleChecked.apply(this, arguments) }
@@ -310,6 +385,7 @@ ApplicationWindow {
         queueFilter = "All Queues"
         statusFilter = "All"
         categoryFilter = "All"
+        sourceFilter = "All"
         searchText = ""
         sortIndex = 0
         sortAscending = true
@@ -414,13 +490,13 @@ ApplicationWindow {
         id: backgroundCloseDialog
         title: "Downloads still running"
         type: "warning"
-        desc: "Tondar can keep downloads active after the window is closed."
+        desc: "GenyDL can keep downloads active after the window is closed."
         message: appController.trayAvailable
                  ? "Use the tray icon to restore the main window or exit the application."
                  : "This system does not expose a tray icon right now. Use Exit to stop the application, or cancel and keep the window open."
         standardButtons: Dialog.Cancel | Dialog.Discard
         cancelTextOverride: "Keep Open"
-        discardTextOverride: "Exit Tondar"
+        discardTextOverride: "Exit GenyDL"
         onDiscarded: appController.quitApplication()
     }
 
@@ -429,10 +505,10 @@ ApplicationWindow {
         width: Math.min(appRoot.width - 60, 620)
         height: 520
 
-        title: "About Tondar"
+        title: "About GenyDL"
         type: "info"
-        desc: "Tondar Download Manager"
-        message: "Tondar provides segmented downloading, queue control, adaptive segment scheduling, runtime policies, and update delivery in a desktop workflow."
+        desc: "GenyDL Download Manager"
+        message: "GenyDL provides segmented downloading, queue control, adaptive segment scheduling, runtime policies, and update delivery in a desktop workflow."
 
         standardButtons: Dialog.Close
 
@@ -464,10 +540,10 @@ ApplicationWindow {
                         border.color: Colors.borderActivated
 
                         Image {
-                            id: tondarAboutImage
+                            id: genydlAboutImage
                             anchors.fill: parent
                             anchors.margins: 8
-                            source: "qrc:/Tondar.png"
+                            source: "qrc:/GenyDL.png"
                             // fillMode: Image.PreserveAspectFit
                             smooth: true
                             asynchronous: true
@@ -476,8 +552,8 @@ ApplicationWindow {
 
                         Text {
                             anchors.centerIn: parent
-                            visible: tondarAboutImage.status !== Image.Ready
-                            text: "TONDAR"
+                            visible: genydlAboutImage.status !== Image.Ready
+                            text: "GENYDL"
                             color: Colors.textPrimary
                             font.family: FontSystem.getTitleBoldFont.font.family
                             font.pixelSize: Typography.t2
@@ -492,7 +568,7 @@ ApplicationWindow {
 
                         Text {
                             Layout.fillWidth: true
-                            text: "Tondar Download Manager"
+                            text: "GenyDL Download Manager"
                             color: Colors.textPrimary
                             font.family: FontSystem.getTitleBoldFont.font.family
                             font.pixelSize: Typography.h4
@@ -518,7 +594,7 @@ ApplicationWindow {
                 rowSpacing: 8
 
                 Controls.Label { text: "Name" }
-                Controls.Label { text: "Tondar Download Manager" }
+                Controls.Label { text: "GenyDL Download Manager" }
                 Controls.Label { text: "Version" }
                 Controls.Label { text: Qt.application.version }
                 Controls.Label { text: "Framework" }
@@ -739,7 +815,7 @@ ApplicationWindow {
         title: "Support & Community"
         type: "info"
         desc: "Official Genyleap resources"
-        message: "Production links for TONDAR, Genyleap, and the developer profile."
+        message: "Production links for GENYDL, Genyleap, and the developer profile."
 
         ColumnLayout {
             Layout.fillWidth: true
@@ -769,7 +845,7 @@ ApplicationWindow {
 
                         Text {
                             anchors.centerIn: parent
-                            text: "TONDAR"
+                            text: "GENYDL"
                             color: Colors.textPrimary
                             font.family: FontSystem.getTitleBoldFont.font.family
                             font.pixelSize: Typography.t2
@@ -841,7 +917,7 @@ ApplicationWindow {
                                 }
 
                                 Text {
-                                    text: "Genyleap Labs home for TONDAR and ecosystem updates."
+                                    text: "Genyleap Labs home for GENYDL and ecosystem updates."
                                     color: Colors.textSecondary
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t3
@@ -897,7 +973,7 @@ ApplicationWindow {
                                 }
 
                                 Text {
-                                    text: "Main open source repository for TONDAR."
+                                    text: "Main open source repository for GENYDL."
                                     color: Colors.textSecondary
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t3
@@ -908,7 +984,7 @@ ApplicationWindow {
                                     textFormat: Text.RichText
                                     text: "<a href=\"" + appRoot.projectRepositoryUrl + "\"><span style=\"color:#3a86ff;text-decoration:underline;\">"
                                           + appRoot.projectRepositoryUrl + "</span></a>"
-                                    onLinkActivated: appRoot.openExternalLink(link, "Opened TONDAR repository")
+                                    onLinkActivated: appRoot.openExternalLink(link, "Opened GENYDL repository")
                                     color: Colors.textAccent
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t2
@@ -1170,7 +1246,7 @@ ApplicationWindow {
         title: "License & Open Source"
         type: "info"
         desc: "MIT License and source access"
-        message: "TONDAR is distributed under the MIT License. Review the repository and full license text below."
+        message: "GENYDL is distributed under the MIT License. Review the repository and full license text below."
 
         ColumnLayout {
             Layout.fillWidth: true
@@ -1214,7 +1290,7 @@ ApplicationWindow {
                                 }
 
                                 Text {
-                                    text: "Main source repository for TONDAR."
+                                    text: "Main source repository for GENYDL."
                                     color: Colors.textSecondary
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t3
@@ -1225,7 +1301,7 @@ ApplicationWindow {
                                     textFormat: Text.RichText
                                     text: "<a href=\"" + appRoot.projectRepositoryUrl + "\"><span style=\"color:#3a86ff;text-decoration:underline;\">"
                                           + appRoot.projectRepositoryUrl + "</span></a>"
-                                    onLinkActivated: appRoot.openExternalLink(link, "Opened TONDAR repository")
+                                    onLinkActivated: appRoot.openExternalLink(link, "Opened GENYDL repository")
                                     color: Colors.textAccent
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t2
@@ -1324,7 +1400,7 @@ ApplicationWindow {
                                 }
 
                                 Text {
-                                    text: "TONDAR is built with Qt " + Qt.version + ". Review the official Qt open source licensing page."
+                                    text: "GENYDL is built with Qt " + Qt.version + ". Review the official Qt open source licensing page."
                                     color: Colors.textSecondary
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t3
@@ -1404,7 +1480,7 @@ ApplicationWindow {
         height: 520
         title: "Donate"
         type: "info"
-        desc: "Support TONDAR on Base and Ethereum MainNet"
+        desc: "Support GENYDL on Base and Ethereum MainNet"
         message: "Use the ERC20 donation address below on both supported networks."
 
         ColumnLayout {
@@ -2180,7 +2256,21 @@ ApplicationWindow {
         onAccepted: {
             addDialogErrorLabel.text = ""
             if (appRoot.isTorrentLikeInput(addDialogUrlField.text)) {
-                addDialogErrorLabel.text = "Torrent/magnet is not supported in backend yet. Use an HTTP/HTTPS/FTP URL."
+                if (!torrentSession.available) {
+                    addDialogErrorLabel.text = "BitTorrent support is not available in this build."
+                    return
+                }
+                downloadManager.addTorrentDownload(
+                            addDialogUrlField.text.trim(),
+                            addDialogPathField.text.trim(),
+                            addDialogQueueCombo.currentText,
+                            addDialogCategoryCombo.currentText,
+                            addDialogPausedSwitch.checked)
+                appRoot.addDefaultOutputPath = addDialogPathField.text.trim()
+                appRoot.addDefaultQueue = addDialogQueueCombo.currentText
+                appRoot.addDefaultStartPaused = addDialogPausedSwitch.checked
+                addDialogUrlField.text = ""
+                addUrlPopup.close()
                 return
             }
             if (githubReleaseService.isReleaseUrl(addDialogUrlField.text)) {
@@ -2192,6 +2282,12 @@ ApplicationWindow {
                 appRoot.addDefaultStartPaused = addDialogPausedSwitch.checked
 
                 githubReleaseService.clear()
+                appRoot.releaseAssetPickerAppIndex = -1
+                appRoot.releaseAssetPickerReleaseInfo = githubReleaseService.release
+                appRoot.releaseAssetPickerAssets = githubReleaseService.assets
+                appRoot.releaseAssetPickerSourceAssets = []
+                appRoot.releaseAssetPickerLoading = githubReleaseService.loading
+                appRoot.releaseAssetPickerError = githubReleaseService.errorMessage
                 githubReleaseAssetPicker.open()
                 githubReleaseService.fetchRelease(addDialogUrlField.text)
                 addUrlPopup.close()
@@ -2224,12 +2320,264 @@ ApplicationWindow {
 
     }
 
+    Controls.Dialog {
+        id: releaseCenterAddDialog
+        title: "Add GitHub App"
+        type: "info"
+        standardButtons: Dialog.NoButton
+        width: Math.min(appRoot.width - 40, 760)
+        height: Math.min(implicitHeight, appRoot.height - 80)
+        readonly property bool hasPreview: releaseCenterService.preview
+                                           && releaseCenterService.preview.repository !== undefined
+                                           && String(releaseCenterService.preview.repository).length > 0
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 10
+
+            Controls.Label {
+                Layout.fillWidth: true
+                text: "Paste a GitHub repository or releases page URL."
+                color: Colors.textSecondary
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                Controls.TextField {
+                    id: releaseCenterUrlField
+                    Layout.fillWidth: true
+                    placeholderText: "https://github.com/owner/repo/releases"
+                    onTextChanged: releaseCenterNameField.text = ""
+                }
+
+                Controls.Button {
+                    text: releaseCenterService.loading ? "Checking..." : "Preview"
+                    enabled: !releaseCenterService.loading && releaseCenterUrlField.text.trim().length > 0
+                    onClicked: releaseCenterService.previewApp(releaseCenterUrlField.text.trim())
+                }
+            }
+
+            Controls.Label {
+                Layout.fillWidth: true
+                visible: releaseCenterService.errorMessage.length > 0
+                text: releaseCenterService.errorMessage
+                color: Colors.error
+                wrapMode: Text.WordWrap
+            }
+
+            // Rich preview so the user sees exactly what will be added.
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: previewCol.implicitHeight + 28
+                radius: Metrics.innerRadius
+                color: Colors.backgroundItemActivated
+                border.width: 1
+                border.color: Colors.borderActivated
+                visible: releaseCenterAddDialog.hasPreview
+
+                ColumnLayout {
+                    id: previewCol
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.margins: 14
+                    spacing: 10
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 14
+
+                        Item {
+                            Layout.preferredWidth: 52
+                            Layout.preferredHeight: 52
+                            Layout.alignment: Qt.AlignTop
+                            Rectangle {
+                                id: previewAvatarFrame
+                                anchors.fill: parent
+                                radius: width * 0.26
+                                border.width: 1
+                                border.color: Colors.borderActivated
+                                clip: true
+                                gradient: Gradient {
+                                    GradientStop { position: 0.0; color: Colors.backgroundItemHovered }
+                                    GradientStop { position: 1.0; color: Colors.pagespaceActivated }
+                                }
+                                Controls.Label {
+                                    anchors.centerIn: parent
+                                    visible: previewLogo.status !== Image.Ready
+                                    text: {
+                                        const o = String(releaseCenterService.preview.owner || "?")
+                                        return o.length > 0 ? o.charAt(0).toUpperCase() : "?"
+                                    }
+                                    font.pixelSize: 22
+                                    font.bold: true
+                                    color: Colors.textSecondary
+                                }
+                                Image {
+                                    id: previewLogo
+                                    anchors.fill: parent
+                                    anchors.margins: 4
+                                    source: releaseCenterService.preview.avatarUrl || ""
+                                    fillMode: Image.PreserveAspectFit
+                                    smooth: true; mipmap: true; cache: true; asynchronous: true
+                                    sourceSize.width: 104; sourceSize.height: 104
+                                }
+                            }
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 3
+                            Text {
+                                Layout.fillWidth: true
+                                text: String(releaseCenterService.preview.displayName
+                                             || releaseCenterService.preview.repo || "")
+                                font.family: FontSystem.getContentFontBold.name
+                                font.weight: Font.Bold
+                                font.pixelSize: Typography.h4
+                                color: Colors.textPrimary
+                                elide: Text.ElideRight
+                            }
+                            Controls.Label {
+                                Layout.fillWidth: true
+                                text: releaseCenterService.preview.repository || ""
+                                color: Colors.textSecondary
+                                elide: Text.ElideRight
+                            }
+                            Controls.Label {
+                                Layout.fillWidth: true
+                                visible: String(releaseCenterService.preview.description || "").length > 0
+                                text: releaseCenterService.preview.description || ""
+                                color: Colors.textSecondary
+                                wrapMode: Text.WordWrap
+                                maximumLineCount: 2
+                                elide: Text.ElideRight
+                            }
+                        }
+                    }
+
+                    // Stat chips
+                    Flow {
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        Repeater {
+                            model: [
+                                { g: "", c: Colors.star, t: appRoot.compactCount(releaseCenterService.preview.stars), show: true },
+                                { g: "", c: Colors.secondry, t: appRoot.compactCount(releaseCenterService.preview.forks), show: true },
+                                { g: "", c: Colors.textSecondary, t: String(releaseCenterService.preview.language || ""), show: String(releaseCenterService.preview.language || "").length > 0 },
+                                { g: "", c: Colors.textSecondary, t: String(releaseCenterService.preview.licenseSpdxId || ""), show: String(releaseCenterService.preview.licenseSpdxId || "").length > 0 }
+                            ]
+                            delegate: Rectangle {
+                                required property var modelData
+                                visible: modelData.show
+                                width: chipContent.implicitWidth + 20
+                                height: 28
+                                radius: Metrics.innerRadius
+                                color: Colors.pagespaceActivated
+                                border.width: 1
+                                border.color: Colors.borderActivated
+                                Row {
+                                    id: chipContent
+                                    anchors.centerIn: parent
+                                    spacing: 6
+                                    Text {
+                                        text: modelData.g
+                                        font.family: FontSystem.getAwesomeSolid.name
+                                        font.weight: Font.Black
+                                        font.pixelSize: 12
+                                        color: modelData.c
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                    Controls.Label {
+                                        text: modelData.t
+                                        color: Colors.textPrimary
+                                        font.pixelSize: Typography.t3
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Release summary line
+                    Controls.Label {
+                        Layout.fillWidth: true
+                        text: {
+                            const tag = String(releaseCenterService.preview.latestTag || "--")
+                            const when = releaseCenterService.preview.latestPublishedAt
+                                       ? appRoot.formatReleaseDate(releaseCenterService.preview.latestPublishedAt)
+                                       : ""
+                            const n = releaseCenterService.previewAssets.length
+                            return "Latest " + tag
+                                 + (when.length > 0 ? "  •  " + when : "")
+                                 + "  •  " + n + " asset" + (n === 1 ? "" : "s")
+                        }
+                        color: Colors.textSecondary
+                        font.pixelSize: Typography.t3
+                        elide: Text.ElideRight
+                    }
+                }
+            }
+
+            Controls.TextField {
+                id: releaseCenterNameField
+                Layout.fillWidth: true
+                visible: releaseCenterAddDialog.hasPreview
+                placeholderText: releaseCenterService.preview.displayName || "Display name"
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.topMargin: 4
+                Item { Layout.fillWidth: true }
+                Controls.Button {
+                    text: "Cancel"
+                    onClicked: releaseCenterAddDialog.close()
+                }
+                Controls.Button {
+                    text: "Add to Release Center"
+                    isDefault: true
+                    enabled: releaseCenterAddDialog.hasPreview
+                    Layout.preferredWidth: 180
+                    onClicked: {
+                        if (releaseCenterService.confirmPreview(releaseCenterNameField.text)) {
+                            appRoot.appendNotification("Release Center",
+                                                       "GitHub app added to Release Center.",
+                                                       "success")
+                            releaseCenterAddDialog.close()
+                        }
+                    }
+                }
+            }
+        }
+
+        onOpened: {
+            releaseCenterService.clearPreview()
+            releaseCenterUrlField.text = ""
+            releaseCenterNameField.text = ""
+            releaseCenterUrlField.forceActiveFocus()
+        }
+    }
+
+    // Lets the Release Center scheduler honor "only when open": when the window
+    // is hidden to tray / minimized, windowActive becomes false.
+    Binding {
+        target: releaseCenterService
+        property: "windowActive"
+        value: appRoot.visible && appRoot.visibility !== Window.Minimized
+                && appRoot.visibility !== Window.Hidden
+    }
+
     Controls.GitHubReleaseAssetPicker {
         id: githubReleaseAssetPicker
-        releaseInfo: githubReleaseService.release
-        assets: githubReleaseService.assets
-        loading: githubReleaseService.loading
-        errorText: githubReleaseService.errorMessage
+        releaseInfo: appRoot.releaseAssetPickerReleaseInfo
+        assets: appRoot.releaseAssetPickerAssets
+        sourceAssets: appRoot.releaseAssetPickerSourceAssets
+        loading: appRoot.releaseAssetPickerLoading
+        errorText: appRoot.releaseAssetPickerError
 
         onAddSelected: function(selectedAssets) {
             const added = appRoot.submitGitHubReleaseAssets(
@@ -2245,6 +2593,55 @@ ApplicationWindow {
                 appRoot.appendNotification("GitHub release assets added",
                                            added + " asset" + (added === 1 ? "" : "s") + " added to the download queue.",
                                            "success")
+                // Record this release as the installed version for the tracked app so
+                // the Release Center compares future releases against what we downloaded.
+                if (appRoot.releaseAssetPickerAppIndex >= 0)
+                    releaseCenterService.markLatestKnown(appRoot.releaseAssetPickerAppIndex)
+                // Jump to Home so the user immediately sees the queued downloads.
+                appRoot.pageIndex = 0
+            }
+            appRoot.releaseAssetPickerAppIndex = -1
+        }
+    }
+
+    Controls.ReleaseDetailsDialog {
+        id: releaseDetailsDialog
+        dateFormat: appRoot.releaseDateFormat
+
+        onCheckNow: function(rowIndex) {
+            if (rowIndex >= 0)
+                releaseCenterService.checkApp(rowIndex)
+        }
+        onOpenUrl: function(url) {
+            if (url && url.length > 0)
+                appRoot.openExternalLink(url, "Opened link")
+        }
+        onDownloadAssets: function(app) { appRoot.openAssetPickerForApp(app) }
+        onUpdateApp: function(app) { appRoot.startAppUpdate(app) }
+    }
+
+    // React to the download policy: "ask" opens the picker, "auto" queues the
+    // best platform asset straight away. ("notify" only raises a notification.)
+    Connections {
+        target: releaseCenterService
+        function onAppAutoDownloadRequested(index, assets, autoStart) {
+            if (!assets || assets.length === 0) return
+            if (autoStart) {
+                const added = appRoot.submitGitHubReleaseAssets(
+                                assets, appRoot.addDefaultOutputPath, appRoot.addDefaultQueue,
+                                appRoot.addDefaultCategory, appRoot.addDefaultStartPaused,
+                                appRoot.addDefaultSegments, appRoot.addDefaultAdaptive)
+                if (added > 0) {
+                    appRoot.appendNotification("Update download started",
+                                               assets[0].name + " is downloading.", "success")
+                    releaseCenterService.markLatestKnown(index)
+                    appRoot.pageIndex = 0
+                }
+            } else {
+                // "Ask before downloading" — surface the picker pre-loaded with the app.
+                const apps = releaseCenterService.apps
+                if (index >= 0 && index < apps.length)
+                    appRoot.openAssetPickerForApp(apps[index])
             }
         }
     }
@@ -2294,6 +2691,7 @@ ApplicationWindow {
                 Controls.TabButton { text: "Queues" }
                 Controls.TabButton { text: "Network" }
                 Controls.TabButton { text: "Updates" }
+                Controls.TabButton { text: "Release Center" }
             }
 
             StackLayout {
@@ -2373,7 +2771,7 @@ ApplicationWindow {
                                     Layout.fillWidth: true
                                     wrapMode: Text.WordWrap
                                     color: Colors.textMuted
-                                    text: "Restore TONDAR defaults and clear persisted session/configuration state without deleting downloaded files."
+                                    text: "Restore GENYDL defaults and clear persisted session/configuration state without deleting downloaded files."
                                 }
 
                                 RowLayout {
@@ -2435,6 +2833,9 @@ ApplicationWindow {
                                             queueDialogSchedule.checked = downloadManager.queueScheduleEnabled(q)
                                             queueDialogStartTime.text = appRoot.minutesToClockText(downloadManager.queueScheduleStartMinutes(q))
                                             queueDialogEndTime.text = appRoot.minutesToClockText(downloadManager.queueScheduleEndMinutes(q))
+                                            queueDialogUseDates.checked = downloadManager.queueScheduleUseDates(q)
+                                            queueDialogStartDate.isoValue = downloadManager.queueScheduleStart(q)
+                                            queueDialogEndDate.isoValue = downloadManager.queueScheduleEnd(q)
                                             queueDialogQuota.checked = downloadManager.queueQuotaEnabled(q)
                                             queueDialogQuotaBytes.value = Math.round(downloadManager.queueQuotaBytes(q) / (1024 * 1024 * 1024))
                                             queueDialogPostAction.currentIndex = appRoot.queuePostActionIndex(downloadManager.queuePostCompletionAction(q))
@@ -2450,6 +2851,9 @@ ApplicationWindow {
                                             downloadManager.setQueueScheduleEnabled(q, queueDialogSchedule.checked)
                                             downloadManager.setQueueScheduleStartMinutes(q, appRoot.clockTextToMinutes(queueDialogStartTime.text, downloadManager.queueScheduleStartMinutes(q)))
                                             downloadManager.setQueueScheduleEndMinutes(q, appRoot.clockTextToMinutes(queueDialogEndTime.text, downloadManager.queueScheduleEndMinutes(q)))
+                                            downloadManager.setQueueScheduleUseDates(q, queueDialogUseDates.checked)
+                                            downloadManager.setQueueScheduleStart(q, queueDialogStartDate.isoValue)
+                                            downloadManager.setQueueScheduleEnd(q, queueDialogEndDate.isoValue)
                                             downloadManager.setQueueQuotaEnabled(q, queueDialogQuota.checked)
                                             downloadManager.setQueueQuotaBytes(q, queueDialogQuotaBytes.value * 1024 * 1024 * 1024)
                                             downloadManager.setQueuePostCompletionAction(q, appRoot.queuePostActionIds[Math.max(0, queueDialogPostAction.currentIndex)])
@@ -2523,18 +2927,79 @@ ApplicationWindow {
                                     Controls.SpinBox { id: queueDialogMaxSpeed; from: 0; to: 4096; value: 0 }
                                     Controls.Label { text: "Run on schedule" }
                                     Controls.Switch { id: queueDialogSchedule }
-                                    Controls.Label { text: "Start time" }
+
+                                    RowLayout {
+                                        spacing: 6
+                                        Text {
+                                            text: String.fromCharCode(0xf133)   // calendar
+                                            font.family: FontSystem.getAwesomeSolid.name
+                                            font.weight: Font.Black
+                                            font.pixelSize: 13
+                                            color: Colors.textSecondary
+                                        }
+                                        Controls.Label { text: "Use calendar dates" }
+                                    }
+                                    Controls.Switch {
+                                        id: queueDialogUseDates
+                                        // Calendar (absolute) window vs. daily clock window.
+                                    }
+
+                                    // Mode hint spanning both columns.
+                                    Controls.Label {
+                                        Layout.columnSpan: 2
+                                        Layout.fillWidth: true
+                                        text: queueDialogUseDates.checked
+                                              ? "On: runs once, only inside the exact calendar window you pick below."
+                                              : "Off: repeats every day between the two clock times below. Turn on to pick exact calendar dates."
+                                        color: Colors.textMuted
+                                        font.pixelSize: Typography.t3
+                                        wrapMode: Text.WordWrap
+                                    }
+
+                                    // Daily clock window (shown when NOT using a date range).
+                                    Controls.Label {
+                                        text: "Start time"
+                                        visible: !queueDialogUseDates.checked
+                                    }
                                     Controls.TextField {
                                         id: queueDialogStartTime
+                                        visible: !queueDialogUseDates.checked
                                         placeholderText: "02:00 AM"
                                         text: "00:00"
                                     }
-                                    Controls.Label { text: "End time" }
+                                    Controls.Label {
+                                        text: "End time"
+                                        visible: !queueDialogUseDates.checked
+                                    }
                                     Controls.TextField {
                                         id: queueDialogEndTime
+                                        visible: !queueDialogUseDates.checked
                                         placeholderText: "07:00 AM"
                                         text: "00:00"
                                     }
+
+                                    // Absolute datetime window with calendar pickers.
+                                    Controls.Label {
+                                        text: "Start date"
+                                        visible: queueDialogUseDates.checked
+                                    }
+                                    Controls.DateTimeField {
+                                        id: queueDialogStartDate
+                                        Layout.fillWidth: true
+                                        visible: queueDialogUseDates.checked
+                                        placeholder: "Pick a start date/time"
+                                    }
+                                    Controls.Label {
+                                        text: "End date"
+                                        visible: queueDialogUseDates.checked
+                                    }
+                                    Controls.DateTimeField {
+                                        id: queueDialogEndDate
+                                        Layout.fillWidth: true
+                                        visible: queueDialogUseDates.checked
+                                        placeholder: "Pick an end date/time"
+                                    }
+
                                     Controls.Label { text: "Enable quota" }
                                     Controls.Switch { id: queueDialogQuota }
                                     Controls.Label { text: "Quota (GB/day)" }
@@ -2685,6 +3150,240 @@ ApplicationWindow {
                                 Controls.Label { Layout.fillWidth: true; text: downloadManager.networkTestMessage; wrapMode: Text.Wrap }
                             }
                         }
+
+                        Controls.GroupBox {
+                            title: "BitTorrent"
+                            Layout.fillWidth: true
+                            implicitHeight: torrentSettingsLayout.implicitHeight + topPadding + bottomPadding
+
+                            ColumnLayout {
+                                id: torrentSettingsLayout
+                                width: parent.width
+                                spacing: 8
+
+                                Controls.Label {
+                                    Layout.fillWidth: true
+                                    text: downloadManager.torrentAvailable
+                                          ? "Seeding stops when either limit is reached. 0 = unlimited."
+                                          : "BitTorrent support is not available in this build."
+                                    color: Colors.textMuted
+                                    wrapMode: Text.WordWrap
+                                }
+
+                                GridLayout {
+                                    Layout.fillWidth: true
+                                    columns: 2
+                                    columnSpacing: 12
+                                    rowSpacing: 8
+                                    enabled: downloadManager.torrentAvailable
+
+                                    Controls.Label { text: "Seed ratio limit" }
+                                    Controls.SpinBox {
+                                        Layout.preferredWidth: 180
+                                        from: 0
+                                        to: 1000
+                                        stepSize: 1
+                                        // SpinBox is integer; store ratio * 10 (e.g. 15 = 2.0... no, 20 = 2.0)
+                                        property int scale: 10
+                                        value: Math.round(downloadManager.torrentSeedRatio * scale)
+                                        onValueModified: downloadManager.torrentSeedRatio = value / scale
+                                        textFromValue: function(v) { return (v / scale).toFixed(1) }
+                                        valueFromText: function(t) { return Math.round(parseFloat(t) * scale) }
+                                    }
+
+                                    Controls.Label { text: "Seed time limit (min)" }
+                                    Controls.SpinBox {
+                                        Layout.preferredWidth: 180
+                                        from: 0
+                                        to: 100000
+                                        value: downloadManager.torrentSeedTimeMinutes
+                                        onValueModified: downloadManager.torrentSeedTimeMinutes = value
+                                    }
+                                }
+                            }
+                        }
+
+                        // Smart Gateway System — the key advantage over a browser's
+                        // single hard-coded gateway. Users see live health and can
+                        // prioritize, disable, reorder, or add their own gateways.
+                        Controls.GroupBox {
+                            id: gatewaysGroup
+                            title: "IPFS Gateways (Smart Gateway System)"
+                            Layout.fillWidth: true
+                            implicitHeight: gatewaysLayout.implicitHeight + topPadding + bottomPadding
+
+                            // Map a status kind token to a theme color.
+                            function statusColor(kind) {
+                                switch (kind) {
+                                    case "success": return Colors.success
+                                    case "warning": return Colors.warning
+                                    case "danger":  return Colors.error
+                                    default:        return Colors.textMuted
+                                }
+                            }
+
+                            ColumnLayout {
+                                id: gatewaysLayout
+                                width: parent.width
+                                spacing: 8
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+
+                                    Controls.Label {
+                                        Layout.fillWidth: true
+                                        wrapMode: Text.WordWrap
+                                        color: Colors.textMuted
+                                        text: "Content is resolved through these gateways, ordered by preference, live health, and response time, with automatic fallback. "
+                                              + gatewayService.healthyCount + " of " + gatewayService.enabledCount + " enabled gateway(s) healthy"
+                                              + (gatewayService.localNodeAvailable ? "  ·  Local node detected" : "")
+                                    }
+
+                                    Controls.Button {
+                                        text: gatewayService.checking ? "Checking…" : "Check now"
+                                        enabled: !gatewayService.checking
+                                        onClicked: gatewayService.checkHealthNow()
+                                    }
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    height: 1
+                                    color: Colors.borderActivated
+                                }
+
+                                Repeater {
+                                    model: gatewayService.gateways
+
+                                    delegate: RowLayout {
+                                        required property var modelData
+                                        required property int index
+                                        Layout.fillWidth: true
+                                        Layout.topMargin: 3
+                                        Layout.bottomMargin: 3
+                                        spacing: 10
+
+                                        Rectangle {
+                                            width: 9; height: 9; radius: 4.5
+                                            Layout.alignment: Qt.AlignVCenter
+                                            color: gatewaysGroup.statusColor(modelData.statusKind)
+                                        }
+
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 1
+
+                                            RowLayout {
+                                                Layout.fillWidth: true
+                                                spacing: 6
+
+                                                Controls.Label {
+                                                    elide: Text.ElideRight
+                                                    font.bold: true
+                                                    text: modelData.host
+                                                }
+                                                Rectangle {
+                                                    visible: modelData.local || !modelData.builtin
+                                                    radius: height / 2
+                                                    color: Colors.backgroundItemActivated
+                                                    implicitHeight: tagText.implicitHeight + 3
+                                                    implicitWidth: tagText.implicitWidth + 12
+                                                    Layout.alignment: Qt.AlignVCenter
+                                                    Text {
+                                                        id: tagText
+                                                        anchors.centerIn: parent
+                                                        text: modelData.local ? "local node" : "custom"
+                                                        color: Colors.textMuted
+                                                        font.pixelSize: 10
+                                                    }
+                                                }
+                                                Item { Layout.fillWidth: true }
+                                            }
+
+                                            Controls.Label {
+                                                color: gatewaysGroup.statusColor(modelData.statusKind)
+                                                text: modelData.status
+                                                      + (modelData.responseMs >= 0 ? "   ·   " + modelData.responseMs + " ms" : "")
+                                            }
+                                        }
+
+                                        // Compact action cluster
+                                        RowLayout {
+                                            spacing: 2
+                                            Layout.alignment: Qt.AlignVCenter
+
+                                            Controls.MiniIconButton {
+                                                glyph: "★"
+                                                active: modelData.preferred
+                                                glyphColor: Colors.textMuted
+                                                activeColor: Colors.star
+                                                onActivated: gatewayService.setGatewayPreferred(index, !modelData.preferred)
+                                            }
+                                            Controls.MiniIconButton {
+                                                glyph: "↑"
+                                                interactive: index > 0
+                                                onActivated: gatewayService.moveGatewayUp(index)
+                                            }
+                                            Controls.MiniIconButton {
+                                                glyph: "↓"
+                                                interactive: index < gatewayService.gateways.length - 1
+                                                onActivated: gatewayService.moveGatewayDown(index)
+                                            }
+                                            Controls.MiniIconButton {
+                                                glyph: "✕"
+                                                glyphColor: Colors.textError
+                                                visible: !modelData.builtin
+                                                onActivated: gatewayService.removeGateway(index)
+                                            }
+                                        }
+
+                                        Controls.Switch {
+                                            Layout.alignment: Qt.AlignVCenter
+                                            checked: modelData.enabled
+                                            onCheckedChanged: {
+                                                if (checked !== modelData.enabled)
+                                                    gatewayService.setGatewayEnabled(index, checked)
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    height: 1
+                                    color: Colors.borderActivated
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+
+                                    Controls.TextField {
+                                        id: customGatewayField
+                                        Layout.fillWidth: true
+                                        placeholderText: "https://my-gateway.example"
+                                        onAccepted: addGatewayButton.clicked()
+                                    }
+                                    Controls.Button {
+                                        id: addGatewayButton
+                                        text: "Add gateway"
+                                        onClicked: {
+                                            var v = customGatewayField.text.trim()
+                                            if (v.length > 0) {
+                                                gatewayService.addCustomGateway(v)
+                                                customGatewayField.text = ""
+                                            }
+                                        }
+                                    }
+                                    Controls.Button {
+                                        text: "Reset"
+                                        style: "danger"
+                                        onClicked: gatewayService.resetToDefaults()
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -2749,6 +3448,22 @@ ApplicationWindow {
                         }
                     }
                 }
+
+                ScrollView {
+                    id: releaseCenterConfigView
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+
+                    ColumnLayout {
+                        width: Math.max(320, releaseCenterConfigView.availableWidth)
+                        spacing: 12
+
+                        Controls.ReleaseCenterSettings { Layout.fillWidth: true }
+
+                        Item { Layout.fillHeight: true }
+                    }
+                }
             }
 
             RowLayout {
@@ -2778,6 +3493,7 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+Shift+R"; context: Qt.ApplicationShortcut; onActivated: downloadManager.resumeAll() }
     Shortcut { sequence: "Ctrl+Shift+T"; context: Qt.ApplicationShortcut; onActivated: downloadManager.retryFailed() }
     Shortcut { sequence: "Ctrl+Shift+X"; context: Qt.ApplicationShortcut; onActivated: downloadManager.cancelAll() }
+    Shortcut { sequence: "Ctrl+Shift+U"; context: Qt.ApplicationShortcut; onActivated: appRoot.pageIndex = 1 }
 
     Component.onCompleted: {
 
@@ -2906,6 +3622,58 @@ ApplicationWindow {
                                        "info")
             notificationDrawer.open()
             updateAvailableDialog.open()
+        }
+    }
+
+    Connections {
+        target: githubReleaseService
+        ignoreUnknownSignals: true
+
+        function onLoadingChanged() {
+            appRoot.releaseAssetPickerLoading = githubReleaseService.loading
+        }
+        function onReleaseChanged() {
+            appRoot.releaseAssetPickerReleaseInfo = githubReleaseService.release
+        }
+        function onAssetsChanged() {
+            appRoot.releaseAssetPickerAssets = githubReleaseService.assets
+            appRoot.releaseAssetPickerSourceAssets = []
+        }
+        function onErrorMessageChanged() {
+            appRoot.releaseAssetPickerError = githubReleaseService.errorMessage
+        }
+    }
+
+    Connections {
+        target: releaseCenterService
+        ignoreUnknownSignals: true
+
+        function onAppUpdateFound(displayName, tagName, index) {
+            appRoot.pageIndex = 1
+            appRoot.lastUpdateAppIndex = index
+            const message = displayName + " " + tagName + " is available. "
+                          + "Click to view details."
+            appRoot.appendNotification("New update available", message, "info")
+            appController.showNotification("New update available", message)
+            notificationDrawer.open()
+        }
+    }
+
+    Connections {
+        target: appController
+        ignoreUnknownSignals: true
+
+        // Clicking the OS notification acts as "View details" for the app whose
+        // update was just announced. (QSystemTrayIcon can't render real action
+        // buttons cross-platform, so the whole notification is the action.)
+        function onNotificationClicked() {
+            appRoot.pageIndex = 1
+            const apps = releaseCenterService.apps
+            const i = appRoot.lastUpdateAppIndex
+            if (i >= 0 && i < apps.length) {
+                releaseDetailsDialog.app = apps[i]
+                releaseDetailsDialog.open()
+            }
         }
     }
 
@@ -3180,15 +3948,36 @@ ApplicationWindow {
         }
     }
 
+    Controls.TorrentDetailsDialog {
+        id: torrentDetailsWindow
+
+        onPauseResumeRequested: function(row) {
+            downloadManager.togglePause(row)
+        }
+        onRemoveRequested: function(row) {
+            appRoot.promptRemoveRows([row])
+            torrentDetailsWindow.close()
+        }
+        onOpenRequested: function(row) {
+            downloadManager.openFile(row)
+        }
+        onRevealRequested: function(row) {
+            downloadManager.revealInFolder(row)
+        }
+        onCopyRequested: function(text) {
+            downloadManager.copyText(text)
+        }
+    }
+
     Window {
         id: detailsWindow
 
         width: 860
-        height: 620
+        height: 640
         minimumWidth: 860
-        minimumHeight: 620
+        minimumHeight: 640
         maximumWidth: 860
-        maximumHeight: 620
+        maximumHeight: 640
 
         flags: Qt.Widget
 
@@ -3196,6 +3985,28 @@ ApplicationWindow {
         visible: false
 
         property int tabIndex: 0
+
+        // Resolve a semantic tone token (from utils.js classifiers) to a color.
+        function toneColor(tone) {
+            switch (tone) {
+                case "success":   return Colors.textSuccess
+                case "warning":   return Colors.textWarning
+                case "danger":    return Colors.textError
+                case "accent":    return Colors.textAccent
+                case "info":      return Colors.textAccent
+                case "secondary": return Colors.textSecondary
+                default:          return Colors.textMuted
+            }
+        }
+
+        readonly property var detailsSrcInfo: Utils.sourceTypeInfo(appRoot.detailsTask)
+        readonly property var detailsVerInfo: Utils.verificationInfo(appRoot.detailsTask)
+        // Blockchain/decentralized rows (IPFS, Arweave, …) get the dedicated
+        // Source Information panel; plain HTTP/torrent rows keep the original
+        // layout so nothing overflows the fixed-size window.
+        readonly property bool detailsIsBlockchain: detailsSrcInfo.id === "ipfs"
+                                                     || detailsSrcInfo.id === "arweave"
+                                                     || detailsSrcInfo.id === "storage"
 
         color: Colors.backgroundActivated
 
@@ -3287,8 +4098,13 @@ ApplicationWindow {
                 currentIndex: detailsWindow.tabIndex
 
                 Item {
-                    ColumnLayout {
+                    ScrollView {
+                        id: detailsGeneralView
                         anchors.fill: parent
+                        clip: true
+
+                    ColumnLayout {
+                        width: Math.max(320, detailsGeneralView.availableWidth)
                         spacing: 8
 
                         GroupBox {
@@ -3351,10 +4167,103 @@ ApplicationWindow {
                             }
                         }
 
+                        // Source Information — protocol, content address, gateway,
+                        // and verification transparency. Mirrors a torrent client's
+                        // tracker panel so users always know where a file came from,
+                        // how it was delivered, and whether it was verified.
+                        GroupBox {
+                            title: "Source Information"
+                            visible: detailsWindow.detailsIsBlockchain
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: sourceGrid.implicitHeight + 64
+
+                            GridLayout {
+                                id: sourceGrid
+                                anchors.fill: parent
+                                anchors.margins: 10
+                                columns: 2
+                                columnSpacing: 16
+                                rowSpacing: 6
+
+                                readonly property bool isIpfs: detailsWindow.detailsSrcInfo.id === "ipfs"
+                                readonly property bool hasCid: appRoot.detailsTask
+                                                               && appRoot.detailsTask.contentId
+                                                               && String(appRoot.detailsTask.contentId).length > 0
+
+                                Controls.Label { text: "Source Type" }
+                                Controls.Label {
+                                    text: detailsWindow.detailsSrcInfo.label
+                                    color: detailsWindow.toneColor(detailsWindow.detailsSrcInfo.tone)
+                                    font.bold: true
+                                    Layout.fillWidth: true
+                                }
+
+                                Controls.Label { text: "Content ID (CID)"; visible: sourceGrid.hasCid }
+                                Controls.Label {
+                                    text: sourceGrid.hasCid ? String(appRoot.detailsTask.contentId) : ""
+                                    font.family: FontSystem.getContentFontMedium.name
+                                    elide: Text.ElideMiddle
+                                    visible: sourceGrid.hasCid
+                                    Layout.fillWidth: true
+                                }
+
+                                Controls.Label { text: "Gateway"; visible: sourceGrid.isIpfs }
+                                Controls.Label {
+                                    text: {
+                                        if (!sourceGrid.isIpfs) return ""
+                                        var gw = Utils.activeGatewayHost(appRoot.detailsTask)
+                                        return gw.length > 0 ? gw : "Resolving…"
+                                    }
+                                    visible: sourceGrid.isIpfs
+                                    Layout.fillWidth: true
+                                }
+
+                                Controls.Label { text: "Fallbacks"; visible: sourceGrid.isIpfs }
+                                Controls.Label {
+                                    text: sourceGrid.isIpfs
+                                          ? Utils.gatewayFallbackCount(appRoot.detailsTask) + " gateway(s) available"
+                                          : ""
+                                    visible: sourceGrid.isIpfs
+                                }
+
+                                Controls.Label { text: "Verification"; visible: detailsWindow.detailsVerInfo.state !== "none" }
+                                Controls.Label {
+                                    text: (detailsWindow.detailsVerInfo.verified ? "✓ " : "")
+                                          + detailsWindow.detailsVerInfo.label
+                                    color: detailsWindow.toneColor(detailsWindow.detailsVerInfo.tone)
+                                    font.bold: true
+                                    visible: detailsWindow.detailsVerInfo.state !== "none"
+                                }
+
+                                Controls.Label { text: "Integrity"; visible: detailsWindow.detailsVerInfo.state !== "none" }
+                                Controls.Label {
+                                    text: {
+                                        switch (detailsWindow.detailsVerInfo.state) {
+                                            case "verified":  return "✓ Verified Content"
+                                            case "mismatch":  return "✗ Integrity check failed"
+                                            case "verifying": return "Checking…"
+                                            case "trusted":   return "Gateway-trusted (not byte-verifiable)"
+                                            default:          return "—"
+                                        }
+                                    }
+                                    color: detailsWindow.toneColor(detailsWindow.detailsVerInfo.tone)
+                                    visible: detailsWindow.detailsVerInfo.state !== "none"
+                                }
+
+                                Controls.Label { text: "Downloaded Via" }
+                                Controls.Label { text: Utils.deliveryChannel(appRoot.detailsTask) }
+                            }
+                        }
+
                         GroupBox {
                             title: "Segmented Progress Map"
+                            // Hidden for blockchain rows: content-addressed fetches
+                            // are typically small single objects, and the Source
+                            // Information panel takes this slot instead — keeping the
+                            // fixed-size window from overflowing.
+                            visible: !detailsWindow.detailsIsBlockchain
                             Layout.fillWidth: true
-                            Layout.fillHeight: true
+                            Layout.preferredHeight: 220
                             Layout.minimumHeight: 164
 
                             Flickable {
@@ -3386,6 +4295,7 @@ ApplicationWindow {
                         }
 
                         Item { Layout.fillHeight: true }
+                    }
                     }
                 }
 
@@ -3738,7 +4648,7 @@ ApplicationWindow {
                     Controls.Label {
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
-                        text: "Remove the selected download from TONDAR?"
+                        text: "Remove the selected download from GENYDL?"
                     }
 
                     Controls.CheckBox {
@@ -3776,7 +4686,7 @@ ApplicationWindow {
             Controls.Label {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
-                text: "A newer version of TONDAR is available."
+                text: "A newer version of GENYDL is available."
             }
 
             Controls.Label {
@@ -3815,7 +4725,7 @@ ApplicationWindow {
             Controls.Label {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
-                text: "Restore TONDAR to its default configuration?"
+                text: "Restore GENYDL to its default configuration?"
             }
 
             Controls.Label {
@@ -3851,8 +4761,8 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 text: appRoot.pendingRemoveRows.length > 1
-                      ? "Remove " + appRoot.pendingRemoveRows.length + " selected downloads from TONDAR?"
-                      : "Remove the selected download from TONDAR?"
+                      ? "Remove " + appRoot.pendingRemoveRows.length + " selected downloads from GENYDL?"
+                      : "Remove the selected download from GENYDL?"
             }
 
             Controls.CheckBox {
@@ -3906,7 +4816,7 @@ ApplicationWindow {
                         font.family: FontSystem.getContentFont.name
                         font.pixelSize: Typography.h3
                         color: Colors.textPrimary
-                        text: "TONDAR"
+                        text: "GENYDL"
                     }
 
                     Item { Layout.preferredWidth: 5; }
@@ -3920,14 +4830,32 @@ ApplicationWindow {
 
             }
 
-            Row {
+            RowLayout {
                 Layout.alignment: Qt.AlignVCenter
-                spacing: 2
+                spacing: 8
 
+                function navSeparator() { return "|" }
+
+                Controls.AppMenuTrigger {
+                    text: "Home"
+                    selected: appRoot.pageIndex === 0
+                    onTriggered: appRoot.pageIndex = 0
+                }
+                Text { text: "|"; color: Colors.lineBorderActivated; font.pixelSize: Typography.t2 }
                 Controls.AppMenuTrigger { text: "Actions"; menu: tasksTopMenu }
+                Text { text: "|"; color: Colors.lineBorderActivated; font.pixelSize: Typography.t2 }
                 Controls.AppMenuTrigger { text: "File"; menu: fileTopMenu }
+                Text { text: "|"; color: Colors.lineBorderActivated; font.pixelSize: Typography.t2 }
                 Controls.AppMenuTrigger { text: "Downloads"; menu: downloadsTopMenu }
+                Text { text: "|"; color: Colors.lineBorderActivated; font.pixelSize: Typography.t2 }
+                Controls.AppMenuTrigger {
+                    text: "Release Center"
+                    menu: releaseCenterTopMenu
+                    selected: appRoot.pageIndex === 1
+                }
+                Text { text: "|"; color: Colors.lineBorderActivated; font.pixelSize: Typography.t2 }
                 Controls.AppMenuTrigger { text: "Configuration"; menu: configurationTopMenu }
+                Text { text: "|"; color: Colors.lineBorderActivated; font.pixelSize: Typography.t2 }
                 Controls.AppMenuTrigger { text: "Help"; menu: helpTopMenu }
 
             }
@@ -3935,22 +4863,30 @@ ApplicationWindow {
             Item { Layout.fillWidth: true }
 
             Rectangle {
+                // fillWidth + cap lets the promo card shrink on narrow windows
+                // instead of overflowing past the right edge and clipping its
+                // rounded corner. minimumWidth 0 + content elision handle the rest.
+                Layout.fillWidth: true
                 Layout.preferredWidth: 512
+                Layout.maximumWidth: 512
+                Layout.minimumWidth: 0
                 Layout.preferredHeight: 58
                 Layout.maximumHeight: 58
                 Layout.alignment: Qt.AlignVCenter
                 radius: Metrics.innerRadius
                 color: Colors.backgroundActivated
                 border.width: 1
-                border.color: Colors.borderActivated
+                border.color: genyAdHover.hovered ? Colors.secondry : Colors.borderActivated
                 clip: true
 
-                gradient: LinearGradient {
-                    orientation: Gradient.Horizontal
-                    GradientStop { position: 0.0; color: "transparent" }
-                    GradientStop { position: 0.33; color: "transparent" }
-                    GradientStop { position: 1.0; color: Colors.backgroundItemActivated }
+                Behavior on border.color { ColorAnimation { duration: Animations.normal; easing.type: Easing.OutCubic } }
 
+                // Opaque, theme-synced sheen so the promo reads as one solid card.
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: Colors.backgroundActivated }
+                    GradientStop { position: 0.55; color: Colors.backgroundActivated }
+                    GradientStop { position: 1.0; color: Colors.backgroundItemActivated }
                 }
 
                 RowLayout {
@@ -3959,6 +4895,7 @@ ApplicationWindow {
                     spacing: 12
 
                     Rectangle {
+                        id: genyLogoFrame
                         Layout.preferredWidth: 42
                         Layout.preferredHeight: 42
                         Layout.alignment: Qt.AlignVCenter
@@ -3968,8 +4905,10 @@ ApplicationWindow {
                         border.color: Colors.borderActivated
                         clip: true
 
+                        // Fallback brand mark shown until the logo image is ready.
                         Text {
                             anchors.centerIn: parent
+                            visible: genyLogo.status !== Image.Ready
                             text: "$" + appRoot.genyTokenSymbol
                             color: Colors.textPrimary
                             font.family: FontSystem.getTitleBoldFont.font.family
@@ -3977,6 +4916,21 @@ ApplicationWindow {
                             font.bold: true
                         }
 
+                        Image {
+                            id: genyLogo
+                            anchors.fill: parent
+                            anchors.margins: 6
+                            source: appRoot.genyTokenImageUrl
+                            fillMode: Image.PreserveAspectFit
+                            smooth: true
+                            mipmap: true
+                            cache: true
+                            asynchronous: true
+                            // Render the SVG at 2x for a crisp mark.
+                            sourceSize.width: 72
+                            sourceSize.height: 72
+                            visible: status === Image.Ready
+                        }
                     }
 
                     ColumnLayout {
@@ -4018,6 +4972,8 @@ ApplicationWindow {
                         }
                     }
                 }
+
+                HoverHandler { id: genyAdHover }
 
                 MouseArea {
                     anchors.fill: parent
@@ -4077,6 +5033,32 @@ ApplicationWindow {
                 iconGlyph: "\uf05a"
                 enabled: appRoot.hasSelection
                 onTriggered: if (appRoot.hasSelection) appRoot.openDetailsFor(appRoot.selectedTaskIndex, appRoot.selectedTask, appRoot.selectedQueue, appRoot.selectedCategory)
+            }
+        }
+
+        Controls.AppMenu {
+            id: releaseCenterTopMenu
+            title: "Release Center"
+            Controls.AppMenuItem {
+                text: "Open Release Center"
+                iconGlyph: "\uf135"
+                onTriggered: appRoot.pageIndex = 1
+            }
+            Controls.AppMenuItem {
+                text: "Add GitHub App"
+                iconGlyph: "\uf0fe"
+                onTriggered: {
+                    appRoot.pageIndex = 1
+                    releaseCenterAddDialog.open()
+                }
+            }
+            Controls.AppMenuItem {
+                text: "Check All"
+                iconGlyph: "\uf021"
+                onTriggered: {
+                    appRoot.pageIndex = 1
+                    releaseCenterService.checkAll()
+                }
             }
         }
 
@@ -4438,6 +5420,77 @@ ApplicationWindow {
                                                     iconGlyph: "\uf071"
                                                     selected: appRoot.statusFilter === "Error"
                                                     onClicked: appRoot.setStatusScope("Error")
+                                                }
+                                            }
+                                        }
+
+                                        // ---- Group by source / protocol ----
+                                        Controls.SidebarTreeItem {
+                                            Layout.fillWidth: true
+                                            text: "By Source"
+                                            iconGlyph: "\uf0e8"
+                                            selected: appRoot.sourceFilter !== "All"
+                                            expandable: true
+                                            expanded: appRoot.sidebarSourceExpanded
+                                            onClicked: appRoot.sidebarSourceExpanded = !appRoot.sidebarSourceExpanded
+                                        }
+
+                                        Item {
+                                            Layout.fillWidth: true
+                                            implicitHeight: sourceChildren.implicitHeight
+                                            height: appRoot.sidebarSourceExpanded ? implicitHeight : 0
+                                            opacity: appRoot.sidebarSourceExpanded ? 1 : 0
+                                            visible: height > 0 || opacity > 0
+
+                                            Behavior on height { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                                            Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
+
+                                            ColumnLayout {
+                                                id: sourceChildren
+                                                anchors.left: parent.left
+                                                anchors.right: parent.right
+                                                anchors.top: parent.top
+                                                spacing: 4
+
+                                                Controls.SidebarTreeItem {
+                                                    Layout.fillWidth: true
+                                                    child: true
+                                                    text: "Direct Downloads"
+                                                    iconGlyph: "\uf0ac"
+                                                    selected: appRoot.sourceFilter === "Direct"
+                                                    onClicked: appRoot.setSourceScope("Direct")
+                                                }
+                                                Controls.SidebarTreeItem {
+                                                    Layout.fillWidth: true
+                                                    child: true
+                                                    text: "Torrents"
+                                                    iconGlyph: "\uf0e8"
+                                                    selected: appRoot.sourceFilter === "Torrent"
+                                                    onClicked: appRoot.setSourceScope("Torrent")
+                                                }
+                                                Controls.SidebarTreeItem {
+                                                    Layout.fillWidth: true
+                                                    child: true
+                                                    text: "Blockchain Storage"
+                                                    iconGlyph: "\uf0c2"
+                                                    selected: appRoot.sourceFilter === "Blockchain"
+                                                    onClicked: appRoot.setSourceScope("Blockchain")
+                                                }
+                                                Controls.SidebarTreeItem {
+                                                    Layout.fillWidth: true
+                                                    child: true
+                                                    text: "IPFS"
+                                                    iconGlyph: "\uf1c0"
+                                                    selected: appRoot.sourceFilter === "IPFS"
+                                                    onClicked: appRoot.setSourceScope("IPFS")
+                                                }
+                                                Controls.SidebarTreeItem {
+                                                    Layout.fillWidth: true
+                                                    child: true
+                                                    text: "Arweave"
+                                                    iconGlyph: "\uf187"
+                                                    selected: appRoot.sourceFilter === "Arweave"
+                                                    onClicked: appRoot.setSourceScope("Arweave")
                                                 }
                                             }
                                         }
@@ -5018,7 +6071,7 @@ ApplicationWindow {
                                         readonly property real ratio: status === "Done"
                                                                       ? 1.0
                                                                       : (bytesTotal > 0 ? Math.min(1.0, bytesReceived / bytesTotal) : 0.0)
-                                        readonly property bool accepted: appRoot.rowAccepted(queueName, status, category, fileName, urlText)
+                                        readonly property bool accepted: appRoot.rowAccepted(queueName, status, category, fileName, urlText, task)
                                         readonly property bool isCheckedRow: appRoot.isTaskChecked(task)
                                         readonly property bool isPrimarySelectedRow: appRoot.selectedTaskIndex === downloadItem.index
                                         readonly property bool isFocusedRow: isPrimarySelectedRow || isCheckedRow
@@ -5390,7 +6443,11 @@ ApplicationWindow {
                                                     }
 
                                                     Controls.Text {
-                                                        text: (task ? (task.effectiveSegments() + "/" + task.segments()) : "0/0")
+                                                        text: {
+                                                            if (!task) return "0/0"
+                                                            if (task.isTorrent) return task.seeders + "/" + task.leechers
+                                                            return task.effectiveSegments() + "/" + task.segments()
+                                                        }
                                                         maximumLineCount: 1
                                                         elide: Text.ElideRight
                                                         font.pixelSize: Typography.t4
@@ -5531,39 +6588,60 @@ ApplicationWindow {
                             }
                         }
 
-                        GroupBox {
+                        Rectangle {
                             id: runtimeFooter
                             visible: uiSettings.showRuntimeFooter
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 42
+                            Layout.preferredHeight: visible ? 42 : 0
+                            radius: Metrics.outerRadius
+                            color: Colors.backgroundActivated
+                            border.width: 1
+                            border.color: Colors.borderActivated
+                            clip: true
                             readonly property real transferRatio: downloadManager.totalSize > 0
                                                                   ? Math.min(1.0, downloadManager.totalReceived / downloadManager.totalSize)
                                                                   : 0.0
 
                             RowLayout {
                                 anchors.fill: parent
-                                anchors.leftMargin: Metrics.padding
-                                anchors.rightMargin: Metrics.padding
-                                spacing: 14
+                                anchors.leftMargin: 18
+                                anchors.rightMargin: 18
+                                spacing: 12
 
                                 Controls.Label {
+                                    Layout.preferredWidth: 72
+                                    elide: Text.ElideRight
                                     text: "Visible: "
                                           + downloadManager.model.filteredCount(appRoot.queueFilter, appRoot.statusFilter, appRoot.categoryFilter, appRoot.searchText)
                                 }
-                                Controls.Label { text: "Speed: " + appRoot.formatSpeed(downloadManager.totalSpeed) }
                                 Controls.Label {
+                                    Layout.preferredWidth: 130
+                                    elide: Text.ElideRight
+                                    text: "Speed: " + appRoot.formatSpeed(downloadManager.totalSpeed)
+                                }
+                                Controls.Label {
+                                    Layout.preferredWidth: 96
+                                    elide: Text.ElideRight
                                     text: "Transfer: " + Math.round(runtimeFooter.transferRatio * 100) + "%"
                                 }
                                 Controls.Label {
+                                    Layout.preferredWidth: 80
+                                    elide: Text.ElideRight
                                     text: "CPU: " + downloadManager.processCpuLoad.toFixed(1) + "%"
                                 }
                                 Controls.Label {
+                                    Layout.preferredWidth: 96
+                                    elide: Text.ElideRight
                                     text: "Mem: " + appRoot.formatBytes(downloadManager.processMemoryBytes)
                                 }
                                 Controls.Label {
+                                    Layout.preferredWidth: 100
+                                    elide: Text.ElideRight
                                     text: "Disk: " + appRoot.formatBytes(downloadManager.diskFreeBytes)
                                 }
                                 Controls.Label {
+                                    Layout.preferredWidth: 66
+                                    elide: Text.ElideRight
                                     text: downloadManager.networkReachability
                                     color: downloadManager.networkReachability === "Online"
                                            ? Colors.success
@@ -5572,19 +6650,41 @@ ApplicationWindow {
                                               : Colors.warning)
                                 }
                                 Controls.Label {
+                                    Layout.preferredWidth: 54
+                                    elide: Text.ElideRight
                                     text: downloadManager.onBattery ? "Battery" : "AC"
                                     color: downloadManager.onBattery ? Colors.warning : Colors.success
                                 }
-                                Controls.Label {
-                                    text: "Selected: "
-                                          + (appRoot.selectedTask ? appRoot.baseName(appRoot.taskFileNameValue(appRoot.selectedTask)) : "None")
-                                    Layout.fillWidth: true
-                                    elide: Text.ElideRight
-                                }
+                                // Spacer keeps the runtime stats left-aligned now that the
+                                // "Selected:" label has been removed.
+                                Item { Layout.fillWidth: true }
                             }
                         }
                     }
 
+                }
+            }
+
+            Controls.ReleaseCenterPage {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                dateFormat: appRoot.releaseDateFormat
+                onOpenSettings: appRoot.openConfigurationDialog(4)
+                onAddGitHubApp: releaseCenterAddDialog.open()
+                onViewReleases: function(app) {
+                    const url = app && app.repository ? ("https://github.com/" + app.repository + "/releases") : ""
+                    if (url.length > 0)
+                        appRoot.openExternalLink(url, "Opened GitHub releases")
+                }
+                onOpenUrl: function(url) {
+                    if (url && url.length > 0)
+                        appRoot.openExternalLink(url, "Opened link")
+                }
+                onDownloadAssets: function(app) { appRoot.openAssetPickerForApp(app) }
+                onUpdateApp: function(app) { appRoot.startAppUpdate(app) }
+                onShowDetails: function(app) {
+                    releaseDetailsDialog.app = app
+                    releaseDetailsDialog.open()
                 }
             }
 
@@ -6034,7 +7134,7 @@ ApplicationWindow {
                             Label {
                                 Layout.fillWidth: true
                                 wrapMode: Text.Wrap
-                                text: "Restore TONDAR defaults and clear persisted session/configuration state without deleting downloaded files."
+                                text: "Restore GENYDL defaults and clear persisted session/configuration state without deleting downloaded files."
                             }
 
                             RowLayout {
@@ -6052,30 +7152,46 @@ ApplicationWindow {
 
         }
 
-        GroupBox {
-            visible: appRoot.pageIndex !== 0
+        Rectangle {
+            readonly property bool shouldShow: appRoot.pageIndex !== 0 && appRoot.pageIndex !== 1
+            visible: shouldShow
             Layout.fillWidth: true
-            Layout.preferredHeight: 34
+            Layout.preferredHeight: shouldShow ? 42 : 0
+            radius: Metrics.outerRadius
+            color: Colors.backgroundActivated
+            border.width: 1
+            border.color: Colors.borderActivated
+            clip: true
 
             RowLayout {
                 anchors.fill: parent
-                anchors.margins: 6
-                spacing: 8
+                anchors.leftMargin: 18
+                anchors.rightMargin: 18
+                spacing: 12
 
-                Label {
+                Controls.Label {
+                    Layout.preferredWidth: 78
+                    elide: Text.ElideRight
                     text: "Visible: " + downloadManager.model.filteredCount(appRoot.queueFilter, appRoot.statusFilter, appRoot.categoryFilter, appRoot.searchText)
                 }
-                Label {
-                    text: "Total speed: " + appRoot.formatSpeed(downloadManager.totalSpeed)
+                Controls.Label {
+                    Layout.preferredWidth: 140
+                    elide: Text.ElideRight
+                    text: "Speed: " + appRoot.formatSpeed(downloadManager.totalSpeed)
                 }
-                Label {
+                Controls.Label {
+                    Layout.preferredWidth: 112
+                    elide: Text.ElideRight
                     text: "Overall: "
                           + (downloadManager.totalSize > 0
                              ? Math.min(100, Math.max(0, (downloadManager.totalReceived / downloadManager.totalSize) * 100)).toFixed(1) + "%"
                              : "--")
                 }
                 Item { Layout.fillWidth: true }
-                Label {
+                Controls.Label {
+                    Layout.fillWidth: true
+                    elide: Text.ElideRight
+                    horizontalAlignment: Text.AlignRight
                     text: appRoot.selectedTask
                           ? ("Selected: " + appRoot.baseName(appRoot.taskFileNameValue(appRoot.selectedTask)))
                           : "Selected: None"

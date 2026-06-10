@@ -7,7 +7,7 @@
  * @author      <a href='https://github.com/thecompez'>Kambiz Asadzadeh</a>
  * @since       05 Jun 2026
  * @copyright   Copyright (c) 2026 Genyleap. All rights reserved.
- * @license     https://github.com/genyleap/tondar/blob/main/LICENSE.md
+ * @license     https://github.com/genyleap/genydl/blob/main/LICENSE.md
  */
 
 module;
@@ -19,23 +19,23 @@ module;
 #include <QWindow>
 
 #ifndef Q_MOC_RUN
-export module tondar.core.appcontroller;
+export module genydl.core.appcontroller;
 #endif
 
 #ifdef Q_MOC_RUN
-#define TONDAR_MODULE_EXPORT
+#define GENYDL_MODULE_EXPORT
 #else
-#define TONDAR_MODULE_EXPORT export
+#define GENYDL_MODULE_EXPORT export
 #endif
 
 /**
- * @brief Coordinates TONDAR background mode and system tray behavior.
+ * @brief Coordinates GENYDL background mode and system tray behavior.
  *
  * AppController owns the tray icon/menu, tracks whether a close request should
  * hide the main window instead of quitting, and keeps explicit Exit/Quit
  * separate from ordinary window close events.
  */
-TONDAR_MODULE_EXPORT class AppController : public QObject {
+GENYDL_MODULE_EXPORT class AppController : public QObject {
     Q_OBJECT
 
     //!< @brief Whether closing the main window keeps the process running.
@@ -96,6 +96,14 @@ public:
     //!< @brief Explicitly quit the application.
     Q_INVOKABLE void quitApplication();
 
+    /**
+     * @brief Show a desktop/tray notification when the platform supports it.
+     * @param title Notification title.
+     * @param message Notification body.
+     * @return True if a tray notification was requested.
+     */
+    Q_INVOKABLE bool showNotification(const QString& title, const QString& message);
+
 signals:
     //!< @brief Emitted when the background close policy changes.
     void keepRunningInBackgroundChanged();
@@ -111,6 +119,9 @@ signals:
      * @param hasActiveDownloads Whether active downloads triggered the block.
      */
     void closeBlocked(bool hasActiveDownloads);
+
+    //!< @brief Emitted when the user clicks a platform notification.
+    void notificationClicked();
 
 private:
     //!< @brief Create tray actions and menu.

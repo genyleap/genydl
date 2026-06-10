@@ -1,11 +1,11 @@
 /*!
     \file        Colors.qml
-    \brief       Provides the Colors core QML definition for TONDAR.
-    \details     This file contains shared Colors values and behavior used across the TONDAR QML user interface.
+    \brief       Provides the Colors core QML definition for GENYDL.
+    \details     This file contains shared Colors values and behavior used across the GENYDL QML user interface.
 
     \author      Kambiz Asadzadeh <https://github.com/thecompez>
     \copyright   Copyright (c) 2026 Genyleap. All rights reserved.
-    \license     https://github.com/genyleap/tondar/blob/main/LICENSE.md
+    \license     https://github.com/genyleap/genydl/blob/main/LICENSE.md
 */
 
 pragma Singleton
@@ -117,6 +117,8 @@ QtObject {
     readonly property color warningBack: lightMode ? "#30b89250" : "#30b89250"
     readonly property color error: lightMode ? "#b85050" : "#b85050"
     readonly property color errorBack: lightMode ? "#30b85050" : "#30b85050"
+    readonly property color star: lightMode ? "#e3a008" : "#f5b50a"
+    readonly property color starBack: lightMode ? "#30e3a008" : "#30f5b50a"
 
     // Shadows
     readonly property color lightShadow: lightMode ? "#28555555" : "#66000000"

@@ -6,23 +6,23 @@
  * @author      <a href='https://github.com/thecompez'>Kambiz Asadzadeh</a>
  * @since       09 Feb 2026
  * @copyright   Copyright (c) 2026 Genyleap. All rights reserved.
- * @license     https://github.com/genyleap/tondar/blob/main/LICENSE.md
+ * @license     https://github.com/genyleap/genydl/blob/main/LICENSE.md
  */
 
 module;
 #include <QString>
 
 #ifndef Q_MOC_RUN
-export module tondar.utils.version_utils;
+export module genydl.utils.version_utils;
 #endif
 
 #ifdef Q_MOC_RUN
-#define TONDAR_MODULE_EXPORT
+#define GENYDL_MODULE_EXPORT
 #else
-#define TONDAR_MODULE_EXPORT export
+#define GENYDL_MODULE_EXPORT export
 #endif
 
-TONDAR_MODULE_EXPORT namespace tondar::utils {
+GENYDL_MODULE_EXPORT namespace genydl::utils {
 
 /**
  * @brief Compare two version strings.
@@ -32,4 +32,4 @@ TONDAR_MODULE_EXPORT namespace tondar::utils {
  */
 int compareVersions(const QString& a, const QString& b);
 
-} // namespace tondar::utils
+} // namespace genydl::utils

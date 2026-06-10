@@ -1,5 +1,5 @@
-// TONDAR Windows resource script.
-// This file is configured by CMake from app.rc.in to tondar_app.rc.
+// GENYDL Windows resource script.
+// This file is configured by CMake from app.rc.in to genydl_app.rc.
 
 #include <windows.h>
 
@@ -37,12 +37,12 @@ BEGIN
         BLOCK "040904b0"
         BEGIN
             VALUE "CompanyName", "Genyleap LLC\0"
-            VALUE "FileDescription", "TONDAR Internet Download Manager\0"
+            VALUE "FileDescription", "GENYDL Internet Download Manager\0"
             VALUE "FileVersion", "@PROJECT_VERSION@.0\0"
-            VALUE "InternalName", "Tondar\0"
-            VALUE "LegalCopyright", "@TONDAR_COPYRIGHT@\0"
-            VALUE "OriginalFilename", "Tondar.exe\0"
-            VALUE "ProductName", "Tondar\0"
+            VALUE "InternalName", "GenyDL\0"
+            VALUE "LegalCopyright", "@GENYDL_COPYRIGHT@\0"
+            VALUE "OriginalFilename", "GenyDL.exe\0"
+            VALUE "ProductName", "GenyDL\0"
             VALUE "ProductVersion", "@PROJECT_VERSION@.0\0"
         END
     END
@@ -58,4 +58,4 @@ END
 // Icon
 //
 
-IDI_ICON1 ICON "@TONDAR_WINDOWS_ICON_ICO_RC@"
+IDI_ICON1 ICON "@GENYDL_WINDOWS_ICON_ICO_RC@"

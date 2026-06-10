@@ -8,9 +8,9 @@ module;
 #include <QUrlQuery>
 #include <QtGlobal>
 
-module tondar.utils.download_utils;
+module genydl.utils.download_utils;
 
-namespace tondar::utils {
+namespace genydl::utils {
 
 static int checksumLengthForAlgo(const QString& algo)
 {
@@ -267,4 +267,4 @@ bool fileExistsPath(const QString& path)
     return info.exists() && info.isFile();
 }
 
-} // namespace tondar::utils
+} // namespace genydl::utils

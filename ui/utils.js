@@ -1,11 +1,11 @@
 /*!
     \file        utils.js
-    \brief       Provides shared JavaScript helper functions for TONDAR QML.
+    \brief       Provides shared JavaScript helper functions for GENYDL QML.
     \details     This file contains application-level helper logic used by Main.qml for formatting, filtering, selection, queue actions, and download workflows.
 
     \author      Kambiz Asadzadeh <https://github.com/thecompez>
     \copyright   Copyright (c) 2026 Genyleap. All rights reserved.
-    \license     https://github.com/genyleap/tondar/blob/main/LICENSE.md
+    \license     https://github.com/genyleap/genydl/blob/main/LICENSE.md
 */
 
 function formatBytes(value) {
@@ -23,6 +23,51 @@ function formatBytes(value) {
 
 function formatSpeed(value) {
     return formatBytes(value) + "/s"
+}
+
+// Compact integer formatting (1234 -> "1.2K", 39000 -> "39K").
+function compactCount(value) {
+    var n = Number(value || 0)
+    if (!isFinite(n)) n = 0
+    if (n >= 1000000) return (n / 1000000).toFixed(n >= 10000000 ? 0 : 1) + "M"
+    if (n >= 1000) return (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "K"
+    return String(n)
+}
+
+// Format a release date according to `mode`. Accepts a Date, an ISO string, or a
+// QDateTime variant. mode: "relative" | "datetime" | "day" | "month".
+// Returns "" for empty input. Requires Qt to be in scope (it is in QML/JS modules).
+function formatReleaseDate(value, mode) {
+    if (value === undefined || value === null || value === "")
+        return ""
+    var d = (value instanceof Date) ? value : new Date(value)
+    if (isNaN(d.getTime()))
+        return String(value)
+
+    if (mode === "datetime")
+        return Qt.formatDateTime(d, "yyyy-MM-dd hh:mm")
+    if (mode === "day")
+        return Qt.formatDate(d, "MMM d, yyyy")        // May 28, 2026
+    if (mode === "month")
+        return Qt.formatDate(d, "MMM yyyy")           // Jun 2025
+
+    // "relative" (default)
+    var now = new Date()
+    var secs = Math.floor((now.getTime() - d.getTime()) / 1000)
+    if (secs < 0) secs = 0
+    var mins = Math.floor(secs / 60)
+    var hours = Math.floor(mins / 60)
+    var days = Math.floor(hours / 24)
+    if (secs < 45) return "just now"
+    if (mins < 60) return mins + (mins === 1 ? " minute ago" : " minutes ago")
+    if (hours < 24) return hours + (hours === 1 ? " hour ago" : " hours ago")
+    if (days === 1) return "Yesterday"
+    if (days < 7) return days + " days ago"
+    if (days < 30) {
+        var weeks = Math.floor(days / 7)
+        return weeks + (weeks === 1 ? " week ago" : " weeks ago")
+    }
+    return Qt.formatDate(d, "MMM d, yyyy")
 }
 
 function formatEta(seconds) {
@@ -68,10 +113,11 @@ function statusPasses(status) {
     return status === statusFilter
 }
 
-function rowAccepted(queueName, status, categoryName, fileName, urlText) {
+function rowAccepted(queueName, status, categoryName, fileName, urlText, taskObj) {
     if (queueFilter !== "All Queues" && queueName !== queueFilter) return false
     if (!statusPasses(status)) return false
     if (categoryFilter !== "All" && categoryName !== categoryFilter) return false
+    if (sourceFilter !== "All" && !sourceMatchesFilter(taskObj, sourceFilter)) return false
 
     const needle = searchText.trim().toLowerCase()
     if (needle.length === 0) return true
@@ -84,11 +130,12 @@ function rowAccepted(queueName, status, categoryName, fileName, urlText) {
 function setStatusScope(scope) {
     queueFilter = "All Queues"
     categoryFilter = "All"
+    sourceFilter = "All"
     statusFilter = scope
     clearCheckedTasks()
     if (selectedTask && downloadManager.indexOfTask(selectedTask) >= 0) {
         const row = downloadManager.indexOfTask(selectedTask)
-        if (!rowAccepted(downloadManager.taskQueueName(row), selectedTask.stateString, downloadManager.taskCategoryName(row), selectedTask.fileName(), selectedTask.url())) {
+        if (!rowAccepted(downloadManager.taskQueueName(row), selectedTask.stateString, downloadManager.taskCategoryName(row), selectedTask.fileName(), selectedTask.url(), selectedTask)) {
             clearSelection()
         }
     }
@@ -97,11 +144,28 @@ function setStatusScope(scope) {
 function setCategoryScope(scope) {
     queueFilter = "All Queues"
     statusFilter = "All"
+    sourceFilter = "All"
     categoryFilter = scope
     clearCheckedTasks()
     if (selectedTask && downloadManager.indexOfTask(selectedTask) >= 0) {
         const row = downloadManager.indexOfTask(selectedTask)
-        if (!rowAccepted(downloadManager.taskQueueName(row), selectedTask.stateString, downloadManager.taskCategoryName(row), selectedTask.fileName(), selectedTask.url())) {
+        if (!rowAccepted(downloadManager.taskQueueName(row), selectedTask.stateString, downloadManager.taskCategoryName(row), selectedTask.fileName(), selectedTask.url(), selectedTask)) {
+            clearSelection()
+        }
+    }
+}
+
+// Filter the list to a single source family (Direct / Torrent / Blockchain /
+// IPFS / Arweave). Resets the other filter dimensions like the sibling scopes.
+function setSourceScope(scope) {
+    queueFilter = "All Queues"
+    statusFilter = "All"
+    categoryFilter = "All"
+    sourceFilter = scope && scope.length > 0 ? scope : "All"
+    clearCheckedTasks()
+    if (selectedTask && downloadManager.indexOfTask(selectedTask) >= 0) {
+        const row = downloadManager.indexOfTask(selectedTask)
+        if (!rowAccepted(downloadManager.taskQueueName(row), selectedTask.stateString, downloadManager.taskCategoryName(row), selectedTask.fileName(), selectedTask.url(), selectedTask)) {
             clearSelection()
         }
     }
@@ -111,6 +175,7 @@ function setQueueScope(scope) {
     queueFilter = scope && scope.length > 0 ? scope : "All Queues"
     statusFilter = "All"
     categoryFilter = "All"
+    sourceFilter = "All"
     clearCheckedTasks()
     if (selectedTask && downloadManager.indexOfTask(selectedTask) >= 0) {
         const row = downloadManager.indexOfTask(selectedTask)
@@ -356,7 +421,7 @@ function shareSelectedTargets() {
         return
     downloadManager.copyText(urls.join("\n"))
     var body = encodeURIComponent(urls.join("\n"))
-    Qt.openUrlExternally("mailto:?subject=TONDAR%20Downloads&body=" + body)
+    Qt.openUrlExternally("mailto:?subject=GENYDL%20Downloads&body=" + body)
     downloadManager.showToast("Share links copied", "info")
 }
 
@@ -419,6 +484,20 @@ function openDetailsFor(row, taskObj, queueName, categoryName) {
     const resolvedRow = resolveTaskRow(row, taskObj)
     if (!taskObj || resolvedRow < 0) return
     selectTask(resolvedRow, taskObj, queueName, categoryName)
+
+    // Torrents have a dedicated details window (swarm stats + file picker).
+    if (taskObj.isTorrent) {
+        torrentDetailsWindow.row = resolvedRow
+        torrentDetailsWindow.task = taskObj
+        torrentDetailsWindow.queueName = queueName
+        torrentDetailsWindow.categoryName = categoryName
+        torrentDetailsWindow.refreshFromRow()
+        torrentDetailsWindow.show()
+        torrentDetailsWindow.raise()
+        torrentDetailsWindow.requestActivate()
+        return
+    }
+
     detailsRow = resolvedRow
     detailsTask = taskObj
     detailsQueue = queueName
@@ -432,7 +511,7 @@ function openDetailsFor(row, taskObj, queueName, categoryName) {
 }
 
 function openConfigurationDialog(tabIndex) {
-    configurationTabIndex = Math.max(0, Math.min(3, Number(tabIndex)))
+    configurationTabIndex = Math.max(0, Math.min(4, Number(tabIndex)))
     if (!queueEditorName || queueEditorName.length === 0) {
         if (downloadManager.queueNames.length > 0)
             queueEditorName = downloadManager.queueNames[0]
@@ -527,7 +606,7 @@ function executeRowAction(row, taskObj, action, queueName, categoryName) {
     }
 }
 
-function submitDownload(url, output, queueName, categoryName, startPaused, segments, adaptive) {
+function submitDownload(url, output, queueName, categoryName, startPaused, segments, adaptive, digest) {
     const safeUrl = (url || "").trim()
     const safeOutput = (output || "").trim()
     if (safeUrl.length === 0 || safeOutput.length === 0) {
@@ -537,6 +616,16 @@ function submitDownload(url, output, queueName, categoryName, startPaused, segme
     const options = {
         "segments": Number(segments),
         "adaptiveSegments": !!adaptive
+    }
+
+    // GitHub asset integrity digest ("sha256:<hex>") → verify the file on
+    // completion using the download engine's built-in checksum support.
+    const rawDigest = (digest || "").trim()
+    if (rawDigest.indexOf(":") > 0) {
+        const parts = rawDigest.split(":")
+        options["checksumAlgo"] = parts[0].toLowerCase()
+        options["checksumExpected"] = parts[1]
+        options["verifyOnComplete"] = true
     }
 
     downloadManager.addDownloadAdvancedWithExtras(
@@ -573,6 +662,7 @@ function submitGitHubReleaseAssets(assets, output, queueName, categoryName, star
         const asset = assets[i]
         const url = asset && asset.downloadUrl !== undefined ? String(asset.downloadUrl) : ""
         const name = asset && asset.name !== undefined ? String(asset.name) : ""
+        const digest = asset && asset.digest !== undefined ? String(asset.digest) : ""
         if (url.length === 0 || name.length === 0) {
             continue
         }
@@ -583,7 +673,8 @@ function submitGitHubReleaseAssets(assets, output, queueName, categoryName, star
                            categoryName,
                            startPaused,
                            segments,
-                           adaptive)) {
+                           adaptive,
+                           digest)) {
             ++added
         }
     }
@@ -608,6 +699,11 @@ function rebuildDownloadTableRows() {
         var received = Math.max(0, Number(downloadManager.taskBytesReceived(i)))
         var total = Math.max(0, Number(downloadManager.taskBytesTotal(i)))
         var ratio = s === "Done" ? 1.0 : (total > 0 ? Math.min(1.0, received / total) : 0.0)
+        var isTorrent = !!taskObj.isTorrent
+        // Torrents have no HTTP segments; show seed/peer counts instead.
+        var segText = isTorrent
+                ? (String(taskObj.seeders) + "S/" + String(taskObj.leechers) + "P")
+                : (String(taskObj.effectiveSegments()) + "/" + String(taskObj.segments()))
         rows.push({
                       rowIndex: i,
                       checked: isRowChecked(i),
@@ -615,6 +711,7 @@ function rebuildDownloadTableRows() {
                       fullPath: f,
                       url: u,
                       queueName: q,
+                      isTorrent: isTorrent,
                       bytesReceived: received,
                       bytesTotal: total,
                       rawStatus: s,
@@ -622,7 +719,7 @@ function rebuildDownloadTableRows() {
                       statusText: taskStatusText(taskObj, s),
                       etaText: formatEta(taskObj.eta),
                       speedText: formatSpeed(taskObj.speed),
-                      segText: String(taskObj.effectiveSegments()) + "/" + String(taskObj.segments()),
+                      segText: segText,
                       categoryText: c,
                       progress: ratio
                   })
@@ -791,4 +888,127 @@ function pushDetailsSpeedSample(v) {
     } else {
         detailsPeakSpeed = 1
     }
+}
+
+// ---------------------------------------------------------------------------
+// Source type & verification classification
+//
+// Shared by the download list (DownloadDelegate) and the details dialog so the
+// protocol/verification surface is consistent everywhere. These return semantic
+// tokens only ({ tone: "success" | "warning" | "danger" | "accent" | "info" |
+// "secondary" | "muted" }); QML resolves tokens to theme colors via toneColor().
+// ---------------------------------------------------------------------------
+
+// Classify a download task by where its content comes from.
+// Returns { id, label, short, tone, glyph }.
+//   id    : stable identifier ("http" | "torrent" | "ipfs" | "arweave" | "storage")
+//   label : full human label for details/tooltips
+//   short : compact badge text for the list
+//   tone  : color token
+//   glyph : Font Awesome code point (solid) for the protocol icon
+function sourceTypeInfo(task) {
+    if (!task) {
+        return { id: "http", label: "Direct Download (HTTP/HTTPS)", short: "HTTP",
+                 tone: "secondary", glyph: "" } // globe
+    }
+    if (task.isTorrent) {
+        return { id: "torrent", label: "Torrent (BitTorrent)", short: "Torrent",
+                 tone: "accent", glyph: "" } // sitemap / swarm
+    }
+    var net = task.storageNetwork ? String(task.storageNetwork) : ""
+    if (net.length > 0) {
+        var up = net.toUpperCase()
+        if (up === "IPFS") {
+            return { id: "ipfs", label: "Blockchain Storage (IPFS)", short: "IPFS",
+                     tone: "info", glyph: "" } // cloud / distributed
+        }
+        if (up === "ARWEAVE") {
+            return { id: "arweave", label: "Permanent Storage (Arweave)", short: "Arweave",
+                     tone: "info", glyph: "" } // archive
+        }
+        return { id: "storage", label: "Blockchain Storage (" + net + ")", short: net,
+                 tone: "info", glyph: "" }
+    }
+    return { id: "http", label: "Direct Download (HTTP/HTTPS)", short: "HTTP",
+             tone: "secondary", glyph: "" }
+}
+
+// Whether a task matches a source-type filter token. Mirrors the C++
+// DownloadModel::filteredCount sourcePasses() classification.
+//   filter: "All" | "Direct" | "Torrent" | "Blockchain" | "IPFS" | "Arweave"
+function sourceMatchesFilter(task, filter) {
+    if (!filter || filter === "All") return true
+    var id = sourceTypeInfo(task).id
+    switch (filter) {
+        case "Direct":     return id === "http"
+        case "Torrent":    return id === "torrent"
+        case "IPFS":       return id === "ipfs"
+        case "Arweave":    return id === "arweave"
+        case "Blockchain": return id === "ipfs" || id === "arweave" || id === "storage"
+        default:           return true
+    }
+}
+
+// "Downloaded Via" phrasing for a task's transport.
+function deliveryChannel(task) {
+    var info = sourceTypeInfo(task)
+    if (info.id === "ipfs") return "IPFS Gateway Network"
+    if (info.id === "arweave") return "Arweave Gateway"
+    if (info.id === "torrent") return "BitTorrent Swarm"
+    return "Direct HTTP Transfer"
+}
+
+// Verification descriptor for a task.
+// Returns { state, label, tone, verified }.
+//   state : "verified" | "mismatch" | "verifying" | "trusted" | "none"
+function verificationInfo(task) {
+    if (!task) return { state: "none", label: "", tone: "muted", verified: false }
+    var cs = task.checksumState ? String(task.checksumState) : ""
+    var contentAddressed = (task.contentId && String(task.contentId).length > 0)
+    if (cs === "OK") {
+        return { state: "verified",
+                 label: contentAddressed ? "CID Match" : "Verified",
+                 tone: "success", verified: true }
+    }
+    if (cs === "Mismatch" || cs === "Failed") {
+        return { state: "mismatch", label: "Verification Failed", tone: "danger", verified: false }
+    }
+    if (cs === "Verifying") {
+        return { state: "verifying", label: "Verifying…", tone: "accent", verified: false }
+    }
+    if (contentAddressed) {
+        // Content-addressed but not byte-verifiable (e.g. UnixFS DAG): we do not
+        // fake a green check; delivery is trusted to the gateway.
+        return { state: "trusted", label: "Gateway-trusted", tone: "warning", verified: false }
+    }
+    return { state: "none", label: "", tone: "muted", verified: false }
+}
+
+// Extract the host from a full gateway URL.
+function gatewayHostFromUrl(u) {
+    if (!u) return ""
+    var s = String(u)
+    var m = s.match(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\/([^\/]+)/)
+    return m ? m[1] : s
+}
+
+// The gateway that actually served (or is serving) an IPFS task, as a host.
+// Derived from the task's current mirror selection.
+function activeGatewayHost(task) {
+    if (!task || !task.mirrorUrls) return ""
+    var urls = task.mirrorUrls
+    if (!urls || urls.length === 0) return ""
+    var idx = task.mirrorIndex || 0
+    if (idx < 0 || idx >= urls.length) idx = 0
+    var host = gatewayHostFromUrl(urls[idx])
+    return host === "127.0.0.1:8080" ? "Local node (127.0.0.1)" : host
+}
+
+// Number of fallback gateways still available behind the active one.
+function gatewayFallbackCount(task) {
+    if (!task || !task.mirrorUrls) return 0
+    var urls = task.mirrorUrls
+    if (!urls) return 0
+    var idx = task.mirrorIndex || 0
+    return Math.max(0, urls.length - 1 - idx)
 }

@@ -8,7 +8,7 @@ module;
 #include <QSystemTrayIcon>
 #include <QWindow>
 
-module tondar.core.appcontroller;
+module genydl.core.appcontroller;
 
 AppController::AppController(QObject* downloadManager, QObject* parent)
     : QObject(parent)
@@ -79,7 +79,7 @@ bool AppController::requestWindowClose(bool hasActiveDownloads)
         if (trayAvailable()) {
             hideMainWindow();
             if (m_trayIcon) {
-                m_trayIcon->showMessage(QStringLiteral("Tondar is still running"),
+                m_trayIcon->showMessage(QStringLiteral("GenyDL is still running"),
                                         hasActiveDownloads
                                             ? QStringLiteral("Downloads continue in the background.")
                                             : QStringLiteral("Use the tray icon to restore or exit."),
@@ -131,10 +131,22 @@ void AppController::quitApplication()
     QCoreApplication::quit();
 }
 
+bool AppController::showNotification(const QString& title, const QString& message)
+{
+    if (!trayAvailable() || !m_trayIcon) {
+        return false;
+    }
+    m_trayIcon->showMessage(title,
+                            message,
+                            QSystemTrayIcon::Information,
+                            6000);
+    return true;
+}
+
 void AppController::setupTray()
 {
     m_trayMenu = new QMenu();
-    m_showHideAction = m_trayMenu->addAction(QStringLiteral("Show Tondar"));
+    m_showHideAction = m_trayMenu->addAction(QStringLiteral("Show GenyDL"));
     connect(m_showHideAction, &QAction::triggered, this, &AppController::toggleMainWindow);
 
     m_trayMenu->addSeparator();
@@ -152,13 +164,17 @@ void AppController::setupTray()
     m_exitAction = m_trayMenu->addAction(QStringLiteral("Exit"));
     connect(m_exitAction, &QAction::triggered, this, &AppController::quitApplication);
 
-    m_trayIcon = new QSystemTrayIcon(QIcon(QStringLiteral(":/Tondar.png")), this);
-    m_trayIcon->setToolTip(QStringLiteral("Tondar Download Manager"));
+    m_trayIcon = new QSystemTrayIcon(QIcon(QStringLiteral(":/GenyDL.png")), this);
+    m_trayIcon->setToolTip(QStringLiteral("GenyDL Download Manager"));
     m_trayIcon->setContextMenu(m_trayMenu);
     connect(m_trayIcon, &QSystemTrayIcon::activated, this, [this](QSystemTrayIcon::ActivationReason reason) {
         if (reason == QSystemTrayIcon::Trigger || reason == QSystemTrayIcon::DoubleClick) {
             toggleMainWindow();
         }
+    });
+    connect(m_trayIcon, &QSystemTrayIcon::messageClicked, this, [this]() {
+        showMainWindow();
+        emit notificationClicked();
     });
 
     if (trayAvailable()) {
@@ -171,8 +187,8 @@ void AppController::updateTrayActions()
 {
     if (!m_showHideAction) return;
     m_showHideAction->setText(mainWindowVisible()
-                                  ? QStringLiteral("Hide Tondar")
-                                  : QStringLiteral("Show Tondar"));
+                                  ? QStringLiteral("Hide GenyDL")
+                                  : QStringLiteral("Show GenyDL"));
 }
 
 void AppController::invokeDownloadManager(const char* method)

@@ -9,9 +9,9 @@ module;
 #include <QStringList>
 #include <QUrl>
 
-module tondar.utils.category_utils;
+module genydl.utils.category_utils;
 
-namespace tondar::utils {
+namespace genydl::utils {
 namespace {
 
 /*!
@@ -763,4 +763,4 @@ bool isKnownCategory(const DownloadCategory category)
     return categoryValues().contains(category);
 }
 
-} // namespace tondar::utils
+} // namespace genydl::utils

@@ -280,7 +280,7 @@ bool rollback(const UpdateJob& job)
 int main(int argc, char* argv[])
 {
     QCoreApplication app(argc, argv);
-    app.setApplicationName(QStringLiteral("TondarUpdaterHelper"));
+    app.setApplicationName(QStringLiteral("GenyDLUpdaterHelper"));
 
     const QStringList args = app.arguments();
     const int jobArgIndex = args.indexOf(QStringLiteral("--job"));

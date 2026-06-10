@@ -9,11 +9,11 @@
     <key>CFBundleExecutable</key>
     <string>@APP_NAME@</string>
     <key>CFBundleGetInfoString</key>
-    <string>@TONDAR_PACKAGE_SUMMARY@</string>
+    <string>@GENYDL_PACKAGE_SUMMARY@</string>
     <key>CFBundleIconFile</key>
-    <string>@TONDAR_MACOS_ICON_FILE@</string>
+    <string>@GENYDL_MACOS_ICON_FILE@</string>
     <key>CFBundleIdentifier</key>
-    <string>@TONDAR_BUNDLE_IDENTIFIER@</string>
+    <string>@GENYDL_BUNDLE_IDENTIFIER@</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
@@ -25,14 +25,14 @@
     <key>CFBundleVersion</key>
     <string>@PROJECT_VERSION@</string>
     <key>CFBundleSignature</key>
-    <string>TONDAR</string>
+    <string>GENYDL</string>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.productivity</string>
     <key>LSMinimumSystemVersion</key>
-    <string>@TONDAR_MACOS_DEPLOYMENT_TARGET@</string>
+    <string>@GENYDL_MACOS_DEPLOYMENT_TARGET@</string>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSHumanReadableCopyright</key>
-    <string>@TONDAR_COPYRIGHT@</string>
+    <string>@GENYDL_COPYRIGHT@</string>
 </dict>
 </plist>

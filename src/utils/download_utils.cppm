@@ -12,7 +12,7 @@
  * @author      <a href='https://github.com/thecompez'>Kambiz Asadzadeh</a>
  * @since       09 Feb 2026
  * @copyright   Copyright (c) 2026 Genyleap. All rights reserved.
- * @license     https://github.com/genyleap/tondar/blob/main/LICENSE.md
+ * @license     https://github.com/genyleap/genydl/blob/main/LICENSE.md
  */
 
 module;
@@ -21,16 +21,16 @@ module;
 #include <QtGlobal>
 
 #ifndef Q_MOC_RUN
-export module tondar.utils.download_utils;
+export module genydl.utils.download_utils;
 #endif
 
 #ifdef Q_MOC_RUN
-#define TONDAR_MODULE_EXPORT
+#define GENYDL_MODULE_EXPORT
 #else
-#define TONDAR_MODULE_EXPORT export
+#define GENYDL_MODULE_EXPORT export
 #endif
 
-TONDAR_MODULE_EXPORT namespace tondar::utils {
+GENYDL_MODULE_EXPORT namespace genydl::utils {
 
 /**
  * @brief Normalizes a local filesystem path or file URL.
@@ -167,4 +167,4 @@ QString uniqueFilePath(const QString& path);
  */
 bool fileExistsPath(const QString& path);
 
-} // namespace tondar::utils
+} // namespace genydl::utils

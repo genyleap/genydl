@@ -8,7 +8,7 @@
  * @author      <a href='https://github.com/thecompez'>Kambiz Asadzadeh</a>
  * @since       09 Feb 2026
  * @copyright   Copyright (c) 2026 Genyleap. All rights reserved.
- * @license     https://github.com/genyleap/tondar/blob/main/LICENSE.md
+ * @license     https://github.com/genyleap/genydl/blob/main/LICENSE.md
  */
 
 module;
@@ -25,20 +25,49 @@ module;
 #include <optional>
 
 #ifndef Q_MOC_RUN
-export module tondar.services.github_release_service;
+export module genydl.services.github_release_service;
 #endif
 
 #ifdef Q_MOC_RUN
-#define TONDAR_MODULE_EXPORT
+#define GENYDL_MODULE_EXPORT
 #else
-#define TONDAR_MODULE_EXPORT export
+#define GENYDL_MODULE_EXPORT export
 #endif
 
-TONDAR_MODULE_EXPORT namespace tondar::github {
+GENYDL_MODULE_EXPORT namespace genydl::github {
 
 enum class ReleaseRequestKind {
     Tag,
     Latest
+};
+
+struct RepositoryRequest {
+    QString owner;
+    QString repo;
+    QString originalUrl;
+
+    [[nodiscard]] bool isValid() const;
+    [[nodiscard]] QString repositoryName() const;
+};
+
+struct RepositoryInfo {
+    QString owner;
+    QString repo;
+    QString fullName;
+    QString description;
+    QUrl avatarUrl;
+    QUrl htmlUrl;
+    QUrl homepageUrl;
+    QString language;
+    QString licenseName;
+    QString licenseSpdxId;
+    int stars = 0;
+    int forks = 0;
+    int watchers = 0;
+
+    [[nodiscard]] bool isValid() const;
+    [[nodiscard]] QString repositoryName() const;
+    [[nodiscard]] QVariantMap toVariantMap() const;
 };
 
 struct ReleaseRequest {
@@ -59,36 +88,56 @@ struct ReleaseAsset {
     int downloadCount = 0;
     QDateTime createdAt;
     QDateTime updatedAt;
+    QString digest;   // GitHub integrity digest, e.g. "sha256:<hex>" (may be empty)
 
     [[nodiscard]] QVariantMap toVariantMap() const;
 };
 
 struct ReleaseInfo {
+    qint64 id = 0;
     QString owner;
     QString repo;
     QString name;
     QString tagName;
     QString body;
+    QUrl htmlUrl;
     QDateTime publishedAt;
+    bool prerelease = false;
+    bool draft = false;
     QVector<ReleaseAsset> assets;
+    QUrl tarballUrl;   // GitHub auto-generated source archive (.tar.gz)
+    QUrl zipballUrl;   // GitHub auto-generated source archive (.zip)
 
     [[nodiscard]] QString repositoryName() const;
     [[nodiscard]] QVariantMap toVariantMap() const;
     [[nodiscard]] QVariantList assetsToVariantList() const;
+    // Synthetic "asset" entries for the source-code archives (tar.gz / zip).
+    // Sizes are unknown (GitHub does not report them) and reported as 0.
+    [[nodiscard]] QVariantList sourceAssetsToVariantList() const;
 };
 
 [[nodiscard]] std::optional<ReleaseRequest> parseReleaseUrl(const QString& value);
+[[nodiscard]] std::optional<RepositoryRequest> parseRepositoryUrl(const QString& value);
+[[nodiscard]] QUrl repositoryApiUrlForRepository(const RepositoryRequest& request);
 [[nodiscard]] QUrl apiUrlForRequest(const ReleaseRequest& request);
+[[nodiscard]] QUrl latestReleaseApiUrlForRepository(const RepositoryRequest& request);
+[[nodiscard]] QUrl releasesApiUrlForRepository(const RepositoryRequest& request);
 [[nodiscard]] QString humanSize(qint64 bytes);
 [[nodiscard]] QString userFriendlyApiError(int statusCode,
                                            const QByteArray& responseBody,
                                            bool rateLimitExhausted = false);
 [[nodiscard]] std::optional<ReleaseInfo> parseReleaseJson(const QByteArray& data,
                                                           QString* errorMessage = nullptr);
+[[nodiscard]] std::optional<RepositoryInfo> parseRepositoryJson(const QByteArray& data,
+                                                               QString* errorMessage = nullptr);
+[[nodiscard]] std::optional<ReleaseInfo> parseLatestReleaseFromListJson(const QByteArray& data,
+                                                                        bool includePrereleases,
+                                                                        QString* errorMessage = nullptr);
+[[nodiscard]] bool isNewerRelease(const ReleaseInfo& candidate, const ReleaseInfo& known);
 
-} // namespace tondar::github
+} // namespace genydl::github
 
-TONDAR_MODULE_EXPORT class GitHubReleaseService : public QObject {
+GENYDL_MODULE_EXPORT class GitHubReleaseService : public QObject {
     Q_OBJECT
 
     Q_PROPERTY(bool loading READ loading NOTIFY loadingChanged)
@@ -124,7 +173,7 @@ signals:
 private:
     void setLoading(bool value);
     void setErrorMessage(const QString& value);
-    void setReleaseInfo(const tondar::github::ReleaseInfo& info);
+    void setReleaseInfo(const genydl::github::ReleaseInfo& info);
     void resetReleaseInfo();
     void finishWithError(const QString& message);
     [[nodiscard]] QString userAgent() const;

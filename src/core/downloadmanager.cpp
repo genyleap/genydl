@@ -45,12 +45,14 @@ module;
 #include <sys/resource.h>
 #endif
 
-module tondar.core.downloadmanager;
+module genydl.core.downloadmanager;
 
-import tondar.utils.download_utils;
-import tondar.utils.category_utils;
+import genydl.utils.download_utils;
+import genydl.utils.category_utils;
+import genydl.utils.ipfs_resolver;
 
-namespace utils = tondar::utils;
+namespace utils = genydl::utils;
+namespace ipfs = genydl::ipfs;
 
 namespace {
 
@@ -58,7 +60,7 @@ QString defaultDownloadsFolderPath()
 {
     QString root = utils::normalizeFilePath(
         QDir(QStandardPaths::writableLocation(QStandardPaths::DownloadLocation))
-            .filePath(QStringLiteral("Tondar")));
+            .filePath(QStringLiteral("GenyDL")));
     if (root.isEmpty()) {
         root = utils::normalizeFilePath(QStandardPaths::writableLocation(QStandardPaths::DownloadLocation));
     }
@@ -178,7 +180,12 @@ QString normalizedQueuePostCompletionAction(const QString& action)
 
 } // namespace
 
-DownloadManager::DownloadManager(QObject* parent) : QObject(parent) {
+DownloadManager::DownloadManager(TorrentSession* torrentSession,
+                                 GatewayService* gatewayService, QObject* parent)
+    : QObject(parent)
+    , m_gatewayService(gatewayService)
+    , m_torrentSession(torrentSession)
+{
     m_saveTimer.setSingleShot(true);
     m_saveTimer.setInterval(400);
     connect(&m_saveTimer, &QTimer::timeout, this, &DownloadManager::saveSession);
@@ -206,6 +213,8 @@ DownloadManager::DownloadManager(QObject* parent) : QObject(parent) {
         m_sessionPath = baseDir + "/downloads.json";
         m_sessionBackupPath = baseDir + "/downloads.json.bak";
         m_telemetryPath = baseDir + "/telemetry.ndjson";
+        m_torrentDir = baseDir + "/torrents";
+        QDir().mkpath(m_torrentDir);
     }
 
     ensureDefaultQueue();
@@ -523,6 +532,211 @@ void DownloadManager::addDownloadAdvancedWithExtras(const QString &urlStr,
     addDownloadInternal(urlStr, filePath, queueName, category, startPaused, &options);
 }
 
+// ---------------------------------------------------------------------------
+// BitTorrent API
+// ---------------------------------------------------------------------------
+
+void DownloadManager::addTorrentDownload(const QString& source,
+                                         const QString& savePath,
+                                         const QString& queueName,
+                                         const QString& category,
+                                         bool startPaused)
+{
+    const QString rq = queueName.isEmpty() ? defaultQueueName() : queueName;
+    const QString rc = category.isEmpty()  ? QStringLiteral("Torrent") : category;
+    const QString rp = savePath.isEmpty()
+        ? utils::normalizeFilePath(defaultDownloadsFolderPath())
+        : utils::normalizeFilePath(savePath);
+    if (!m_queues.contains(rq)) createQueue(rq);
+    addTorrentInternal(source, rp, rq, rc, startPaused);
+}
+
+TorrentTask* DownloadManager::addTorrentInternal(const QString& source,
+                                                  const QString& savePath,
+                                                  const QString& queueName,
+                                                  const QString& category,
+                                                  bool startPaused)
+{
+    if (!m_torrentSession || !m_torrentSession->isAvailable()) {
+        emit toastRequested(
+            QStringLiteral("BitTorrent support is not available (libtorrent not compiled in)."),
+            QStringLiteral("warning"));
+        return nullptr;
+    }
+
+    if (!m_queues.contains(queueName)) createQueue(queueName);
+    if (!savePath.isEmpty()) QDir().mkpath(savePath);
+
+    const bool isMagnet = source.startsWith(QStringLiteral("magnet:"), Qt::CaseInsensitive);
+    const bool isRemoteTorrent = !isMagnet
+        && (source.startsWith(QStringLiteral("http://"), Qt::CaseInsensitive)
+            || source.startsWith(QStringLiteral("https://"), Qt::CaseInsensitive));
+
+    // A .torrent referenced by URL must be downloaded first — libtorrent's
+    // torrent_info() only reads local files. Fetch it, then re-enter with the
+    // local temp path.
+    if (isRemoteTorrent) {
+        auto* nam = new QNetworkAccessManager(this);
+        QNetworkRequest req{QUrl(source)};
+        if (!m_defaultUserAgent.isEmpty())
+            req.setHeader(QNetworkRequest::UserAgentHeader, m_defaultUserAgent);
+        req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                         QNetworkRequest::NoLessSafeRedirectPolicy);
+        QNetworkReply* reply = nam->get(req);
+        connect(reply, &QNetworkReply::finished, this,
+                [this, reply, nam, savePath, queueName, category, startPaused]() {
+            reply->deleteLater();
+            nam->deleteLater();
+            if (reply->error() != QNetworkReply::NoError) {
+                emit toastRequested(
+                    QStringLiteral("Failed to download .torrent: %1").arg(reply->errorString()),
+                    QStringLiteral("danger"));
+                return;
+            }
+            const QByteArray data = reply->isOpen() ? reply->readAll() : QByteArray();
+            if (data.isEmpty()) {
+                emit toastRequested(QStringLiteral("Downloaded .torrent is empty."),
+                                    QStringLiteral("danger"));
+                return;
+            }
+            QString tmpBase = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+            if (tmpBase.isEmpty()) tmpBase = QDir::tempPath();
+            QDir().mkpath(tmpBase);
+            const QString tmpPath = QDir(tmpBase).filePath(
+                QStringLiteral("genydl-%1.torrent").arg(QDateTime::currentMSecsSinceEpoch()));
+            QFile f(tmpPath);
+            if (!f.open(QIODevice::WriteOnly)) {
+                emit toastRequested(QStringLiteral("Cannot write temporary .torrent file."),
+                                    QStringLiteral("danger"));
+                return;
+            }
+            f.write(data);
+            f.close();
+            addTorrentInternal(tmpPath, savePath, queueName, category, startPaused);
+            QFile::remove(tmpPath); // libtorrent parses synchronously; safe to drop
+        });
+        emit toastRequested(QStringLiteral("Downloading torrent metadata…"),
+                            QStringLiteral("info"));
+        return nullptr;
+    }
+
+    qint64 handleId = isMagnet
+        ? m_torrentSession->addMagnet(source, savePath)
+        : m_torrentSession->addTorrentFile(source, savePath);
+
+    if (handleId < 0) {
+        emit toastRequested(QStringLiteral("Failed to add torrent."), QStringLiteral("danger"));
+        return nullptr;
+    }
+
+    auto* task = new TorrentTask(handleId, m_torrentSession, source, savePath, this);
+    m_torrentQueue.append(task);
+    m_torrentTaskQueue[task]    = queueName;
+    m_torrentTaskCategory[task] = category;
+    m_torrentSpeed[task]        = 0;
+    m_torrentReceived[task]     = 0;
+    m_torrentTotal[task]        = 0;
+
+    // Remember how to re-add this torrent after a restart. For .torrent files we
+    // keep a persistent copy (the original/temp file may be gone next launch);
+    // magnets just store their URI.
+    QString persistentSource = source;
+    if (!isMagnet && !m_torrentDir.isEmpty()) {
+        const QFileInfo si(source);
+        const QString torrentDirAbs = QFileInfo(m_torrentDir).absoluteFilePath();
+        if (si.absolutePath() != torrentDirAbs) {
+            const QString dest = QDir(m_torrentDir).filePath(
+                QStringLiteral("t-%1.torrent").arg(QDateTime::currentMSecsSinceEpoch()));
+            if (QFile::copy(source, dest)) persistentSource = dest;
+        }
+    }
+    m_torrentSource[task] = persistentSource;
+
+    // Record a source we can re-add on next launch. Magnets persist as-is;
+    // .torrent files are copied into the app's torrents dir (the original may be
+    // a temporary download that gets deleted right after we add it).
+    if (isMagnet) {
+        m_torrentSource[task] = source;
+    } else {
+        QString persistent = source;
+        if (!m_torrentDir.isEmpty() && !source.startsWith(m_torrentDir)) {
+            const QString dest = QDir(m_torrentDir).filePath(
+                QStringLiteral("t-%1.torrent").arg(QDateTime::currentMSecsSinceEpoch()));
+            if (QFile::copy(source, dest))
+                persistent = dest;
+        }
+        m_torrentSource[task] = persistent;
+    }
+
+    m_model.addTorrentDownload(task, queueName, category);
+
+    connect(task, &TorrentTask::finished, this, &DownloadManager::onTorrentTaskFinished);
+    connect(task, &TorrentTask::progress, this, [this, task](qint64 recv, qint64 total) {
+        m_torrentReceived[task] = recv;
+        m_torrentTotal[task]    = total;
+        updateTotals();
+    });
+    connect(task, &TorrentTask::speedChanged, this, [this, task]() {
+        m_torrentSpeed[task] = task->speed();
+        updateTotals();
+    });
+
+    if (startPaused) task->pause();
+
+    emit countsChanged();
+    scheduleSave();
+    return task;
+}
+
+void DownloadManager::onTorrentTaskFinished(bool success)
+{
+    auto* task = qobject_cast<TorrentTask*>(sender());
+    if (!task) return;
+    m_torrentCompletedAt[task] = QDateTime::currentMSecsSinceEpoch();
+    emit countsChanged();
+    scheduleSave();
+
+    const QString queueName = m_torrentTaskQueue.value(task, defaultQueueName());
+    maybeRunQueuePostCompletionAction(queueName);
+
+    if (success) {
+        writeTelemetryEvent(QStringLiteral("torrent_finished"), {
+            {QStringLiteral("name"), task->fileName()},
+            {QStringLiteral("queue"), queueName}
+        });
+    }
+}
+
+TorrentSession* DownloadManager::torrentSession() const
+{
+    return m_torrentSession;
+}
+
+bool DownloadManager::torrentAvailable() const
+{
+    return m_torrentSession && m_torrentSession->isAvailable();
+}
+
+void DownloadManager::setTorrentSeedRatio(double ratio)
+{
+    if (ratio < 0.0) ratio = 0.0;
+    if (qFuzzyCompare(m_torrentSeedRatio + 1.0, ratio + 1.0)) return;
+    m_torrentSeedRatio = ratio;
+    if (m_torrentSession) m_torrentSession->setSeedRatioLimit(ratio);
+    emit torrentPolicyChanged();
+    scheduleSave();
+}
+
+void DownloadManager::setTorrentSeedTimeMinutes(int minutes)
+{
+    if (minutes < 0) minutes = 0;
+    if (m_torrentSeedTimeMinutes == minutes) return;
+    m_torrentSeedTimeMinutes = minutes;
+    if (m_torrentSession) m_torrentSession->setSeedTimeLimit(minutes);
+    emit torrentPolicyChanged();
+    scheduleSave();
+}
+
 DownloaderTask* DownloadManager::addDownloadInternal(const QString &urlStr,
                                                      const QString &filePath,
                                                      const QString &queueName,
@@ -530,6 +744,27 @@ DownloaderTask* DownloadManager::addDownloadInternal(const QString &urlStr,
                                                      bool startPaused,
                                                      const QVariantMap* options)
 {
+    // Route magnet URIs and .torrent files to the torrent engine.
+    const bool isMagnet      = urlStr.startsWith(QStringLiteral("magnet:"), Qt::CaseInsensitive);
+    const bool isTorrentFile = urlStr.toLower().endsWith(QStringLiteral(".torrent"));
+    if (isMagnet || isTorrentFile) {
+        const QString resolvedQueue = queueName.isEmpty() ? defaultQueueName() : queueName;
+        const QString resolvedPath  = filePath.isEmpty()
+            ? utils::normalizeFilePath(defaultDownloadsFolderPath())
+            : utils::normalizeFilePath(filePath);
+        addTorrentInternal(urlStr, resolvedPath, resolvedQueue,
+                           category.isEmpty() ? QStringLiteral("Torrent") : category,
+                           startPaused);
+        return nullptr;
+    }
+
+    // Route IPFS inputs (ipfs://, /ipfs/<cid>, or a bare CID) through the HTTP
+    // engine via a content gateway, with gateway failover and (when the CID is a
+    // raw sha2-256 block) content-address verification.
+    if (ipfs::looksLikeIpfs(urlStr)) {
+        return addIpfsInternal(urlStr, filePath, queueName, category, startPaused, options);
+    }
+
     QUrl url(urlStr);
     if (!url.isValid()) {
         qWarning() << "Invalid URL:" << urlStr;
@@ -607,6 +842,97 @@ DownloaderTask* DownloadManager::addDownloadInternal(const QString &urlStr,
     if (startPaused && task) {
         task->markPaused();
     }
+    startQueued();
+    scheduleSave();
+    return task;
+}
+
+DownloaderTask* DownloadManager::addIpfsInternal(const QString &urlStr,
+                                                 const QString &filePath,
+                                                 const QString &queueName,
+                                                 const QString &category,
+                                                 bool startPaused,
+                                                 const QVariantMap* options)
+{
+    const ipfs::Target target = ipfs::parse(urlStr);
+    if (!target.valid) {
+        emit toastRequested(QStringLiteral("Invalid IPFS reference or CID."),
+                            QStringLiteral("danger"));
+        return nullptr;
+    }
+
+    // Gateway selection comes from the Smart Gateway System when available:
+    // enabled gateways ordered by preference, health, and measured latency. This
+    // is the key advantage over a browser's single hard-coded gateway. Each URL
+    // doubles as a mirror so DownloaderTask's existing failover logic
+    // transparently rotates through them on error.
+    QStringList gateways;
+    if (m_gatewayService) gateways = m_gatewayService->orderedGatewayBases();
+    if (gateways.isEmpty()) gateways = ipfs::defaultGateways();
+    QStringList urls;
+    urls.reserve(gateways.size());
+    for (const QString& gw : gateways) {
+        urls.append(ipfs::buildGatewayUrl(gw, target.cidText, target.subPath));
+    }
+    if (urls.isEmpty()) {
+        emit toastRequested(QStringLiteral("No IPFS gateway configured."),
+                            QStringLiteral("danger"));
+        return nullptr;
+    }
+
+    QString resolvedQueue = queueName.isEmpty() ? defaultQueueName() : queueName;
+    if (!m_queues.contains(resolvedQueue)) createQueue(resolvedQueue);
+    const QString resolvedCategory = category.isEmpty() ? QStringLiteral("IPFS") : category;
+
+    // Resolve the output path: honour an explicit file, otherwise place the
+    // suggested name under the category (or default downloads) folder.
+    QString normalizedPath = utils::normalizeFilePath(filePath);
+    const QString suggestedName = ipfs::suggestedFileName(target);
+    if (normalizedPath.isEmpty() || QFileInfo(normalizedPath).isDir()) {
+        QString folder = normalizedPath;
+        if (folder.isEmpty()) {
+            folder = categoryFolderForName(resolvedCategory);
+            if (folder.isEmpty()) folder = defaultDownloadsFolderPath();
+        }
+        normalizedPath = QDir(folder).filePath(suggestedName);
+    }
+    normalizedPath = utils::uniqueFilePath(normalizedPath);
+    if (!normalizedPath.isEmpty()) {
+        QDir().mkpath(QFileInfo(normalizedPath).absolutePath());
+    }
+
+    const int segments = segmentCountFromOptions(options);
+    DownloaderTask* task = createTask(QUrl(urls.first()), normalizedPath,
+                                      resolvedQueue, resolvedCategory, segments);
+    if (!task) return nullptr;
+
+    // Apply user-supplied extras first, then assert the IPFS-specific settings so
+    // gateway failover and content-address verification remain authoritative.
+    if (options) {
+        applyTaskOptions(task, *options);
+        m_taskPriority[task] = task->priority();
+    }
+
+    task->setMirrorUrls(urls);
+    task->setStorageNetwork(QStringLiteral("IPFS"));
+    task->setContentId(target.cidText);
+    task->appendLog(QStringLiteral("IPFS content %1 via %2 gateway(s)")
+                        .arg(target.cidText).arg(urls.size()));
+
+    if (ipfs::isSha256Verifiable(target.cid)) {
+        // Raw single-block CID: its multihash digest is the sha2-256 of the
+        // bytes, so the standard checksum pipeline verifies the content address.
+        task->setChecksumAlgorithm(QStringLiteral("SHA256"));
+        task->setChecksumExpected(ipfs::sha256Hex(target.cid));
+        task->setVerifyOnComplete(true);
+        task->appendLog(QStringLiteral("Content-address verification enabled (sha2-256)"));
+    } else {
+        task->appendLog(QStringLiteral("Content-address verification unavailable for this CID "
+                                       "(UnixFS DAG); delivery is gateway-trusted"));
+    }
+
+    if (startPaused) task->markPaused();
+
     startQueued();
     scheduleSave();
     return task;
@@ -860,7 +1186,7 @@ void DownloadManager::setTelemetryEnabled(bool enabled)
 void DownloadManager::setDefaultUserAgent(const QString& value)
 {
     const QString next = value.trimmed().isEmpty()
-        ? QStringLiteral("tondar/1.0")
+        ? QStringLiteral("genydl/1.0")
         : value.trimmed();
     if (m_defaultUserAgent == next) return;
     m_defaultUserAgent = next;
@@ -913,27 +1239,28 @@ void DownloadManager::setDefaultProxyPassword(const QString& value)
 int DownloadManager::activeCount() const
 {
     int count = 0;
-    for (DownloaderTask* t : m_queue) {
+    for (DownloaderTask* t : m_queue)
         if (t && t->isRunning()) count++;
-    }
+    for (TorrentTask* t : m_torrentQueue)
+        if (t && t->isRunning()) count++;
     return count;
 }
 
 int DownloadManager::queuedCount() const
 {
     int count = 0;
-    for (DownloaderTask* t : m_queue) {
+    for (DownloaderTask* t : m_queue)
         if (t && t->isIdle()) count++;
-    }
+    for (TorrentTask* t : m_torrentQueue)
+        if (t && t->isIdle()) count++;
     return count;
 }
 
 int DownloadManager::completedCount() const
 {
     int count = 0;
-    for (int i = 0; i < m_model.rowCount(); ++i) {
+    for (int i = 0; i < m_model.rowCount(); ++i)
         if (m_model.isFinishedAt(i)) count++;
-    }
     return count;
 }
 
@@ -942,9 +1269,14 @@ bool DownloadManager::hasActiveDownloads() const
     for (DownloaderTask* task : m_queue) {
         if (!task) continue;
         const QString state = task->stateString();
-        if (task->isRunning() || task->isIdle() || state == QStringLiteral("Paused")) {
+        if (task->isRunning() || task->isIdle() || state == QStringLiteral("Paused"))
             return true;
-        }
+    }
+    for (TorrentTask* task : m_torrentQueue) {
+        if (!task) continue;
+        if (task->isRunning() || task->isIdle()
+            || task->stateString() == QStringLiteral("Paused"))
+            return true;
     }
     return false;
 }
@@ -1089,6 +1421,34 @@ void DownloadManager::removeDownload(int index)
 
 void DownloadManager::removeDownloadWithOptions(int index, bool deleteFromDisk)
 {
+    // Check for torrent task first
+    TorrentTask* torrentTask = m_model.torrentTaskAt(index);
+    if (torrentTask) {
+        const QString queueName = m_torrentTaskQueue.value(torrentTask, defaultQueueName());
+        if (m_torrentSession)
+            m_torrentSession->removeTorrent(torrentTask->handleId(), deleteFromDisk);
+        m_torrentQueue.removeAll(torrentTask);
+        m_torrentSpeed.remove(torrentTask);
+        m_torrentReceived.remove(torrentTask);
+        m_torrentTotal.remove(torrentTask);
+        m_torrentCompletedAt.remove(torrentTask);
+        m_torrentTaskQueue.remove(torrentTask);
+        m_torrentTaskCategory.remove(torrentTask);
+        // Drop the persisted .torrent copy so it isn't restored next launch.
+        {
+            const QString src = m_torrentSource.take(torrentTask);
+            if (!src.isEmpty() && !m_torrentDir.isEmpty() && src.startsWith(m_torrentDir))
+                QFile::remove(src);
+        }
+        m_model.removeAt(index);
+        updateTotals();
+        scheduleSave();
+        startQueued();
+        emit countsChanged();
+        maybeRunQueuePostCompletionAction(queueName);
+        return;
+    }
+
     DownloaderTask* task = m_model.taskAt(index);
     if (!task) return;
     const QString queueName = m_taskQueue.value(task, defaultQueueName());
@@ -1132,34 +1492,50 @@ void DownloadManager::removeDownloadWithOptions(int index, bool deleteFromDisk)
 void DownloadManager::clearCompleted()
 {
     for (int i = m_model.rowCount() - 1; i >= 0; --i) {
-        if (m_model.isFinishedAt(i)) {
-            DownloaderTask* task = m_model.taskAt(i);
-            if (task) {
-                m_queue.removeAll(task);
-                m_taskSpeed.remove(task);
-                m_taskReceived.remove(task);
-                m_taskTotal.remove(task);
-                m_taskLastReceived.remove(task);
-                m_taskMaxSpeed.remove(task);
-                m_taskCompletedAt.remove(task);
-                m_taskRetryCount.remove(task);
-                m_taskPriority.remove(task);
-                m_taskCreatedOrder.remove(task);
-                m_taskQueue.remove(task);
-                m_taskCategory.remove(task);
-                m_taskPausedBySchedule.remove(task);
-                m_taskPausedByQuota.remove(task);
-                m_taskPausedByBattery.remove(task);
-                m_taskPausedByNetwork.remove(task);
-                if (m_checksumWatchers.contains(task)) {
-                    if (QPointer<QFutureWatcher<QString>> watcher = m_checksumWatchers.take(task)) {
-                        watcher->cancel();
-                        watcher->deleteLater();
-                    }
+        if (!m_model.isFinishedAt(i)) continue;
+
+        TorrentTask* tt = m_model.torrentTaskAt(i);
+        if (tt) {
+            m_torrentQueue.removeAll(tt);
+            m_torrentSpeed.remove(tt);
+            m_torrentReceived.remove(tt);
+            m_torrentTotal.remove(tt);
+            m_torrentCompletedAt.remove(tt);
+            m_torrentTaskQueue.remove(tt);
+            m_torrentTaskCategory.remove(tt);
+            const QString src = m_torrentSource.take(tt);
+            if (!src.isEmpty() && !m_torrentDir.isEmpty() && src.startsWith(m_torrentDir))
+                QFile::remove(src);
+            m_model.removeAt(i);
+            continue;
+        }
+
+        DownloaderTask* task = m_model.taskAt(i);
+        if (task) {
+            m_queue.removeAll(task);
+            m_taskSpeed.remove(task);
+            m_taskReceived.remove(task);
+            m_taskTotal.remove(task);
+            m_taskLastReceived.remove(task);
+            m_taskMaxSpeed.remove(task);
+            m_taskCompletedAt.remove(task);
+            m_taskRetryCount.remove(task);
+            m_taskPriority.remove(task);
+            m_taskCreatedOrder.remove(task);
+            m_taskQueue.remove(task);
+            m_taskCategory.remove(task);
+            m_taskPausedBySchedule.remove(task);
+            m_taskPausedByQuota.remove(task);
+            m_taskPausedByBattery.remove(task);
+            m_taskPausedByNetwork.remove(task);
+            if (m_checksumWatchers.contains(task)) {
+                if (QPointer<QFutureWatcher<QString>> watcher = m_checksumWatchers.take(task)) {
+                    watcher->cancel();
+                    watcher->deleteLater();
                 }
             }
-            m_model.removeAt(i);
         }
+        m_model.removeAt(i);
     }
     updateTotals();
     scheduleSave();
@@ -1168,18 +1544,20 @@ void DownloadManager::clearCompleted()
 
 void DownloadManager::pauseAll()
 {
-    for (DownloaderTask* t : m_queue) {
+    for (DownloaderTask* t : m_queue)
         if (t && t->isRunning()) t->pause();
-    }
+    for (TorrentTask* t : m_torrentQueue)
+        if (t && t->isRunning()) t->pause();
     emit countsChanged();
     scheduleSave();
 }
 
 void DownloadManager::resumeAll()
 {
-    for (DownloaderTask* t : m_queue) {
+    for (DownloaderTask* t : m_queue)
         if (t && t->stateString() == "Paused") t->resume();
-    }
+    for (TorrentTask* t : m_torrentQueue)
+        if (t && t->stateString() == "Paused") t->resume();
     startQueued();
     scheduleSave();
 }
@@ -1235,23 +1613,28 @@ void DownloadManager::retryTask(int index)
 
 void DownloadManager::openFile(int index)
 {
-    DownloaderTask* task = m_model.taskAt(index);
-    if (!task) return;
-    const QString path = utils::normalizeFilePath(task->fileName());
-    QFileInfo info(path);
-    if (info.exists()) {
+    QString filePath;
+    if (TorrentTask* tt = m_model.torrentTaskAt(index))
+        filePath = utils::normalizeFilePath(tt->fileName());
+    else if (DownloaderTask* task = m_model.taskAt(index))
+        filePath = utils::normalizeFilePath(task->fileName());
+    if (filePath.isEmpty()) return;
+    QFileInfo info(filePath);
+    if (info.exists())
         QDesktopServices::openUrl(QUrl::fromLocalFile(info.absoluteFilePath()));
-    } else if (!info.absolutePath().isEmpty()) {
+    else if (!info.absolutePath().isEmpty())
         QDesktopServices::openUrl(QUrl::fromLocalFile(info.absolutePath()));
-    }
 }
 
 void DownloadManager::revealInFolder(int index)
 {
-    DownloaderTask* task = m_model.taskAt(index);
-    if (!task) return;
-    const QString path = utils::normalizeFilePath(task->fileName());
-    QFileInfo info(path);
+    QString filePath;
+    if (TorrentTask* tt = m_model.torrentTaskAt(index))
+        filePath = utils::normalizeFilePath(tt->fileName());
+    else if (DownloaderTask* task = m_model.taskAt(index))
+        filePath = utils::normalizeFilePath(task->fileName());
+    if (filePath.isEmpty()) return;
+    QFileInfo info(filePath);
     const QString absPath = info.absoluteFilePath();
 #if defined(Q_OS_MAC)
     if (info.exists() && !absPath.isEmpty()) {
@@ -1265,19 +1648,20 @@ void DownloadManager::revealInFolder(int index)
         return;
     }
 #endif
-    if (!info.absolutePath().isEmpty()) {
+    if (!info.absolutePath().isEmpty())
         QDesktopServices::openUrl(QUrl::fromLocalFile(info.absolutePath()));
-    }
 }
 
 bool DownloadManager::fileExists(int index) const
 {
-    DownloaderTask* task = m_model.taskAt(index);
-    if (!task) return false;
-    const QString path = utils::normalizeFilePath(task->fileName());
-    if (path.isEmpty()) return false;
-    QFileInfo info(path);
-    return info.exists() && info.isFile();
+    QString filePath;
+    if (TorrentTask* tt = m_model.torrentTaskAt(index))
+        filePath = utils::normalizeFilePath(tt->fileName());
+    else if (DownloaderTask* task = m_model.taskAt(index))
+        filePath = utils::normalizeFilePath(task->fileName());
+    if (filePath.isEmpty()) return false;
+    QFileInfo info(filePath);
+    return info.exists();
 }
 
 void DownloadManager::applyPostActions(DownloaderTask* task)
@@ -1436,37 +1820,46 @@ qint64 DownloadManager::taskMaxSpeed(int index) const
 
 qint64 DownloadManager::taskBytesReceived(int index) const
 {
+    if (TorrentTask* tt = m_model.torrentTaskAt(index))
+        return m_torrentReceived.value(tt, 0);
     DownloaderTask* task = m_model.taskAt(index);
-    if (!task) return 0;
-    return m_taskReceived.value(task, 0);
+    return task ? m_taskReceived.value(task, 0) : 0;
 }
 
 qint64 DownloadManager::taskBytesTotal(int index) const
 {
+    if (TorrentTask* tt = m_model.torrentTaskAt(index))
+        return m_torrentTotal.value(tt, 0);
     DownloaderTask* task = m_model.taskAt(index);
-    if (!task) return 0;
-    return m_taskTotal.value(task, 0);
+    return task ? m_taskTotal.value(task, 0) : 0;
 }
 
 qint64 DownloadManager::taskCompletedAt(int index) const
 {
+    if (TorrentTask* tt = m_model.torrentTaskAt(index))
+        return m_torrentCompletedAt.value(tt, 0);
     DownloaderTask* task = m_model.taskAt(index);
-    if (!task) return 0;
-    return m_taskCompletedAt.value(task, 0);
+    return task ? m_taskCompletedAt.value(task, 0) : 0;
 }
 
 int DownloadManager::taskPriority(int index) const
 {
+    if (TorrentTask* tt = m_model.torrentTaskAt(index))
+        return tt->priority();
     DownloaderTask* task = m_model.taskAt(index);
-    if (!task) return 100;
-    return m_taskPriority.value(task, task->priority());
+    return task ? m_taskPriority.value(task, task->priority()) : 100;
 }
 
 void DownloadManager::setTaskMaxSpeed(int index, qint64 bytesPerSecond)
 {
+    if (bytesPerSecond < 0) bytesPerSecond = 0;
+    if (TorrentTask* tt = m_model.torrentTaskAt(index)) {
+        tt->setMaxSpeed(bytesPerSecond);
+        scheduleSave();
+        return;
+    }
     DownloaderTask* task = m_model.taskAt(index);
     if (!task) return;
-    if (bytesPerSecond < 0) bytesPerSecond = 0;
     if (m_taskMaxSpeed.value(task, 0) == bytesPerSecond) return;
     m_taskMaxSpeed[task] = bytesPerSecond;
     applyTaskSpeed(task);
@@ -1475,9 +1868,14 @@ void DownloadManager::setTaskMaxSpeed(int index, qint64 bytesPerSecond)
 
 void DownloadManager::setTaskPriority(int index, int priority)
 {
+    const int normalized = qBound(0, priority, 1000);
+    if (TorrentTask* tt = m_model.torrentTaskAt(index)) {
+        tt->setPriority(normalized);
+        scheduleSave();
+        return;
+    }
     DownloaderTask* task = m_model.taskAt(index);
     if (!task) return;
-    const int normalized = qBound(0, priority, 1000);
     if (m_taskPriority.value(task, task->priority()) == normalized) return;
     m_taskPriority[task] = normalized;
     task->setPriority(normalized);
@@ -1487,6 +1885,11 @@ void DownloadManager::setTaskPriority(int index, int priority)
 
 void DownloadManager::pauseTask(int index)
 {
+    if (TorrentTask* tt = m_model.torrentTaskAt(index)) {
+        tt->pause();
+        scheduleSave();
+        return;
+    }
     DownloaderTask* task = m_model.taskAt(index);
     if (!task) return;
     m_taskPausedByNetwork[task] = false;
@@ -1496,6 +1899,8 @@ void DownloadManager::pauseTask(int index)
 
 int DownloadManager::indexOfTask(QObject* taskObject) const
 {
+    if (auto* tt = qobject_cast<TorrentTask*>(taskObject))
+        return m_model.indexOfTorrentTask(tt);
     DownloaderTask* task = qobject_cast<DownloaderTask*>(taskObject);
     return task ? m_model.indexOfTask(task) : -1;
 }
@@ -1507,17 +1912,23 @@ int DownloadManager::taskCount() const
 
 QObject* DownloadManager::taskObjectAt(int index) const
 {
+    if (TorrentTask* tt = m_model.torrentTaskAt(index))
+        return static_cast<QObject*>(tt);
     return m_model.taskAt(index);
 }
 
 QString DownloadManager::taskQueueName(int index) const
 {
+    if (TorrentTask* tt = m_model.torrentTaskAt(index))
+        return m_torrentTaskQueue.value(tt, defaultQueueName());
     DownloaderTask* task = m_model.taskAt(index);
     return task ? m_taskQueue.value(task, defaultQueueName()) : defaultQueueName();
 }
 
 QString DownloadManager::taskCategoryName(int index) const
 {
+    if (TorrentTask* tt = m_model.torrentTaskAt(index))
+        return m_torrentTaskCategory.value(tt, QStringLiteral("Torrent"));
     DownloaderTask* task = m_model.taskAt(index);
     return task ? m_taskCategory.value(task, utils::toString(utils::detectCategory(task->fileName())))
                 : QStringLiteral("Other");
@@ -1525,6 +1936,11 @@ QString DownloadManager::taskCategoryName(int index) const
 
 void DownloadManager::resumeTask(int index)
 {
+    if (TorrentTask* tt = m_model.torrentTaskAt(index)) {
+        tt->resume();
+        scheduleSave();
+        return;
+    }
     DownloaderTask* task = m_model.taskAt(index);
     if (!task) return;
     const QString pauseReason = task->pauseReason().trimmed();
@@ -1544,6 +1960,12 @@ void DownloadManager::resumeTask(int index)
 
 void DownloadManager::togglePause(int index)
 {
+    if (TorrentTask* tt = m_model.torrentTaskAt(index)) {
+        if (tt->isRunning()) tt->pause();
+        else if (tt->stateString() == QStringLiteral("Paused")) tt->resume();
+        scheduleSave();
+        return;
+    }
     DownloaderTask* task = m_model.taskAt(index);
     if (!task) return;
     const QString state = task->stateString();
@@ -1734,7 +2156,7 @@ void DownloadManager::resetPersistentState()
     setPerHostMaxConcurrent(8);
     setPersistSensitiveOptions(false);
     setTelemetryEnabled(true);
-    setDefaultUserAgent(QStringLiteral("tondar/1.0"));
+    setDefaultUserAgent(QStringLiteral("genydl/1.0"));
     setDefaultAllowInsecureSsl(false);
     setDefaultProxyHost(QString());
     setDefaultProxyPort(0);
@@ -1862,7 +2284,7 @@ void DownloadManager::testUrl(const QString& urlStr)
         qint64* probeBytes = new qint64(0);
 
         connect(getReply, &QNetworkReply::readyRead, this, [getReply, probeBytes]() {
-            if (!getReply) return;
+            if (!getReply || !getReply->isOpen() || getReply->bytesAvailable() <= 0) return;
             *probeBytes += getReply->readAll().size();
         });
 
@@ -1871,7 +2293,10 @@ void DownloadManager::testUrl(const QString& urlStr)
             const QNetworkReply::NetworkError getErrCode = getReply->error();
             const QString getErr = getReply->errorString();
             if (getReply) {
-                *probeBytes += getReply->readAll().size();
+                // Only drain remaining bytes from a still-open socket; reading a
+                // closed/errored reply triggers "QSslSocket: device not open".
+                if (getReply->isOpen() && getErrCode == QNetworkReply::NoError)
+                    *probeBytes += getReply->readAll().size();
                 getReply->deleteLater();
             }
 
@@ -2127,6 +2552,53 @@ void DownloadManager::setQueueScheduleEndMinutes(const QString& name, int minute
     minutes = qBound(0, minutes, 23 * 60 + 59);
     if (info->endMinutes == minutes) return;
     info->endMinutes = minutes;
+    scheduleSave();
+    enforceQueuePolicies();
+}
+
+bool DownloadManager::queueScheduleUseDates(const QString& name) const
+{
+    const QueueInfo* info = queueInfo(name);
+    return info ? info->scheduleUseDates : false;
+}
+
+void DownloadManager::setQueueScheduleUseDates(const QString& name, bool useDates)
+{
+    QueueInfo* info = queueInfo(name);
+    if (!info || info->scheduleUseDates == useDates) return;
+    info->scheduleUseDates = useDates;
+    scheduleSave();
+    enforceQueuePolicies();
+}
+
+QString DownloadManager::queueScheduleStart(const QString& name) const
+{
+    const QueueInfo* info = queueInfo(name);
+    return (info && info->scheduleStart.isValid())
+        ? info->scheduleStart.toString(Qt::ISODate) : QString();
+}
+
+void DownloadManager::setQueueScheduleStart(const QString& name, const QString& isoDateTime)
+{
+    QueueInfo* info = queueInfo(name);
+    if (!info) return;
+    info->scheduleStart = QDateTime::fromString(isoDateTime.trimmed(), Qt::ISODate);
+    scheduleSave();
+    enforceQueuePolicies();
+}
+
+QString DownloadManager::queueScheduleEnd(const QString& name) const
+{
+    const QueueInfo* info = queueInfo(name);
+    return (info && info->scheduleEnd.isValid())
+        ? info->scheduleEnd.toString(Qt::ISODate) : QString();
+}
+
+void DownloadManager::setQueueScheduleEnd(const QString& name, const QString& isoDateTime)
+{
+    QueueInfo* info = queueInfo(name);
+    if (!info) return;
+    info->scheduleEnd = QDateTime::fromString(isoDateTime.trimmed(), Qt::ISODate);
     scheduleSave();
     enforceQueuePolicies();
 }
@@ -2475,6 +2947,7 @@ DownloaderTask* DownloadManager::createTask(const QUrl& url,
     connect(task, &DownloaderTask::mirrorUrlsChanged, this, &DownloadManager::scheduleSave);
     connect(task, &DownloaderTask::mirrorIndexChanged, this, &DownloadManager::scheduleSave);
     connect(task, &DownloaderTask::checksumChanged, this, &DownloadManager::scheduleSave);
+    connect(task, &DownloaderTask::storageInfoChanged, this, &DownloadManager::scheduleSave);
     connect(task, &DownloaderTask::verifyOnCompleteChanged, this, &DownloadManager::scheduleSave);
     connect(task, &DownloaderTask::resumeWarningChanged, this, &DownloadManager::scheduleSave);
     connect(task, &DownloaderTask::logLinesChanged, this, &DownloadManager::scheduleSave);
@@ -2517,6 +2990,8 @@ void DownloadManager::loadSession()
     if (root.contains("pauseOnBattery")) setPauseOnBattery(root.value("pauseOnBattery").toBool(false));
     if (root.contains("resumeOnAC")) setResumeOnAC(root.value("resumeOnAC").toBool(true));
     if (root.contains("perHostMaxConcurrent")) setPerHostMaxConcurrent(root.value("perHostMaxConcurrent").toInt(m_perHostMaxConcurrent));
+    if (root.contains("torrentSeedRatio")) setTorrentSeedRatio(root.value("torrentSeedRatio").toDouble(m_torrentSeedRatio));
+    if (root.contains("torrentSeedTimeMinutes")) setTorrentSeedTimeMinutes(root.value("torrentSeedTimeMinutes").toInt(m_torrentSeedTimeMinutes));
     if (root.contains("persistSensitiveOptions")) setPersistSensitiveOptions(root.value("persistSensitiveOptions").toBool(false));
     if (root.contains("telemetryEnabled")) setTelemetryEnabled(root.value("telemetryEnabled").toBool(true));
     if (root.contains("defaultUserAgent")) setDefaultUserAgent(root.value("defaultUserAgent").toString(m_defaultUserAgent));
@@ -2542,6 +3017,9 @@ void DownloadManager::loadSession()
         info.scheduleEnabled = obj.value("scheduleEnabled").toBool(false);
         info.startMinutes = obj.value("startMinutes").toInt(0);
         info.endMinutes = obj.value("endMinutes").toInt(0);
+        info.scheduleUseDates = obj.value("scheduleUseDates").toBool(false);
+        info.scheduleStart = QDateTime::fromString(obj.value("scheduleStart").toString(), Qt::ISODate);
+        info.scheduleEnd = QDateTime::fromString(obj.value("scheduleEnd").toString(), Qt::ISODate);
         info.quotaEnabled = obj.value("quotaEnabled").toBool(false);
         info.quotaBytes = static_cast<qint64>(obj.value("quotaBytes").toDouble(0));
         info.postCompletionAction = normalizedQueuePostCompletionAction(obj.value("postCompletionAction").toString());
@@ -2711,6 +3189,8 @@ void DownloadManager::loadSession()
         if (!checksumActual.isEmpty()) task->setChecksumActual(checksumActual);
         if (!checksumState.isEmpty()) task->setChecksumState(checksumState);
         task->setVerifyOnComplete(verifyOnComplete);
+        task->setStorageNetwork(obj.value("storageNetwork").toString());
+        task->setContentId(obj.value("contentId").toString());
         task->setPostOpenFile(postOpenFile);
         task->setPostRevealFolder(postRevealFolder);
         task->setPostExtract(postExtract);
@@ -2775,6 +3255,26 @@ void DownloadManager::loadSession()
         }
     }
 
+    // Restore torrents: re-add to the session; libtorrent re-checks existing
+    // files in the save path and resumes from whatever is already on disk.
+    if (torrentAvailable()) {
+        const QJsonArray torrents = root.value("torrents").toArray();
+        for (const QJsonValue& v : torrents) {
+            if (!v.isObject()) continue;
+            const QJsonObject obj = v.toObject();
+            const QString src = obj.value("source").toString();
+            if (src.isEmpty()) continue;
+            const bool isMagnet = src.startsWith(QStringLiteral("magnet:"), Qt::CaseInsensitive);
+            // Skip dead .torrent references (file was deleted/moved).
+            if (!isMagnet && !QFile::exists(src)) continue;
+            addTorrentInternal(src,
+                               obj.value("savePath").toString(),
+                               obj.value("queueName").toString(defaultQueueName()),
+                               obj.value("category").toString(QStringLiteral("Torrent")),
+                               obj.value("paused").toBool(false));
+        }
+    }
+
     m_restoreInProgress = false;
     emit queuesChanged();
     emit categoryFoldersChanged();
@@ -2802,6 +3302,8 @@ void DownloadManager::saveSession()
     root.insert("pauseOnBattery", m_pauseOnBattery);
     root.insert("resumeOnAC", m_resumeOnAC);
     root.insert("perHostMaxConcurrent", m_perHostMaxConcurrent);
+    root.insert("torrentSeedRatio", m_torrentSeedRatio);
+    root.insert("torrentSeedTimeMinutes", m_torrentSeedTimeMinutes);
     root.insert("persistSensitiveOptions", m_persistSensitiveOptions);
     root.insert("telemetryEnabled", m_telemetryEnabled);
     root.insert("defaultUserAgent", m_defaultUserAgent);
@@ -2826,6 +3328,9 @@ void DownloadManager::saveSession()
         obj.insert("scheduleEnabled", info.scheduleEnabled);
         obj.insert("startMinutes", info.startMinutes);
         obj.insert("endMinutes", info.endMinutes);
+        obj.insert("scheduleUseDates", info.scheduleUseDates);
+        obj.insert("scheduleStart", info.scheduleStart.isValid() ? info.scheduleStart.toString(Qt::ISODate) : QString());
+        obj.insert("scheduleEnd", info.scheduleEnd.isValid() ? info.scheduleEnd.toString(Qt::ISODate) : QString());
         obj.insert("quotaEnabled", info.quotaEnabled);
         obj.insert("quotaBytes", static_cast<double>(info.quotaBytes));
         obj.insert("postCompletionAction", info.postCompletionAction.isEmpty()
@@ -2883,6 +3388,10 @@ void DownloadManager::saveSession()
         obj.insert("checksumActual", task->checksumActual());
         obj.insert("checksumState", task->checksumState());
         obj.insert("verifyOnComplete", task->verifyOnComplete());
+        if (!task->storageNetwork().isEmpty()) {
+            obj.insert("storageNetwork", task->storageNetwork());
+            obj.insert("contentId", task->contentId());
+        }
         obj.insert("postOpenFile", task->postOpenFile());
         obj.insert("postRevealFolder", task->postRevealFolder());
         obj.insert("postExtract", task->postExtract());
@@ -2917,6 +3426,22 @@ void DownloadManager::saveSession()
         items.append(obj);
     }
     root.insert("items", items);
+
+    // Persist torrents so they reappear (and resume) on next launch.
+    QJsonArray torrents;
+    for (TorrentTask* tt : m_torrentQueue) {
+        if (!tt) continue;
+        const QString src = m_torrentSource.value(tt);
+        if (src.isEmpty()) continue;
+        QJsonObject obj;
+        obj.insert("source", src);
+        obj.insert("savePath", tt->savePath());
+        obj.insert("queueName", m_torrentTaskQueue.value(tt, defaultQueueName()));
+        obj.insert("category", m_torrentTaskCategory.value(tt, QStringLiteral("Torrent")));
+        obj.insert("paused", tt->stateString() == QStringLiteral("Paused"));
+        torrents.append(obj);
+    }
+    root.insert("torrents", torrents);
 
     if (!m_sessionBackupPath.isEmpty() && QFile::exists(m_sessionPath)) {
         QFile::remove(m_sessionBackupPath);
@@ -3069,6 +3594,16 @@ void DownloadManager::applyTaskSpeed(DownloaderTask* task)
 bool DownloadManager::isWithinSchedule(const QueueInfo& info, const QTime& now) const
 {
     if (!info.scheduleEnabled) return true;
+
+    // Absolute datetime window (calendar mode): active only between the two
+    // instants. An unset bound means "open-ended" on that side.
+    if (info.scheduleUseDates) {
+        const QDateTime nowDt = QDateTime::currentDateTime();
+        if (info.scheduleStart.isValid() && nowDt < info.scheduleStart) return false;
+        if (info.scheduleEnd.isValid() && nowDt > info.scheduleEnd) return false;
+        return true;
+    }
+
     const int start = info.startMinutes;
     const int end = info.endMinutes;
     const int current = now.hour() * 60 + now.minute();
@@ -3117,7 +3652,7 @@ void DownloadManager::executeQueuePostCompletionAction(const QString& action)
     if (normalized == QStringLiteral("none")) return;
 
     if (normalized == QStringLiteral("exit")) {
-        emit toastRequested(QStringLiteral("Queue completed. Exiting Tondar."), QStringLiteral("info"));
+        emit toastRequested(QStringLiteral("Queue completed. Exiting GenyDL."), QStringLiteral("info"));
         QTimer::singleShot(250, []() { QCoreApplication::quit(); });
         return;
     }

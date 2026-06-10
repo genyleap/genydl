@@ -30,12 +30,12 @@ module;
 #include <windows.h>
 #endif
 
-module tondar.services.update_client;
+module genydl.services.update_client;
 
-import tondar.utils.download_utils;
-import tondar.utils.version_utils;
+import genydl.utils.download_utils;
+import genydl.utils.version_utils;
 
-namespace utils = tondar::utils;
+namespace utils = genydl::utils;
 
 static QString settingsGroup()
 {
@@ -59,9 +59,9 @@ static QString updatesDirPath()
 static QString appUpdaterHelperPath()
 {
 #if defined(Q_OS_WIN)
-    return QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("TondarUpdaterHelper.exe"));
+    return QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("GenyDLUpdaterHelper.exe"));
 #else
-    return QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("TondarUpdaterHelper"));
+    return QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("GenyDLUpdaterHelper"));
 #endif
 }
 
@@ -353,7 +353,7 @@ void UpdateClient::downloadUpdate()
     QNetworkRequest req{QUrl(m_downloadUrl)};
     req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
     req.setTransferTimeout(30000);
-    req.setRawHeader("User-Agent", "tondar/1.0");
+    req.setRawHeader("User-Agent", "genydl/1.0");
     QNetworkReply* reply = m_net.get(req);
     m_downloadReply = reply;
 
@@ -562,7 +562,7 @@ void UpdateClient::resetSettingsToDefaults()
     m_autoDownload = false;
     m_updateMode = QStringLiteral("custom");
     m_sourcePreference = QStringLiteral("auto");
-    m_githubRepo = QStringLiteral("genyleap/tondar");
+    m_githubRepo = QStringLiteral("genyleap/genydl");
     m_manifestUrl.clear();
     m_requireSignature = false;
     m_publicKeyPath.clear();
@@ -713,7 +713,7 @@ void UpdateClient::checkWebsiteManifest()
     QNetworkRequest req{QUrl(m_manifestUrl)};
     req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
     req.setTransferTimeout(12000);
-    req.setRawHeader("User-Agent", "tondar/1.0");
+    req.setRawHeader("User-Agent", "genydl/1.0");
     QNetworkReply* reply = m_net.get(req);
     m_activeReply = reply;
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
@@ -763,7 +763,7 @@ void UpdateClient::checkGitHubReleases()
     QNetworkRequest req{QUrl(url)};
     req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
     req.setTransferTimeout(12000);
-    req.setRawHeader("User-Agent", "tondar/1.0");
+    req.setRawHeader("User-Agent", "genydl/1.0");
     QNetworkReply* reply = m_net.get(req);
     m_activeReply = reply;
     connect(reply, &QNetworkReply::finished, this, [this, reply, allowPrerelease]() {
@@ -1028,7 +1028,7 @@ QString UpdateClient::pickFileNameFromUrl(const QString& url) const
 {
     const QString name = utils::fileNameFromUrl(QUrl(url));
     if (!name.isEmpty()) return name;
-    return QStringLiteral("tondar-update.bin");
+    return QStringLiteral("genydl-update.bin");
 }
 
 QJsonObject UpdateClient::assetByUrl(const QJsonArray& assets, const QString& url) const
@@ -1120,7 +1120,7 @@ QByteArray UpdateClient::fetchRemoteBytes(const QString& url, QString* errorOut)
     QNetworkRequest req{QUrl(trimmedUrl)};
     req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
     req.setTransferTimeout(15000);
-    req.setRawHeader("User-Agent", "tondar/1.0");
+    req.setRawHeader("User-Agent", "genydl/1.0");
     QNetworkReply* reply = m_net.get(req);
 
     QEventLoop loop;
@@ -1294,7 +1294,7 @@ bool UpdateClient::verifyDownloadedPayload(const QString& payloadPath, QString* 
             return false;
         }
 
-        QTemporaryFile sigTmp(QDir::tempPath() + QStringLiteral("/tondar-signature-XXXXXX.sig"));
+        QTemporaryFile sigTmp(QDir::tempPath() + QStringLiteral("/genydl-signature-XXXXXX.sig"));
         sigTmp.setAutoRemove(true);
         if (!sigTmp.open()) {
             if (errorOut) *errorOut = QStringLiteral("Cannot create temporary signature file");

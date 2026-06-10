@@ -1,4 +1,4 @@
-name: TONDAR CI
+name: GENYDL CI
 
 on:
   push:
@@ -136,13 +136,13 @@ jobs:
             -DCMAKE_CXX_SCAN_FOR_MODULES=ON \
             -DCMAKE_CXX_COMPILER_CLANG_SCAN_DEPS="${CLANG_SCAN_DEPS}" \
             -DCMAKE_OSX_DEPLOYMENT_TARGET="${{ matrix.macos_deployment_target }}" \
-            -DTONDAR_MACOS_DEPLOYMENT_TARGET="${{ matrix.macos_deployment_target }}" \
-            -DTONDAR_USE_MODULES=ON \
-            -DTONDAR_LLVM_AUTO_SCAN=ON \
-            -DTONDAR_TARGET_ARCH="${{ matrix.target_arch }}" \
-            -DTONDAR_TARGET_BUILD_ARCH="${{ matrix.target_arch }}" \
-            -DTONDAR_MACOS_CODESIGN=ON \
-            -DTONDAR_CODESIGN_IDENTITY="-"
+            -DGENYDL_MACOS_DEPLOYMENT_TARGET="${{ matrix.macos_deployment_target }}" \
+            -DGENYDL_USE_MODULES=ON \
+            -DGENYDL_LLVM_AUTO_SCAN=ON \
+            -DGENYDL_TARGET_ARCH="${{ matrix.target_arch }}" \
+            -DGENYDL_TARGET_BUILD_ARCH="${{ matrix.target_arch }}" \
+            -DGENYDL_MACOS_CODESIGN=ON \
+            -DGENYDL_CODESIGN_IDENTITY="-"
 
       - name: Configure Windows
         if: runner.os == 'Windows'
@@ -153,9 +153,9 @@ jobs:
             -DCMAKE_CONFIGURATION_TYPES="Release" `
             -DCMAKE_PREFIX_PATH="${env:QT_ROOT_DIR}" `
             -DCMAKE_CXX_SCAN_FOR_MODULES=ON `
-            -DTONDAR_USE_MODULES=ON `
-            -DTONDAR_TARGET_ARCH="${{ matrix.target_arch }}" `
-            -DTONDAR_TARGET_BUILD_ARCH="${{ matrix.target_arch }}"
+            -DGENYDL_USE_MODULES=ON `
+            -DGENYDL_TARGET_ARCH="${{ matrix.target_arch }}" `
+            -DGENYDL_TARGET_BUILD_ARCH="${{ matrix.target_arch }}"
 
       - name: Build
         run: cmake --build build --config Release --parallel
@@ -166,11 +166,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          APP="build/bin/Tondar.app"
+          APP="build/bin/GenyDL.app"
 
           for f in \
-            "$APP/Contents/MacOS/Tondar" \
-            "$APP/Contents/MacOS/TondarUpdaterHelper"
+            "$APP/Contents/MacOS/GenyDL" \
+            "$APP/Contents/MacOS/GenyDLUpdaterHelper"
           do
             echo
             echo "==== $f ===="
@@ -195,11 +195,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          APP="build/bin/Tondar.app"
+          APP="build/bin/GenyDL.app"
 
           test -d "$APP"
-          test -f "$APP/Contents/MacOS/Tondar"
-          test -f "$APP/Contents/MacOS/TondarUpdaterHelper"
+          test -f "$APP/Contents/MacOS/GenyDL"
+          test -f "$APP/Contents/MacOS/GenyDLUpdaterHelper"
 
           echo "Bundle contents:"
           find "$APP/Contents" -maxdepth 3 -type f | sort | head -200
@@ -210,7 +210,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          APP="build/bin/Tondar.app"
+          APP="build/bin/GenyDL.app"
           OUT_DIR="build/final/macos-${{ matrix.target_arch }}"
 
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
@@ -227,7 +227,7 @@ jobs:
             exit 1
           fi
 
-          DMG_NAME="Tondar-${VERSION}-macos-${{ matrix.target_arch }}.dmg"
+          DMG_NAME="GenyDL-${VERSION}-macos-${{ matrix.target_arch }}.dmg"
           DMG_PATH="${OUT_DIR}/${DMG_NAME}"
 
           echo "Package version: ${VERSION}"
@@ -246,8 +246,8 @@ jobs:
           xattr -cr "$APP" || true
 
           echo "Fixing executable permissions..."
-          chmod +x "$APP/Contents/MacOS/Tondar" || true
-          chmod +x "$APP/Contents/MacOS/TondarUpdaterHelper" || true
+          chmod +x "$APP/Contents/MacOS/GenyDL" || true
+          chmod +x "$APP/Contents/MacOS/GenyDLUpdaterHelper" || true
 
           echo "Removing old signatures from app bundle where possible..."
           codesign --remove-signature "$APP" || true
@@ -285,11 +285,11 @@ jobs:
           echo "Creating clean DMG..."
           STAGING="$(mktemp -d)"
 
-          cp -R "$APP" "$STAGING/Tondar.app"
+          cp -R "$APP" "$STAGING/GenyDL.app"
           ln -s /Applications "$STAGING/Applications"
 
           hdiutil create \
-            -volname "Tondar" \
+            -volname "GenyDL" \
             -srcfolder "$STAGING" \
             -ov \
             -format UDZO \
@@ -322,10 +322,10 @@ jobs:
           MOUNT_DIR="$(mktemp -d)"
           hdiutil attach "$DMG" -mountpoint "$MOUNT_DIR" -nobrowse -quiet
 
-          APP="$(find "$MOUNT_DIR" -maxdepth 2 -name "Tondar.app" -type d | head -n 1)"
+          APP="$(find "$MOUNT_DIR" -maxdepth 2 -name "GenyDL.app" -type d | head -n 1)"
 
           if [[ -z "$APP" ]]; then
-            echo "Tondar.app not found inside DMG."
+            echo "GenyDL.app not found inside DMG."
             hdiutil detach "$MOUNT_DIR" -quiet || true
             exit 1
           fi
@@ -344,16 +344,16 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
 
-          if (!(Test-Path "build\bin\Release\Tondar.exe") -and !(Test-Path "build\bin\Tondar.exe")) {
-            Write-Host "Could not find Tondar.exe. Listing build/bin:"
+          if (!(Test-Path "build\bin\Release\GenyDL.exe") -and !(Test-Path "build\bin\GenyDL.exe")) {
+            Write-Host "Could not find GenyDL.exe. Listing build/bin:"
             if (Test-Path "build\bin") {
               Get-ChildItem -Recurse "build\bin" | Select-Object -First 200 | Format-Table -AutoSize
             }
             exit 1
           }
 
-          if (!(Test-Path "build\bin\Release\TondarUpdaterHelper.exe") -and !(Test-Path "build\bin\TondarUpdaterHelper.exe")) {
-            Write-Host "Could not find TondarUpdaterHelper.exe. Listing build/bin:"
+          if (!(Test-Path "build\bin\Release\GenyDLUpdaterHelper.exe") -and !(Test-Path "build\bin\GenyDLUpdaterHelper.exe")) {
+            Write-Host "Could not find GenyDLUpdaterHelper.exe. Listing build/bin:"
             if (Test-Path "build\bin") {
               Get-ChildItem -Recurse "build\bin" | Select-Object -First 200 | Format-Table -AutoSize
             }
@@ -388,7 +388,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Tondar-${{ matrix.name }}
+          name: GenyDL-${{ matrix.name }}
           path: artifacts/*
 
       - name: Release

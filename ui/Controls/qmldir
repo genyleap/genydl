@@ -1,6 +1,7 @@
-module Tondar.Controls
+module GenyDL.Controls
 
 Button 1.0 Button.qml
+MiniIconButton 1.0 MiniIconButton.qml
 Card 1.0 Card.qml
 Label 1.0 Label.qml
 TextField 1.0 TextField.qml
@@ -20,6 +21,11 @@ AppMenuTrigger 1.0 AppMenuTrigger.qml
 CommandActionButton 1.0 CommandActionButton.qml
 CommandAddUrlButton 1.0 CommandAddUrlButton.qml
 GitHubReleaseAssetPicker 1.0 GitHubReleaseAssetPicker.qml
+ReleaseCenterPage 1.0 ReleaseCenterPage.qml
+ReleaseDetailsDialog 1.0 ReleaseDetailsDialog.qml
+ReleaseCenterSettings 1.0 ReleaseCenterSettings.qml
+DateTimeField 1.0 DateTimeField.qml
+ToolTip 1.0 ToolTip.qml
 SidebarTreeItem 1.0 SidebarTreeItem.qml
 AddDownloadDialog 1.0 AddDownloadDialog.qml
 DownloadDelegate 1.0 DownloadDelegate.qml

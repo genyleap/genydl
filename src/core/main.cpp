@@ -12,10 +12,13 @@
 #include <QIcon>
 #include <QUrl>
 
-import tondar.core.downloadmanager;
-import tondar.core.appcontroller;
-import tondar.services.github_release_service;
-import tondar.services.update_client;
+import genydl.core.downloadmanager;
+import genydl.core.appcontroller;
+import genydl.services.github_release_service;
+import genydl.services.release_center_service;
+import genydl.services.update_client;
+import genydl.services.torrent_session;
+import genydl.services.gateway_service;
 
 #ifndef APP_VERSION
 #define APP_VERSION "0.1.0"
@@ -87,17 +90,24 @@ auto main(int argc, char *argv[]) -> int
 {
     QApplication app(argc, argv);
     QCoreApplication::setOrganizationName(QStringLiteral("Genyleap"));
-    QCoreApplication::setApplicationName(QStringLiteral("Tondar"));
+    QCoreApplication::setApplicationName(QStringLiteral("GenyDL"));
     QCoreApplication::setApplicationVersion(QStringLiteral(APP_VERSION));
-    app.setWindowIcon(QIcon(QStringLiteral(":/Tondar.png")));
+    app.setWindowIcon(QIcon(QStringLiteral(":/GenyDL.png")));
     QQuickStyle::setStyle("Basic");
 
     ::configureGraphicsBackend();
 
+    // Create TorrentSession (no-op when libtorrent is not compiled in)
+    TorrentSession torrentSession;
+
+    // Smart Gateway System: IPFS gateway pool, health monitoring, priority.
+    GatewayService gatewayService;
+
     // Create DownloadManager instance
-    DownloadManager manager;
+    DownloadManager manager(&torrentSession, &gatewayService);
     UpdateClient updateClient;
     GitHubReleaseService githubReleaseService;
+    GitHubReleaseTrackerService releaseCenterService;
     AppController appController(&manager);
 
     const QString appDir = QCoreApplication::applicationDirPath();
@@ -123,10 +133,13 @@ auto main(int argc, char *argv[]) -> int
 
     // Expose the manager to QML
     engine.rootContext()->setContextProperty("downloadManager", &manager);
+    engine.rootContext()->setContextProperty("torrentSession", &torrentSession);
+    engine.rootContext()->setContextProperty("gatewayService", &gatewayService);
     engine.rootContext()->setContextProperty("updateClient", &updateClient);
     engine.rootContext()->setContextProperty("githubReleaseService", &githubReleaseService);
+    engine.rootContext()->setContextProperty("releaseCenterService", &releaseCenterService);
     engine.rootContext()->setContextProperty("appController", &appController);
-    QString downloadsRoot = QDir(QStandardPaths::writableLocation(QStandardPaths::DownloadLocation)).filePath(QStringLiteral("Tondar"));
+    QString downloadsRoot = QDir(QStandardPaths::writableLocation(QStandardPaths::DownloadLocation)).filePath(QStringLiteral("GenyDL"));
     if (downloadsRoot.isEmpty()) {
         downloadsRoot = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
     }
@@ -136,6 +149,16 @@ auto main(int argc, char *argv[]) -> int
     engine.rootContext()->setContextProperty("documentsFolder", downloadsRoot);
     engine.rootContext()->setContextProperty("faFontPath", fontPath);
 
+    // Tell the Release Center where to look for completed downloads so it can
+    // detect which tracked apps are already downloaded/installed.
+    {
+        QStringList downloadRoots;
+        if (!downloadsRoot.isEmpty()) downloadRoots << downloadsRoot;
+        const QString plainDownloads = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
+        if (!plainDownloads.isEmpty()) downloadRoots << plainDownloads;
+        releaseCenterService.setDownloadRoots(downloadRoots);
+    }
+
 
     // Handle QML loading errors
     QObject::connect(
@@ -144,7 +167,7 @@ auto main(int argc, char *argv[]) -> int
         &app,
         []() { QCoreApplication::exit(-1); },
         Qt::QueuedConnection);
-    engine.loadFromModule("Tondar", "Main");
+    engine.loadFromModule("GenyDL", "Main");
 
     if (engine.rootObjects().isEmpty())
         return -1;

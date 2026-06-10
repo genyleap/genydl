@@ -1,17 +1,18 @@
 /*!
     \file        DownloadListView.qml
-    \brief       Implements the DownloadListView QML component for TONDAR.
-    \details     This file contains the DownloadListView user interface component used by the TONDAR desktop application.
+    \brief       Implements the DownloadListView QML component for GENYDL.
+    \details     This file contains the DownloadListView user interface component used by the GENYDL desktop application.
 
     \author      Kambiz Asadzadeh <https://github.com/thecompez>
     \copyright   Copyright (c) 2026 Genyleap. All rights reserved.
-    \license     https://github.com/genyleap/tondar/blob/main/LICENSE.md
+    \license     https://github.com/genyleap/genydl/blob/main/LICENSE.md
 */
 
 import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import "../Core" as Core
+import "../utils.js" as Utils
 
 Item {
     id: root
@@ -20,6 +21,7 @@ Item {
     property string queueFilter: "All Queues"
     property string statusFilter: "All"
     property string categoryFilter: "All"
+    property string sourceFilter: "All"
     property string searchText: ""
 
     property int selectedIndex: -1
@@ -37,7 +39,8 @@ Item {
                                      ? model.filteredCount(queueFilter,
                                                            statusFilter,
                                                            categoryFilter,
-                                                           searchText)
+                                                           searchText,
+                                                           sourceFilter)
                                      : 0
 
     signal taskSelected(int row,
@@ -64,10 +67,11 @@ Item {
         return status === statusFilter
     }
 
-    function rowAccepted(queueName, status, categoryName, fileName, urlText) {
+    function rowAccepted(queueName, status, categoryName, fileName, urlText, taskObj) {
         if (queueFilter !== "All Queues" && queueName !== queueFilter) return false
         if (!statusPasses(status)) return false
         if (categoryFilter !== "All" && categoryName !== categoryFilter) return false
+        if (!Utils.sourceMatchesFilter(taskObj, sourceFilter)) return false
 
         const needle = searchText.trim().toLowerCase()
         if (needle.length === 0) return true
@@ -111,7 +115,8 @@ Item {
                                              status,
                                              category,
                                              fileName,
-                                             task ? task.url() : "")
+                                             task ? task.url() : "",
+                                             task)
 
             onSelectRequested: function(row, taskObj, queue, categoryName) {
                 root.taskSelected(row, taskObj, queue, categoryName)

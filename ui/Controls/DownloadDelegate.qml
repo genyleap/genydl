@@ -1,17 +1,18 @@
 /*!
     \file        DownloadDelegate.qml
-    \brief       Implements the DownloadDelegate QML component for TONDAR.
-    \details     This file contains the DownloadDelegate user interface component used by the TONDAR desktop application.
+    \brief       Implements the DownloadDelegate QML component for GENYDL.
+    \details     This file contains the DownloadDelegate user interface component used by the GENYDL desktop application.
 
     \author      Kambiz Asadzadeh <https://github.com/thecompez>
     \copyright   Copyright (c) 2026 Genyleap. All rights reserved.
-    \license     https://github.com/genyleap/tondar/blob/main/LICENSE.md
+    \license     https://github.com/genyleap/genydl/blob/main/LICENSE.md
 */
 
 import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import "../Core" as Core
+import "../utils.js" as Utils
 
 Item {
     id: root
@@ -134,6 +135,52 @@ Item {
     readonly property string resolvedState: visualState()
     readonly property string urlText: task ? task.url() : ""
 
+    // ---- Source-type & verification badges --------------------------------
+    // Every row exposes its protocol (HTTP / Torrent / IPFS / Arweave); rows with
+    // a verification result also expose a verification badge (Verified / CID
+    // Match). Classification logic is shared with the details dialog via utils.js.
+    readonly property var srcInfo: Utils.sourceTypeInfo(task)
+    readonly property var verInfo: Utils.verificationInfo(task)
+    readonly property bool hasVerBadge: verInfo.state !== "none"
+
+    // Resolve a semantic tone token to a theme color.
+    function toneColor(tone) {
+        switch (tone) {
+            case "success":   return Core.Colors.textSuccess
+            case "warning":   return Core.Colors.textWarning
+            case "danger":    return Core.Colors.textError
+            case "accent":    return Core.Colors.textAccent
+            case "info":      return Core.Colors.textAccent
+            case "secondary": return Core.Colors.textSecondary
+            default:          return Core.Colors.textMuted
+        }
+    }
+
+    function sourceBadgeTooltip() {
+        if (!task) return ""
+        var lines = [srcInfo.label]
+        if (task.contentId && task.contentId.length > 0)
+            lines.push("CID: " + task.contentId)
+        if (srcInfo.id === "ipfs") {
+            var gw = Utils.activeGatewayHost(task)
+            if (gw.length > 0) lines.push("Gateway: " + gw)
+        }
+        return lines.join("\n")
+    }
+
+    function verBadgeTooltip() {
+        if (!task) return ""
+        switch (verInfo.state) {
+            case "verified":  return (task.contentId && task.contentId.length > 0)
+                                     ? "Content address verified — downloaded bytes match the CID"
+                                     : "Integrity verified against the expected checksum"
+            case "mismatch":  return "Verification FAILED — downloaded bytes do not match"
+            case "verifying": return "Verifying content integrity…"
+            case "trusted":   return "Content-addressed but not byte-verifiable (UnixFS DAG); delivery is gateway-trusted"
+            default:          return ""
+        }
+    }
+
     Rectangle {
         anchors.fill: parent
         radius: 10
@@ -185,10 +232,67 @@ Item {
                     Layout.minimumWidth: root.nameWidth
                     spacing: 1
 
-                    Label {
-                        text: root.baseName(root.fileName)
-                        role: "caption"
-                        elide: Text.ElideRight
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 6
+
+                        Label {
+                            Layout.fillWidth: true
+                            text: root.baseName(root.fileName)
+                            role: "caption"
+                            elide: Text.ElideRight
+                        }
+
+                        // Protocol badge — always present, identifies the source.
+                        Rectangle {
+                            id: sourceBadge
+                            radius: height / 2
+                            color: "transparent"
+                            border.width: 1
+                            border.color: root.toneColor(root.srcInfo.tone)
+                            implicitHeight: sourceBadgeText.implicitHeight + 4
+                            implicitWidth: sourceBadgeText.implicitWidth + 14
+                            Layout.alignment: Qt.AlignVCenter
+
+                            Text {
+                                id: sourceBadgeText
+                                anchors.centerIn: parent
+                                text: root.srcInfo.short
+                                color: root.toneColor(root.srcInfo.tone)
+                                font.pixelSize: 10
+                                font.weight: Font.DemiBold
+                            }
+
+                            QQC2.ToolTip.visible: sourceBadgeHover.hovered
+                            QQC2.ToolTip.text: root.sourceBadgeTooltip()
+                            HoverHandler { id: sourceBadgeHover }
+                        }
+
+                        // Verification badge — only when there is a result to show.
+                        Rectangle {
+                            id: verBadge
+                            visible: root.hasVerBadge
+                            radius: height / 2
+                            color: Core.Colors.alpha(root.toneColor(root.verInfo.tone), 0.12)
+                            border.width: 1
+                            border.color: root.toneColor(root.verInfo.tone)
+                            implicitHeight: verBadgeText.implicitHeight + 4
+                            implicitWidth: verBadgeText.implicitWidth + 14
+                            Layout.alignment: Qt.AlignVCenter
+
+                            Text {
+                                id: verBadgeText
+                                anchors.centerIn: parent
+                                text: (root.verInfo.verified ? "✓ " : "") + root.verInfo.label
+                                color: root.toneColor(root.verInfo.tone)
+                                font.pixelSize: 10
+                                font.weight: Font.DemiBold
+                            }
+
+                            QQC2.ToolTip.visible: verBadgeHover.hovered && root.hasVerBadge
+                            QQC2.ToolTip.text: root.verBadgeTooltip()
+                            HoverHandler { id: verBadgeHover }
+                        }
                     }
 
                     Label {
@@ -266,7 +370,11 @@ Item {
                     Layout.preferredWidth: root.segmentsWidth
                     Layout.maximumWidth: root.segmentsWidth
                     Layout.minimumWidth: root.segmentsWidth
-                    text: task ? (task.effectiveSegments() + "/" + task.segments()) : "0/0"
+                    text: {
+                        if (!task) return "0/0"
+                        if (task.isTorrent) return task.seeders + "/" + task.leechers
+                        return task.effectiveSegments() + "/" + task.segments()
+                    }
                     role: "mono"
                     tone: "secondary"
                 }
