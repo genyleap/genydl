@@ -2,7 +2,7 @@
 
 **Next-Gen, Ultra-Fast, and Reliable Download Manager**
 
-GenyDL is a modern, high-performance download manager built with **C++23**, **Qt 6**, and **QML**, designed for speed, reliability, clean architecture, and a polished desktop experience — with future integration for the **Geny token ecosystem** and blockchain-powered features.
+GenyDL is a modern, high-performance download manager built with **C++23**, **Qt 6**, and **QML**, designed for speed, reliability, clean architecture, and a polished desktop experience — featuring built-in support for the **Geny blockchain ecosystem**, IPFS, and BitTorrent networks.
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 ![C++](https://img.shields.io/badge/C%2B%2B%20Version-23-blue.svg)
@@ -18,6 +18,9 @@ GenyDL is a modern, high-performance download manager built with **C++23**, **Qt
 
 - Modern QML-based desktop interface
 - Multi-segment download engine foundation
+- Torrent and magnet backend support for P2P downloads
+- Geny blockchain ecosystem and IPFS networking integration
+- Built-in Application Store (Release Center) for seamless updates
 - Resume, pause, retry, cancel, and remove actions
 - Per-segment progress and download details window
 - Queue and category-based download organization
@@ -25,18 +28,14 @@ GenyDL is a modern, high-performance download manager built with **C++23**, **Qt
 - Per-task and global speed limit foundation
 - Proxy, SSL, User-Agent, and network configuration foundation
 - Runtime dashboard for CPU, memory, disk, network, and transfer status
-- URL probe and integrated update client foundation
+- URL probe, advanced GitHub, and IPFS-based update client
 - Session persistence, import/export, and post-download action foundation
 - Cross-platform packaging for macOS and Windows
 
 ## Planned Features
 
 - Speed and network tester module
-- Geny token and NFT ecosystem integration
-- Application store for better maintenance and dependency updates
 - Auto platform and file type detector
-- Torrent and magnet backend support
-- Advanced remote terminal repository updater
 - YouTube and social media download support
 - More advanced mirror failover and checksum verification workflows
 
