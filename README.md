@@ -1,10 +1,8 @@
-## Tondar ⚡️
-
-<u><small><i>Pronunciation: /tonˈdær/ — Persian (تندر)</i></small></u>
+## GenyDL ⚡️
 
 **Next-Gen, Ultra-Fast, and Reliable Download Manager**
 
-Tondar is a modern, high-performance download manager built with **C++23**, **Qt 6**, and **QML**, designed for speed, reliability, clean architecture, and a polished desktop experience — with future integration for the **Geny token ecosystem** and blockchain-powered features.
+GenyDL is a modern, high-performance download manager built with **C++23**, **Qt 6**, and **QML**, designed for speed, reliability, clean architecture, and a polished desktop experience — with future integration for the **Geny token ecosystem** and blockchain-powered features.
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 ![C++](https://img.shields.io/badge/C%2B%2B%20Version-23-blue.svg)
@@ -13,7 +11,7 @@ Tondar is a modern, high-performance download manager built with **C++23**, **Qt
 
 ## 🚧 Project Status
 
-> Tondar is currently under active development.  
+> GenyDL is currently under active development.  
 > Version **1.0.0** is the first milestone release, focused on the desktop UI, core download workflow, packaging, and runtime foundation.
 
 ## Highlights
@@ -72,7 +70,7 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
 ```
 
-If GenyConnect helps you, consider supporting its continued development.
+If GenyDL helps you, consider supporting its continued development.
 
 ## Crypto Donations
 GENY / ETH (ERC20)
