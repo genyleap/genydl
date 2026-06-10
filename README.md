@@ -1,21 +1,19 @@
-## GenyDL ⚡️
+## Tondar ⚡️
 
 <u><small><i>Pronunciation: /tonˈdær/ — Persian (تندر)</i></small></u>
 
 **Next-Gen, Ultra-Fast, and Reliable Download Manager**
 
-GenyDL is a modern, high-performance download manager built with **C++23**, **Qt 6**, and **QML**, designed for speed, reliability, clean architecture, and a polished desktop experience — with future integration for the **Geny token ecosystem** and blockchain-powered features.
+Tondar is a modern, high-performance download manager built with **C++23**, **Qt 6**, and **QML**, designed for speed, reliability, clean architecture, and a polished desktop experience — with future integration for the **Geny token ecosystem** and blockchain-powered features.
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 ![C++](https://img.shields.io/badge/C%2B%2B%20Version-23-blue.svg)
 ![Qt](https://img.shields.io/badge/Qt-6.8%2B-brightgreen.svg)
 ![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen.svg)
 
-![GenyDL Preview](https://github.com/user-attachments/assets/1cb69065-2441-49e3-ad98-dceca633f97f)
-
 ## 🚧 Project Status
 
-> GenyDL is currently under active development.  
+> Tondar is currently under active development.  
 > Version **1.0.0** is the first milestone release, focused on the desktop UI, core download workflow, packaging, and runtime foundation.
 
 ## Highlights
@@ -45,9 +43,7 @@ GenyDL is a modern, high-performance download manager built with **C++23**, **Qt
 - More advanced mirror failover and checksum verification workflows
 
 ## Shots
-<img width="1350" height="897" alt="Screenshot 2026-05-11 at 10 34 01" src="https://github.com/user-attachments/assets/f447ecdf-7acb-45ae-808e-7955d1c06634" />
-<img width="1316" height="869" alt="Screenshot 2026-05-11 at 10 34 14" src="https://github.com/user-attachments/assets/490fa9ad-a1b6-4c8c-ad85-c0caa8efc7c3" />
-<img width="1331" height="878" alt="Screenshot 2026-05-11 at 10 34 38" src="https://github.com/user-attachments/assets/f92dddab-f3a1-41d5-bd75-50a2fe1036d5" />
+Soon...
 
 ## Tech Stack
 
