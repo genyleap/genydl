@@ -36,7 +36,7 @@ GenyDL is a modern, high-performance download manager built with **C++23**, **Qt
 
 - Speed and network tester module
 - Auto platform and file type detector
-- YouTube and social media download support
+- Stream and social media download support
 - More advanced mirror failover and checksum verification workflows
 
 ## Shots

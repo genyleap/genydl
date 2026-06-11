@@ -417,9 +417,9 @@ jobs:
 
           wget -O /tmp/llvm.sh https://apt.llvm.org/llvm.sh
           chmod +x /tmp/llvm.sh
-          /tmp/llvm.sh 19
+          /tmp/llvm.sh 20
 
-          apt-get install -y clang-19 clang-tools-19 lld-19 llvm-19 ninja-build
+          apt-get install -y clang-20 clang-tools-20 lld-20 llvm-20 ninja-build
 
           NINJA_VERSION="1.13.1"
           wget -O /tmp/ninja-linux.zip "https://github.com/ninja-build/ninja/releases/download/v${NINJA_VERSION}/ninja-linux.zip"
@@ -427,9 +427,9 @@ jobs:
           chmod +x /usr/local/bin/ninja
 
           echo "/usr/local/bin" >> "$GITHUB_PATH"
-          echo "CC=/usr/bin/clang-19" >> "$GITHUB_ENV"
-          echo "CXX=/usr/bin/clang++-19" >> "$GITHUB_ENV"
-          echo "CLANG_SCAN_DEPS=/usr/bin/clang-scan-deps-19" >> "$GITHUB_ENV"
+          echo "CC=/usr/bin/clang-20" >> "$GITHUB_ENV"
+          echo "CXX=/usr/bin/clang++-20" >> "$GITHUB_ENV"
+          echo "CLANG_SCAN_DEPS=/usr/bin/clang-scan-deps-20" >> "$GITHUB_ENV"
           echo "APPIMAGE_EXTRACT_AND_RUN=1" >> "$GITHUB_ENV"
 
       - name: Configure Linux x64
@@ -653,13 +653,13 @@ jobs:
 
           wget -O /tmp/llvm.sh https://apt.llvm.org/llvm.sh
           chmod +x /tmp/llvm.sh
-          sudo /tmp/llvm.sh 19
+          sudo /tmp/llvm.sh 20
 
-          sudo apt-get install -y clang-19 clang-tools-19 lld-19 llvm-19 ninja-build
+          sudo apt-get install -y clang-20 clang-tools-20 lld-20 llvm-20 ninja-build
 
-          echo "CC=/usr/bin/clang-19" >> "$GITHUB_ENV"
-          echo "CXX=/usr/bin/clang++-19" >> "$GITHUB_ENV"
-          echo "CLANG_SCAN_DEPS=/usr/bin/clang-scan-deps-19" >> "$GITHUB_ENV"
+          echo "CC=/usr/bin/clang-20" >> "$GITHUB_ENV"
+          echo "CXX=/usr/bin/clang++-20" >> "$GITHUB_ENV"
+          echo "CLANG_SCAN_DEPS=/usr/bin/clang-scan-deps-20" >> "$GITHUB_ENV"
           echo "APPIMAGE_EXTRACT_AND_RUN=1" >> "$GITHUB_ENV"
 
       - name: Install Qt Linux ARM64
@@ -910,6 +910,7 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: GenyDL ${{ github.ref_name }}
+          body_path: release-notes/${{ github.ref_name }}.md
           files: release-artifacts/*
           fail_on_unmatched_files: true
           generate_release_notes: true
