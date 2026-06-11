@@ -685,7 +685,6 @@ set(qml_controls
     ui/Controls/Switch.qml
     ui/Controls/MiniButton.qml
     ui/Controls/TabBar.qml
-    ui/Controls/ToolTip.qml
     ui/Controls/TabBarButton.qml
     ui/Controls/TabButton.qml
     ui/Controls/TabButtonMini.qml
