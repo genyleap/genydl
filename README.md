@@ -3,6 +3,7 @@
 **Next-Gen, Ultra-Fast, and Reliable Download Manager**
 
 GenyDL is a modern, high-performance download manager built with **C++23**, **Qt 6**, and **QML**, designed for speed, reliability, clean architecture, and a polished desktop experience — featuring built-in support for the **Geny blockchain ecosystem**, IPFS, and BitTorrent networks.
+<img width="1600" height="640" alt="background" src="https://github.com/user-attachments/assets/13261f2a-4a8e-4f1b-be27-9afe84990bfd" />
 
 ![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
 ![C++](https://img.shields.io/badge/C%2B%2B%20Version-23-blue.svg)
@@ -40,7 +41,9 @@ GenyDL is a modern, high-performance download manager built with **C++23**, **Qt
 - More advanced mirror failover and checksum verification workflows
 
 ## Shots
-Soon...
+<img width="1302" height="850" alt="Screenshot 2026-06-12 at 00 50 38" src="https://github.com/user-attachments/assets/9a2117fb-25e7-4a54-abec-6e111e5bbb3e" />
+<img width="1298" height="847" alt="Screenshot 2026-06-12 at 00 50 49" src="https://github.com/user-attachments/assets/3195ae45-e3b6-4af6-a1a2-a54b9aa510bf" />
+
 
 ## Tech Stack
 
