@@ -28,6 +28,7 @@ module;
 #include <QVector>
 
 #ifndef Q_MOC_RUN
+#  include <QtCore/qtmochelpers.h>
 export module genydl.core.downloadmodel;
 import genydl.core.downloadertask;
 import genydl.core.torrenttask;

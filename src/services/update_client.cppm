@@ -37,6 +37,9 @@ module;
 #include <QJsonArray>
 #include <QJsonDocument>
 
+#ifndef Q_MOC_RUN
+#  include <QtCore/qtmochelpers.h>
+#endif
 export module genydl.services.update_client;
 
 #ifdef Q_MOC_RUN

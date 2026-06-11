@@ -39,6 +39,7 @@ module;
 #include <QElapsedTimer>
 
 #ifndef Q_MOC_RUN
+#  include <QtCore/qtmochelpers.h>
 export module genydl.core.downloadmanager;
 import genydl.core.downloadertask;
 import genydl.core.downloadmodel;

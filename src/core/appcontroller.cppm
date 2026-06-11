@@ -19,6 +19,7 @@ module;
 #include <QWindow>
 
 #ifndef Q_MOC_RUN
+#  include <QtCore/qtmochelpers.h>
 export module genydl.core.appcontroller;
 #endif
 

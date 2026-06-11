@@ -36,6 +36,7 @@ module;
 #include <QVariantList>
 
 #ifndef Q_MOC_RUN
+#  include <QtCore/qtmochelpers.h>
 export module genydl.core.downloadertask;
 #endif
 

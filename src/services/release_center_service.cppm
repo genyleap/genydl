@@ -26,6 +26,7 @@ module;
 #include <QVector>
 
 #ifndef Q_MOC_RUN
+#  include <QtCore/qtmochelpers.h>
 export module genydl.services.release_center_service;
 import genydl.services.github_release_service;
 import genydl.utils.version_utils;
