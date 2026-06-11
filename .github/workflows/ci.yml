@@ -1,4 +1,4 @@
-name: GENYDL CI
+name: GenyDL CI
 
 on:
   push:
@@ -9,49 +9,45 @@ on:
 permissions:
   contents: write
 
+env:
+  CMAKE_VERSION: "4.2.3"
+
 jobs:
-  build:
-    name: Build ${{ matrix.name }}
+  desktop:
+    name: Build ${{ matrix.artifact_name }}
     runs-on: ${{ matrix.os }}
 
     strategy:
       fail-fast: false
       matrix:
         include:
-          # macOS Apple Silicon
-          - name: macos-arm64
+          - artifact_name: GenyDL-macos-arm64
             os: macos-14
             qt_version: "6.11.0"
             qt_arch: clang_64
             target_arch: arm64
             macos_deployment_target: "15.1"
 
-          # macOS Intel
-          - name: macos-x86_64
+          - artifact_name: GenyDL-macos-x86_64
             os: macos-15-intel
             qt_version: "6.11.0"
             qt_arch: clang_64
             target_arch: x86_64
             macos_deployment_target: "15.1"
 
-          # Windows Intel/AMD 64-bit
-          - name: windows-x64
-            os: windows-latest
+          - artifact_name: GenyDL-windows-x64
+            os: windows-2022
             qt_version: "6.10.3"
             qt_arch: win64_msvc2022_64
             cmake_arch: x64
             target_arch: x86_64
 
-          # Windows ARM64
-          - name: windows-arm64
+          - artifact_name: GenyDL-windows-arm64
             os: windows-11-arm
             qt_version: "6.10.3"
             qt_arch: win64_msvc2022_arm64
             cmake_arch: ARM64
             target_arch: arm64
-
-    env:
-      CMAKE_VERSION: "4.2.3"
 
     steps:
       - name: Checkout
@@ -98,24 +94,6 @@ jobs:
           SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
           echo "SDKROOT=${SDKROOT}" >> "$GITHUB_ENV"
 
-      - name: Print macOS tool versions
-        if: runner.os == 'macOS'
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          echo "QT_ROOT_DIR=${QT_ROOT_DIR}"
-          echo "CC=${CC}"
-          echo "CXX=${CXX}"
-          echo "CLANG_SCAN_DEPS=${CLANG_SCAN_DEPS}"
-          echo "SDKROOT=${SDKROOT}"
-
-          "${CXX}" --version
-          "${CLANG_SCAN_DEPS}" --version
-          cmake --version
-          ninja --version
-          xcrun --sdk macosx --show-sdk-version
-
       - name: Configure MSVC
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
@@ -131,8 +109,11 @@ jobs:
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_PREFIX_PATH="${QT_ROOT_DIR}" \
+            -DQt6_DIR="${QT_ROOT_DIR}/lib/cmake/Qt6" \
             -DCMAKE_C_COMPILER="${CC}" \
             -DCMAKE_CXX_COMPILER="${CXX}" \
+            -DCMAKE_CXX_STANDARD=23 \
+            -DCMAKE_CXX_STANDARD_REQUIRED=ON \
             -DCMAKE_CXX_SCAN_FOR_MODULES=ON \
             -DCMAKE_CXX_COMPILER_CLANG_SCAN_DEPS="${CLANG_SCAN_DEPS}" \
             -DCMAKE_OSX_DEPLOYMENT_TARGET="${{ matrix.macos_deployment_target }}" \
@@ -152,6 +133,9 @@ jobs:
             -G "Visual Studio 17 2022" -A "${{ matrix.cmake_arch }}" `
             -DCMAKE_CONFIGURATION_TYPES="Release" `
             -DCMAKE_PREFIX_PATH="${env:QT_ROOT_DIR}" `
+            -DQt6_DIR="${env:QT_ROOT_DIR}/lib/cmake/Qt6" `
+            -DCMAKE_CXX_STANDARD=23 `
+            -DCMAKE_CXX_STANDARD_REQUIRED=ON `
             -DCMAKE_CXX_SCAN_FOR_MODULES=ON `
             -DGENYDL_USE_MODULES=ON `
             -DGENYDL_TARGET_ARCH="${{ matrix.target_arch }}" `
@@ -240,7 +224,9 @@ jobs:
           mkdir -p "$OUT_DIR"
 
           echo "Cleaning previous DMG..."
+          hdiutil detach "/Volumes/GenyDL" -force || true
           rm -f "$DMG_PATH"
+          sleep 2
 
           echo "Cleaning extended attributes..."
           xattr -cr "$APP" || true
@@ -253,25 +239,21 @@ jobs:
           codesign --remove-signature "$APP" || true
 
           echo "Ad-hoc signing nested Mach-O files..."
-
           while IFS= read -r file_path; do
             if file "$file_path" | grep -q "Mach-O"; then
-              echo "Signing Mach-O: $file_path"
               codesign --force --sign - "$file_path" || true
             fi
           done < <(find "$APP/Contents" -type f)
 
           echo "Ad-hoc signing frameworks..."
           while IFS= read -r framework_path; do
-            echo "Signing framework: $framework_path"
             codesign --force --sign - "$framework_path" || true
           done < <(find "$APP/Contents" -type d -name "*.framework" | sort -r)
 
           echo "Ad-hoc signing bundles/plugins..."
           while IFS= read -r bundle_path; do
-            echo "Signing bundle/plugin: $bundle_path"
             codesign --force --sign - "$bundle_path" || true
-          done < <(find "$APP/Contents" -type d | grep -E '\.(bundle|plugin|appex)$' | sort -r)
+          done < <(find "$APP/Contents" \( -name "*.bundle" -o -name "*.plugin" -o -name "*.appex" \) -type d | sort -r)
 
           echo "Signing main app..."
           codesign --force --deep --sign - "$APP"
@@ -284,9 +266,11 @@ jobs:
 
           echo "Creating clean DMG..."
           STAGING="$(mktemp -d)"
-
           cp -R "$APP" "$STAGING/GenyDL.app"
           ln -s /Applications "$STAGING/Applications"
+
+          hdiutil detach "/Volumes/GenyDL" -force || true
+          sleep 2
 
           hdiutil create \
             -volname "GenyDL" \
@@ -360,41 +344,572 @@ jobs:
             exit 1
           }
 
-      - name: Package
-        if: runner.os != 'macOS'
-        run: cpack --config build/CPackConfig.cmake -C Release
+      - name: Package Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cpack --config build/CPackConfig.cmake -C Release
 
-      - name: Collect packages
+      - name: Collect desktop packages
         shell: bash
         run: |
           set -euo pipefail
 
           mkdir -p artifacts
 
-          find build/final -type f -name "*.dmg" -exec cp {} artifacts/ \;
-          find build/final -type f -name "*.zip" -exec cp {} artifacts/ \;
-          find build/final -type f -name "*.exe" -exec cp {} artifacts/ \;
-          find build/final -type f -name "*.tar.gz" -exec cp {} artifacts/ \;
-          find build/final -type f -name "*.tgz" -exec cp {} artifacts/ \;
+          find build/final -type f -name "*.dmg" -exec cp {} artifacts/ \; || true
+          find build/final -type f -name "*.zip" -exec cp {} artifacts/ \; || true
+          find build/final -type f -name "*.exe" -exec cp {} artifacts/ \; || true
 
           if [ -z "$(find artifacts -type f -print -quit)" ]; then
-            echo "No packages found. Listing recent build files:"
+            echo "No desktop artifacts found. Listing recent build files:"
             find build -maxdepth 6 -type f | sort | tail -300
             exit 1
           fi
 
           ls -lah artifacts
 
-      - name: Upload artifact
+      - name: Upload desktop artifact
         uses: actions/upload-artifact@v4
         with:
-          name: GenyDL-${{ matrix.name }}
+          name: ${{ matrix.artifact_name }}
           path: artifacts/*
 
-      - name: Release
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
+  linux-x64:
+    name: Build GenyDL-linux-x86_64
+    runs-on: ubuntu-latest
+
+    container:
+      image: a12e/docker-qt:6.8-linux
+      options: --user 0
+
+    env:
+      TARGET_ARCH: x86_64
+      APPIMAGE_ARCH: x86_64
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare Linux x64 toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          apt-get update
+          apt-get install -y \
+            locales \
+            wget curl gnupg lsb-release software-properties-common ca-certificates \
+            unzip zip file tar gzip patchelf desktop-file-utils fakeroot fuse libfuse2 imagemagick \
+            libgl1 libgl1-mesa-dev libegl1 libegl1-mesa-dev \
+            libxkbcommon0 libxkbcommon-dev libxkbcommon-x11-0 libxkbcommon-x11-dev \
+            libxcb1 libxcb1-dev libxcb-cursor0 libxcb-cursor-dev libxcb-icccm4 libxcb-icccm4-dev \
+            libxcb-image0 libxcb-image0-dev libxcb-keysyms1 libxcb-keysyms1-dev \
+            libxcb-render-util0 libxcb-render-util0-dev libxcb-shape0 libxcb-shape0-dev \
+            libxcb-xfixes0 libxcb-xfixes0-dev libfontconfig1 libfontconfig1-dev \
+            libfreetype6 libfreetype6-dev libglib2.0-0 libglib2.0-dev \
+            libharfbuzz0b libharfbuzz-dev libpng16-16 libpng-dev zsync
+
+          locale-gen C.UTF-8 || true
+          update-locale LANG=C.UTF-8 || true
+
+          wget -O /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+          chmod +x /tmp/llvm.sh
+          /tmp/llvm.sh 18
+
+          apt-get install -y clang-18 clang-tools-18 lld-18 llvm-18 ninja-build
+
+          NINJA_VERSION="1.13.1"
+          wget -O /tmp/ninja-linux.zip "https://github.com/ninja-build/ninja/releases/download/v${NINJA_VERSION}/ninja-linux.zip"
+          unzip -o /tmp/ninja-linux.zip -d /usr/local/bin
+          chmod +x /usr/local/bin/ninja
+
+          echo "/usr/local/bin" >> "$GITHUB_PATH"
+          echo "CC=/usr/bin/clang-18" >> "$GITHUB_ENV"
+          echo "CXX=/usr/bin/clang++-18" >> "$GITHUB_ENV"
+          echo "CLANG_SCAN_DEPS=/usr/bin/clang-scan-deps-18" >> "$GITHUB_ENV"
+          echo "APPIMAGE_EXTRACT_AND_RUN=1" >> "$GITHUB_ENV"
+
+      - name: Configure Linux x64
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER="${CC}" \
+            -DCMAKE_CXX_COMPILER="${CXX}" \
+            -DCMAKE_CXX_STANDARD=23 \
+            -DCMAKE_CXX_STANDARD_REQUIRED=ON \
+            -DCMAKE_CXX_COMPILER_CLANG_SCAN_DEPS="${CLANG_SCAN_DEPS}" \
+            -DGENYDL_USE_MODULES=ON \
+            -DGENYDL_LLVM_AUTO_SCAN=ON \
+            -DGENYDL_TARGET_OS=linux \
+            -DGENYDL_TARGET_ARCH="${TARGET_ARCH}" \
+            -DGENYDL_TARGET_BUILD_ARCH="${TARGET_ARCH}" \
+            -DGENYDL_LINUX_INSTALL_DEPLOY=OFF
+
+      - name: Build Linux x64
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build build --config Release --parallel
+
+      - name: Create Linux x64 AppImage
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION_MAJOR="$(awk '/set\(PROJECT_VERSION_MAJOR / { gsub(/[^0-9]/, "", $0); print $0; exit }' CMakeLists.txt)"
+            VERSION_MINOR="$(awk '/set\(PROJECT_VERSION_MINOR / { gsub(/[^0-9]/, "", $0); print $0; exit }' CMakeLists.txt)"
+            VERSION_PATCH="$(awk '/set\(PROJECT_VERSION_PATCH / { gsub(/[^0-9]/, "", $0); print $0; exit }' CMakeLists.txt)"
+            VERSION="${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}"
+          fi
+
+          OUT_DIR="build/final/linux-${TARGET_ARCH}"
+          mkdir -p "${OUT_DIR}"
+
+          rm -rf AppDir tools
+          mkdir -p AppDir tools
+
+          DESTDIR="${PWD}/AppDir" cmake --install build --config Release --prefix /usr
+
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/512x512/apps
+
+          if [[ ! -f AppDir/usr/share/applications/genydl.desktop ]]; then
+            printf '%s\n' \
+              '[Desktop Entry]' \
+              'Type=Application' \
+              'Name=GenyDL' \
+              'Comment=GenyDL Download Manager' \
+              'Exec=GenyDL' \
+              'Icon=genydl' \
+              'Terminal=false' \
+              'Categories=Network;Utility;Qt;' \
+              > AppDir/usr/share/applications/genydl.desktop
+          fi
+
+          # The icon is installed by cmake --install; regenerate from the root
+          # logo only if it is missing.
+          if [[ ! -f AppDir/usr/share/icons/hicolor/512x512/apps/genydl.png ]]; then
+            if command -v magick >/dev/null 2>&1; then
+              magick GenyDL.png -resize 512x512! AppDir/usr/share/icons/hicolor/512x512/apps/genydl.png
+            else
+              convert GenyDL.png -resize 512x512! AppDir/usr/share/icons/hicolor/512x512/apps/genydl.png
+            fi
+          fi
+
+          chmod +x AppDir/usr/bin/GenyDL || true
+          chmod +x AppDir/usr/bin/GenyDLUpdaterHelper || true
+
+          wget -O tools/linuxdeploy.AppImage "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-${APPIMAGE_ARCH}.AppImage"
+          wget -O tools/linuxdeploy-plugin-qt.AppImage "https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-${APPIMAGE_ARCH}.AppImage"
+
+          chmod +x tools/linuxdeploy.AppImage tools/linuxdeploy-plugin-qt.AppImage
+
+          QMAKE_BIN="$(command -v qmake6 || true)"
+          if [[ -z "${QMAKE_BIN}" ]]; then
+            QMAKE_BIN="$(command -v qmake || true)"
+          fi
+          if [[ -z "${QMAKE_BIN}" ]]; then
+            QMAKE_BIN="$(find /opt /usr /root -type f \( -name qmake6 -o -name qmake \) 2>/dev/null | head -n 1 || true)"
+          fi
+          if [[ -z "${QMAKE_BIN}" || ! -x "${QMAKE_BIN}" ]]; then
+            echo "qmake/qmake6 not found."
+            exit 1
+          fi
+
+          QT_PREFIX="$("${QMAKE_BIN}" -query QT_INSTALL_PREFIX)"
+          QT_LIB_DIR="$("${QMAKE_BIN}" -query QT_INSTALL_LIBS)"
+          export LD_LIBRARY_PATH="${QT_LIB_DIR}:${QT_PREFIX}/lib:${LD_LIBRARY_PATH:-}"
+
+          export QMAKE="${QMAKE_BIN}"
+          export QML_SOURCES_PATHS="${PWD}/ui"
+          export EXTRA_QT_PLUGINS="platforms/libqxcb.so;imageformats/libqsvg.so"
+          export OUTPUT="GenyDL-${VERSION}-linux-${TARGET_ARCH}.AppImage"
+          export APPIMAGE_EXTRACT_AND_RUN=1
+
+          ./tools/linuxdeploy.AppImage \
+            --appdir AppDir \
+            --desktop-file AppDir/usr/share/applications/genydl.desktop \
+            --icon-file AppDir/usr/share/icons/hicolor/512x512/apps/genydl.png \
+            --plugin qt \
+            --output appimage
+
+          test -f "${OUTPUT}"
+          mv "${OUTPUT}" "${OUT_DIR}/${OUTPUT}"
+          (
+            cd "${OUT_DIR}"
+            sha256sum "GenyDL-${VERSION}-linux-${TARGET_ARCH}.AppImage" \
+              > "GenyDL-${VERSION}-linux-${TARGET_ARCH}.AppImage.sha256"
+          )
+
+          ls -lah "${OUT_DIR}"
+
+      - name: Verify Linux x64 AppImage
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APPIMAGE="$(find build/final -type f -name "*.AppImage" | head -n 1)"
+          test -f "${APPIMAGE}"
+          chmod +x "${APPIMAGE}"
+
+          rm -rf /tmp/genydl-appimage-check
+          mkdir -p /tmp/genydl-appimage-check
+          cp "${APPIMAGE}" /tmp/genydl-appimage-check/
+          cd /tmp/genydl-appimage-check
+
+          "./$(basename "${APPIMAGE}")" --appimage-extract >/dev/null
+
+          : > /tmp/genydl-linux-x64-ldd.txt
+          for name in GenyDL GenyDLUpdaterHelper; do
+            BIN="$(find squashfs-root -type f -name "${name}" | head -n 1 || true)"
+            if [[ -z "${BIN}" ]]; then
+              echo "Missing expected binary: ${name}"
+              exit 1
+            fi
+            echo "==== ${BIN} ====" | tee -a /tmp/genydl-linux-x64-ldd.txt
+            ldd "${BIN}" | tee -a /tmp/genydl-linux-x64-ldd.txt || true
+          done
+
+          if grep -q "not found" /tmp/genydl-linux-x64-ldd.txt; then
+            grep "not found" /tmp/genydl-linux-x64-ldd.txt
+            exit 1
+          fi
+
+      - name: Collect Linux x64 packages
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p artifacts
+
+          find build/final -type f -name "*.AppImage" -exec cp {} artifacts/ \; || true
+          find build/final -type f -name "*.AppImage.sha256" -exec cp {} artifacts/ \; || true
+
+          if [ -z "$(find artifacts -type f -print -quit)" ]; then
+            echo "No Linux x64 artifacts found."
+            find build -maxdepth 8 -type f | sort | tail -300
+            exit 1
+          fi
+
+          ls -lah artifacts
+
+      - name: Upload Linux x64 artifact
+        uses: actions/upload-artifact@v4
         with:
-          files: artifacts/*
+          name: GenyDL-linux-x86_64
+          path: artifacts/*
+
+  linux-arm64:
+    name: Build GenyDL-linux-arm64
+    runs-on: ubuntu-24.04-arm
+
+    env:
+      QT_VERSION: "6.11.0"
+      TARGET_ARCH: arm64
+      APPIMAGE_ARCH: aarch64
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install CMake
+        uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: ${{ env.CMAKE_VERSION }}
+
+      - name: Prepare Linux ARM64 toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          sudo apt-get update
+          sudo apt-get install -y \
+            locales \
+            python3 python3-pip python3-venv imagemagick \
+            wget curl gnupg lsb-release software-properties-common ca-certificates \
+            unzip zip p7zip-full file tar gzip patchelf desktop-file-utils fakeroot fuse libfuse2 \
+            libgl1 libgl1-mesa-dev libegl1 libegl1-mesa-dev \
+            libxkbcommon0 libxkbcommon-dev libxkbcommon-x11-0 libxkbcommon-x11-dev \
+            libxcb1 libxcb1-dev libxcb-cursor0 libxcb-cursor-dev libxcb-icccm4 libxcb-icccm4-dev \
+            libxcb-image0 libxcb-image0-dev libxcb-keysyms1 libxcb-keysyms1-dev \
+            libxcb-render-util0 libxcb-render-util0-dev libxcb-shape0 libxcb-shape0-dev \
+            libxcb-xfixes0 libxcb-xfixes0-dev libfontconfig1 libfontconfig1-dev \
+            libfreetype6 libfreetype6-dev libglib2.0-0 libglib2.0-dev \
+            libharfbuzz0b libharfbuzz-dev libpng16-16 libpng-dev zsync
+
+          sudo locale-gen C.UTF-8 || true
+          sudo update-locale LANG=C.UTF-8 || true
+
+          wget -O /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+          chmod +x /tmp/llvm.sh
+          sudo /tmp/llvm.sh 18
+
+          sudo apt-get install -y clang-18 clang-tools-18 lld-18 llvm-18 ninja-build
+
+          echo "CC=/usr/bin/clang-18" >> "$GITHUB_ENV"
+          echo "CXX=/usr/bin/clang++-18" >> "$GITHUB_ENV"
+          echo "CLANG_SCAN_DEPS=/usr/bin/clang-scan-deps-18" >> "$GITHUB_ENV"
+          echo "APPIMAGE_EXTRACT_AND_RUN=1" >> "$GITHUB_ENV"
+
+      - name: Install Qt Linux ARM64
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python3 -m pip install --user --upgrade pip
+          python3 -m pip install --user aqtinstall
+
+          export PATH="${HOME}/.local/bin:${PATH}"
+
+          aqt list-qt linux_arm64 desktop || true
+
+          aqt install-qt linux_arm64 desktop "${QT_VERSION}" linux_gcc_arm64 -O "${HOME}/Qt"
+
+          QT_CONFIG="$(find "${HOME}/Qt" -type f -path "*/lib/cmake/Qt6/Qt6Config.cmake" | head -n 1)"
+
+          if [[ -z "${QT_CONFIG}" || ! -f "${QT_CONFIG}" ]]; then
+            echo "Qt ARM64 install failed."
+            find "${HOME}/Qt" -maxdepth 6 -type f | sort || true
+            exit 1
+          fi
+
+          QT_ROOT="$(dirname "$(dirname "$(dirname "$(dirname "${QT_CONFIG}")")")")"
+
+          echo "QT_ROOT_DIR=${QT_ROOT}" >> "$GITHUB_ENV"
+          echo "${QT_ROOT}/bin" >> "$GITHUB_PATH"
+
+          echo "Qt ARM64 installed at: ${QT_ROOT}"
+
+      - name: Configure Linux ARM64
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="${QT_ROOT_DIR}" \
+            -DQt6_DIR="${QT_ROOT_DIR}/lib/cmake/Qt6" \
+            -DCMAKE_C_COMPILER="${CC}" \
+            -DCMAKE_CXX_COMPILER="${CXX}" \
+            -DCMAKE_CXX_STANDARD=23 \
+            -DCMAKE_CXX_STANDARD_REQUIRED=ON \
+            -DCMAKE_CXX_COMPILER_CLANG_SCAN_DEPS="${CLANG_SCAN_DEPS}" \
+            -DGENYDL_USE_MODULES=ON \
+            -DGENYDL_LLVM_AUTO_SCAN=ON \
+            -DGENYDL_TARGET_OS=linux \
+            -DGENYDL_TARGET_ARCH="${TARGET_ARCH}" \
+            -DGENYDL_TARGET_BUILD_ARCH="${TARGET_ARCH}" \
+            -DGENYDL_LINUX_INSTALL_DEPLOY=OFF
+
+      - name: Build Linux ARM64
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build build --config Release --parallel
+
+      - name: Create Linux ARM64 AppImage
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION_MAJOR="$(awk '/set\(PROJECT_VERSION_MAJOR / { gsub(/[^0-9]/, "", $0); print $0; exit }' CMakeLists.txt)"
+            VERSION_MINOR="$(awk '/set\(PROJECT_VERSION_MINOR / { gsub(/[^0-9]/, "", $0); print $0; exit }' CMakeLists.txt)"
+            VERSION_PATCH="$(awk '/set\(PROJECT_VERSION_PATCH / { gsub(/[^0-9]/, "", $0); print $0; exit }' CMakeLists.txt)"
+            VERSION="${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}"
+          fi
+
+          OUT_DIR="build/final/linux-${TARGET_ARCH}"
+          mkdir -p "${OUT_DIR}"
+
+          rm -rf AppDir tools
+          mkdir -p AppDir tools
+
+          DESTDIR="${PWD}/AppDir" cmake --install build --config Release --prefix /usr
+
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/512x512/apps
+
+          if [[ ! -f AppDir/usr/share/applications/genydl.desktop ]]; then
+            printf '%s\n' \
+              '[Desktop Entry]' \
+              'Type=Application' \
+              'Name=GenyDL' \
+              'Comment=GenyDL Download Manager' \
+              'Exec=GenyDL' \
+              'Icon=genydl' \
+              'Terminal=false' \
+              'Categories=Network;Utility;Qt;' \
+              > AppDir/usr/share/applications/genydl.desktop
+          fi
+
+          # The icon is installed by cmake --install; regenerate from the root
+          # logo only if it is missing.
+          if [[ ! -f AppDir/usr/share/icons/hicolor/512x512/apps/genydl.png ]]; then
+            if command -v magick >/dev/null 2>&1; then
+              magick GenyDL.png -resize 512x512! AppDir/usr/share/icons/hicolor/512x512/apps/genydl.png
+            else
+              convert GenyDL.png -resize 512x512! AppDir/usr/share/icons/hicolor/512x512/apps/genydl.png
+            fi
+          fi
+
+          chmod +x AppDir/usr/bin/GenyDL || true
+          chmod +x AppDir/usr/bin/GenyDLUpdaterHelper || true
+
+          wget -O tools/linuxdeploy.AppImage "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-${APPIMAGE_ARCH}.AppImage"
+          wget -O tools/linuxdeploy-plugin-qt.AppImage "https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-${APPIMAGE_ARCH}.AppImage"
+
+          chmod +x tools/linuxdeploy.AppImage tools/linuxdeploy-plugin-qt.AppImage
+
+          QMAKE_BIN="${QT_ROOT_DIR}/bin/qmake6"
+          if [[ ! -x "${QMAKE_BIN}" ]]; then
+            QMAKE_BIN="${QT_ROOT_DIR}/bin/qmake"
+          fi
+          if [[ ! -x "${QMAKE_BIN}" ]]; then
+            echo "qmake/qmake6 not found."
+            find "${QT_ROOT_DIR}" -type f \( -name qmake6 -o -name qmake \) || true
+            exit 1
+          fi
+
+          QT_PREFIX="$("${QMAKE_BIN}" -query QT_INSTALL_PREFIX)"
+          QT_LIB_DIR="$("${QMAKE_BIN}" -query QT_INSTALL_LIBS)"
+          export LD_LIBRARY_PATH="${QT_LIB_DIR}:${QT_PREFIX}/lib:${LD_LIBRARY_PATH:-}"
+
+          export QMAKE="${QMAKE_BIN}"
+          export QML_SOURCES_PATHS="${PWD}/ui"
+          export EXTRA_QT_PLUGINS="platforms/libqxcb.so;imageformats/libqsvg.so"
+          export OUTPUT="GenyDL-${VERSION}-linux-${TARGET_ARCH}.AppImage"
+          export APPIMAGE_EXTRACT_AND_RUN=1
+
+          ./tools/linuxdeploy.AppImage \
+            --appdir AppDir \
+            --desktop-file AppDir/usr/share/applications/genydl.desktop \
+            --icon-file AppDir/usr/share/icons/hicolor/512x512/apps/genydl.png \
+            --plugin qt \
+            --output appimage
+
+          test -f "${OUTPUT}"
+          mv "${OUTPUT}" "${OUT_DIR}/${OUTPUT}"
+          (
+            cd "${OUT_DIR}"
+            sha256sum "GenyDL-${VERSION}-linux-${TARGET_ARCH}.AppImage" \
+              > "GenyDL-${VERSION}-linux-${TARGET_ARCH}.AppImage.sha256"
+          )
+
+          ls -lah "${OUT_DIR}"
+
+      - name: Verify Linux ARM64 AppImage
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APPIMAGE="$(find build/final -type f -name "*.AppImage" | head -n 1)"
+          test -f "${APPIMAGE}"
+          chmod +x "${APPIMAGE}"
+
+          rm -rf /tmp/genydl-appimage-check
+          mkdir -p /tmp/genydl-appimage-check
+          cp "${APPIMAGE}" /tmp/genydl-appimage-check/
+          cd /tmp/genydl-appimage-check
+
+          "./$(basename "${APPIMAGE}")" --appimage-extract >/dev/null
+
+          : > /tmp/genydl-linux-arm64-ldd.txt
+          for name in GenyDL GenyDLUpdaterHelper; do
+            BIN="$(find squashfs-root -type f -name "${name}" | head -n 1 || true)"
+            if [[ -z "${BIN}" ]]; then
+              echo "Missing expected binary: ${name}"
+              exit 1
+            fi
+            echo "==== ${BIN} ====" | tee -a /tmp/genydl-linux-arm64-ldd.txt
+            ldd "${BIN}" | tee -a /tmp/genydl-linux-arm64-ldd.txt || true
+          done
+
+          if grep -q "not found" /tmp/genydl-linux-arm64-ldd.txt; then
+            grep "not found" /tmp/genydl-linux-arm64-ldd.txt
+            exit 1
+          fi
+
+      - name: Collect Linux ARM64 packages
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p artifacts
+
+          find build/final -type f -name "*.AppImage" -exec cp {} artifacts/ \; || true
+          find build/final -type f -name "*.AppImage.sha256" -exec cp {} artifacts/ \; || true
+
+          if [ -z "$(find artifacts -type f -print -quit)" ]; then
+            echo "No Linux ARM64 artifacts found."
+            find build -maxdepth 8 -type f | sort | tail -300
+            exit 1
+          fi
+
+          ls -lah artifacts
+
+      - name: Upload Linux ARM64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GenyDL-linux-arm64
+          path: artifacts/*
+
+  release:
+    name: Publish GitHub Release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs:
+      - desktop
+      - linux-x64
+      - linux-arm64
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+          merge-multiple: true
+
+      - name: List release files
+        shell: bash
+        run: |
+          set -euo pipefail
+          find release-artifacts -type f | sort
+
+      - name: Delete existing manual release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release delete "${GITHUB_REF_NAME}" --cleanup-tag=false --yes || true
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: GenyDL ${{ github.ref_name }}
+          files: release-artifacts/*
           fail_on_unmatched_files: true
           generate_release_notes: true

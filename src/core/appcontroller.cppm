@@ -130,6 +130,17 @@ private:
     //!< @brief Refresh tray action labels.
     void updateTrayActions();
 
+    /**
+     * @brief Post a transient tray balloon when it is safe to do so.
+     * @param title Balloon title.
+     * @param message Balloon body.
+     * @param msecs Display duration in milliseconds.
+     *
+     * Centralizes every QSystemTrayIcon::showMessage() call so the macOS-only
+     * crash in the native notification image path can be avoided in one place.
+     */
+    void postTrayMessage(const QString& title, const QString& message, int msecs);
+
     //!< @brief Invoke a no-argument method on DownloadManager.
     void invokeDownloadManager(const char* method);
 

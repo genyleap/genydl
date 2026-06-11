@@ -725,7 +725,7 @@ QString GitHubReleaseService::userAgent() const
     const QString version = QCoreApplication::applicationVersion().isEmpty()
         ? QStringLiteral("0.1.0")
         : QCoreApplication::applicationVersion();
-    return QStringLiteral("GenyDLDownloadManager/%1").arg(version);
+    return QStringLiteral("GenyDL/%1").arg(version);
 }
 
 QString GitHubReleaseService::networkErrorMessage(QNetworkReply::NetworkError error, const QString& detail) const

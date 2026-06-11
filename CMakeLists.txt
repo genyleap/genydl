@@ -535,6 +535,7 @@ endfunction()
 # Sources / targets
 # -------------------------
 set(GENYDL_MODULE_IFS
+    src/ui/tray_icon_provider.cppm
     src/core/appcontroller.cppm
     src/core/downloadertask.cppm
     src/core/torrenttask.cppm
@@ -553,6 +554,7 @@ set(GENYDL_MODULE_IFS
 )
 
 set(GENYDL_IMPL_SOURCES
+    src/ui/tray_icon_provider.cpp
     src/core/appcontroller.cpp
     src/core/downloadertask.cpp
     src/core/torrenttask.cpp
@@ -743,7 +745,16 @@ set_source_files_properties(${qml_singletons_existing}
 # Resources
 # -------------------------
 set(qml_resource_files
+    # Kept for backward compatibility: existing code references :/GenyDL.png
+    # (window icon in main.cpp and qrc:/GenyDL.png in QML). Do not remove.
     GenyDL.png
+
+    # Canonical icon assets (PREFIX /, so paths become :/resources/icons/...).
+    resources/icons/app/GenyDL.png
+    resources/icons/tray/GenyDL.png
+    resources/icons/tray/GenyDLTemplate.png
+    resources/icons/tray/GenyDLTemplate@2x.png
+    resources/icons/tray/GenyDLTemplate@3x.png
 
     resources/fonts/Inter-Thin.ttf
     resources/fonts/Inter-ExtraLight.ttf

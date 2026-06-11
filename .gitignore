@@ -51,4 +51,5 @@ third-party/
 dynamics/
 CMakeLists.txt.user
 .qtcreator
+.claude
 TODO.txt

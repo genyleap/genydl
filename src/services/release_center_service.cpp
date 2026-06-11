@@ -527,7 +527,7 @@ QString GitHubReleaseTrackerService::userAgent() const
     const QString version = QCoreApplication::applicationVersion().isEmpty()
         ? QStringLiteral("0.1.0")
         : QCoreApplication::applicationVersion();
-    return QStringLiteral("GenyDLDownloadManager/%1").arg(version);
+    return QStringLiteral("GenyDL/%1").arg(version);
 }
 QString GitHubReleaseTrackerService::githubToken() const { return m_githubToken; }
 
