@@ -18,6 +18,7 @@ T.AbstractButton {
     id: control
 
     property string iconGlyph: ""
+    property bool iconBrand: false
     property bool expandable: false
     property bool expanded: false
     property bool selected: false
@@ -52,7 +53,7 @@ T.AbstractButton {
             text: control.iconGlyph
             visible: text.length > 0
 
-            font.family: FontSystem.getAwesomeSolid.name
+            font.family: control.iconBrand ? FontSystem.getAwesomeBrand.name : FontSystem.getAwesomeSolid.name
             font.weight: Font.Black
 
             font.pixelSize: control.child ? Typography.t2 : Typography.t1

@@ -32,3 +32,4 @@ DownloadDelegate 1.0 DownloadDelegate.qml
 DownloadListView 1.0 DownloadListView.qml
 DownloadDetailsDialog 1.0 DownloadDetailsDialog.qml
 DownloadDetailsWindow 1.0 DownloadDetailsWindow.qml
+DropZone 1.0 DropZone.qml

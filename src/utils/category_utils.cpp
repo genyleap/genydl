@@ -27,12 +27,17 @@ namespace {
         DownloadCategory::Subtitles,
         DownloadCategory::Archives,
         DownloadCategory::Documents,
-        DownloadCategory::Programs,
+        DownloadCategory::AppWindows,
+        DownloadCategory::AppMacOS,
+        DownloadCategory::AppLinux,
+        DownloadCategory::AppAndroid,
         DownloadCategory::DiskImages,
+        DownloadCategory::Games,
         DownloadCategory::Fonts,
         DownloadCategory::Code,
         DownloadCategory::Torrents,
         DownloadCategory::NFT,
+        DownloadCategory::Programs,
         DownloadCategory::Other
     };
     return values;
@@ -274,7 +279,6 @@ namespace {
         { "jar", DownloadCategory::Archives },
         { "war", DownloadCategory::Archives },
         { "ear", DownloadCategory::Archives },
-        { "apk", DownloadCategory::Archives },
         { "xpi", DownloadCategory::Archives },
         { "crx", DownloadCategory::Archives },
         { "vsix", DownloadCategory::Archives },
@@ -307,28 +311,83 @@ namespace {
         { "tex", DownloadCategory::Documents },
         { "log", DownloadCategory::Documents },
 
-        // Programs
-        { "exe", DownloadCategory::Programs },
-        { "msi", DownloadCategory::Programs },
-        { "msix", DownloadCategory::Programs },
-        { "appx", DownloadCategory::Programs },
-        { "appxbundle", DownloadCategory::Programs },
-        { "dmg", DownloadCategory::Programs },
-        { "pkg", DownloadCategory::Programs },
-        { "app", DownloadCategory::Programs },
-        { "deb", DownloadCategory::Programs },
-        { "rpm", DownloadCategory::Programs },
-        { "run", DownloadCategory::Programs },
-        { "bin", DownloadCategory::Programs },
-        { "sh", DownloadCategory::Programs },
-        { "bash", DownloadCategory::Programs },
-        { "command", DownloadCategory::Programs },
-        { "ps1", DownloadCategory::Programs },
-        { "bat", DownloadCategory::Programs },
-        { "cmd", DownloadCategory::Programs },
-        { "com", DownloadCategory::Programs },
-        { "scr", DownloadCategory::Programs },
-        { "wsf", DownloadCategory::Programs },
+        // Windows apps
+        { "exe", DownloadCategory::AppWindows },
+        { "msi", DownloadCategory::AppWindows },
+        { "msix", DownloadCategory::AppWindows },
+        { "msixbundle", DownloadCategory::AppWindows },
+        { "appx", DownloadCategory::AppWindows },
+        { "appxbundle", DownloadCategory::AppWindows },
+        { "bat", DownloadCategory::AppWindows },
+        { "cmd", DownloadCategory::AppWindows },
+        { "com", DownloadCategory::AppWindows },
+        { "scr", DownloadCategory::AppWindows },
+        { "ps1", DownloadCategory::AppWindows },
+        { "wsf", DownloadCategory::AppWindows },
+        { "vbs", DownloadCategory::AppWindows },
+
+        // macOS apps
+        { "dmg", DownloadCategory::AppMacOS },
+        { "pkg", DownloadCategory::AppMacOS },
+        { "app", DownloadCategory::AppMacOS },
+        { "command", DownloadCategory::AppMacOS },
+
+        // Linux apps
+        { "deb", DownloadCategory::AppLinux },
+        { "rpm", DownloadCategory::AppLinux },
+        { "run", DownloadCategory::AppLinux },
+        { "appimage", DownloadCategory::AppLinux },
+        { "snap", DownloadCategory::AppLinux },
+        { "flatpak", DownloadCategory::AppLinux },
+        { "flatpakref", DownloadCategory::AppLinux },
+        { "sh", DownloadCategory::AppLinux },
+        { "bash", DownloadCategory::AppLinux },
+        { "bin", DownloadCategory::AppLinux },
+
+        // Android apps
+        { "apk", DownloadCategory::AppAndroid },
+        { "apks", DownloadCategory::AppAndroid },
+        { "xapk", DownloadCategory::AppAndroid },
+        { "aab", DownloadCategory::AppAndroid },
+
+        // Games / console ROMs
+        { "nes", DownloadCategory::Games },
+        { "sfc", DownloadCategory::Games },
+        { "smc", DownloadCategory::Games },
+        { "snes", DownloadCategory::Games },
+        { "gb", DownloadCategory::Games },
+        { "gbc", DownloadCategory::Games },
+        { "gba", DownloadCategory::Games },
+        { "n64", DownloadCategory::Games },
+        { "z64", DownloadCategory::Games },
+        { "v64", DownloadCategory::Games },
+        { "nds", DownloadCategory::Games },
+        { "3ds", DownloadCategory::Games },
+        { "cia", DownloadCategory::Games },
+        { "nsp", DownloadCategory::Games },
+        { "xci", DownloadCategory::Games },
+        { "gen", DownloadCategory::Games },
+        { "smd", DownloadCategory::Games },
+        { "sms", DownloadCategory::Games },
+        { "gg", DownloadCategory::Games },
+        { "pce", DownloadCategory::Games },
+        { "ws", DownloadCategory::Games },
+        { "wsc", DownloadCategory::Games },
+        { "gcm", DownloadCategory::Games },
+        { "rvz", DownloadCategory::Games },
+        { "wbfs", DownloadCategory::Games },
+        { "chd", DownloadCategory::Games },
+        { "cso", DownloadCategory::Games },
+        { "pbp", DownloadCategory::Games },
+        { "gdi", DownloadCategory::Games },
+        { "cdi", DownloadCategory::Games },
+        { "a26", DownloadCategory::Games },
+        { "jag", DownloadCategory::Games },
+        { "lnx", DownloadCategory::Games },
+        { "d64", DownloadCategory::Games },
+        { "t64", DownloadCategory::Games },
+        { "adf", DownloadCategory::Games },
+        { "rom", DownloadCategory::Games },
 
         // Disk Images
         { "iso", DownloadCategory::DiskImages },
@@ -466,21 +525,21 @@ namespace {
         { "application/x-xz", DownloadCategory::Archives },
         { "application/zstd", DownloadCategory::Archives },
         { "application/java-archive", DownloadCategory::Archives },
-        { "application/vnd.android.package-archive", DownloadCategory::Archives },
+        { "application/vnd.android.package-archive", DownloadCategory::AppAndroid },
 
         { "application/x-bittorrent", DownloadCategory::Torrents },
 
         { "application/x-iso9660-image", DownloadCategory::DiskImages },
-        { "application/x-apple-diskimage", DownloadCategory::DiskImages },
+        { "application/x-apple-diskimage", DownloadCategory::AppMacOS },
         { "application/x-qemu-disk", DownloadCategory::DiskImages },
 
-        { "application/x-msdownload", DownloadCategory::Programs },
-        { "application/x-msi", DownloadCategory::Programs },
-        { "application/vnd.microsoft.portable-executable", DownloadCategory::Programs },
-        { "application/x-debian-package", DownloadCategory::Programs },
-        { "application/x-rpm", DownloadCategory::Programs },
-        { "application/x-sh", DownloadCategory::Programs },
-        { "application/x-shellscript", DownloadCategory::Programs },
+        { "application/x-msdownload", DownloadCategory::AppWindows },
+        { "application/x-msi", DownloadCategory::AppWindows },
+        { "application/vnd.microsoft.portable-executable", DownloadCategory::AppWindows },
+        { "application/x-debian-package", DownloadCategory::AppLinux },
+        { "application/x-rpm", DownloadCategory::AppLinux },
+        { "application/x-sh", DownloadCategory::AppLinux },
+        { "application/x-shellscript", DownloadCategory::AppLinux },
 
         { "application/json", DownloadCategory::Code },
         { "application/xml", DownloadCategory::Code },
@@ -630,6 +689,16 @@ QString toString(const DownloadCategory category)
         return "Documents";
     case DownloadCategory::Programs:
         return "Programs";
+    case DownloadCategory::AppWindows:
+        return "Windows";
+    case DownloadCategory::AppMacOS:
+        return "macOS";
+    case DownloadCategory::AppLinux:
+        return "Linux";
+    case DownloadCategory::AppAndroid:
+        return "Android";
+    case DownloadCategory::Games:
+        return "Games";
     case DownloadCategory::DiskImages:
         return "Disk Images";
     case DownloadCategory::Fonts:
@@ -675,6 +744,21 @@ DownloadCategory fromString(const QString& categoryName)
     if (normalized == u"programs") {
         return DownloadCategory::Programs;
     }
+    if (normalized == u"windows") {
+        return DownloadCategory::AppWindows;
+    }
+    if (normalized == u"macos") {
+        return DownloadCategory::AppMacOS;
+    }
+    if (normalized == u"linux") {
+        return DownloadCategory::AppLinux;
+    }
+    if (normalized == u"android") {
+        return DownloadCategory::AppAndroid;
+    }
+    if (normalized == u"games") {
+        return DownloadCategory::Games;
+    }
     if (normalized == u"disk images") {
         return DownloadCategory::DiskImages;
     }
@@ -713,6 +797,16 @@ QString iconName(const DownloadCategory category)
         return "document";
     case DownloadCategory::Programs:
         return "program";
+    case DownloadCategory::AppWindows:
+        return "app-windows";
+    case DownloadCategory::AppMacOS:
+        return "app-macos";
+    case DownloadCategory::AppLinux:
+        return "app-linux";
+    case DownloadCategory::AppAndroid:
+        return "app-android";
+    case DownloadCategory::Games:
+        return "games";
     case DownloadCategory::DiskImages:
         return "disk-image";
     case DownloadCategory::Fonts:

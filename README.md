@@ -4,7 +4,7 @@
 
 GenyDL is a modern, high-performance download manager built with **C++23**, **Qt 6**, and **QML**, designed for speed, reliability, clean architecture, and a polished desktop experience — featuring built-in support for the **Geny blockchain ecosystem**, IPFS, and BitTorrent networks.
 
-![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
+![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
 ![C++](https://img.shields.io/badge/C%2B%2B%20Version-23-blue.svg)
 ![Qt](https://img.shields.io/badge/Qt-6.8%2B-brightgreen.svg)
 ![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen.svg)
@@ -78,3 +78,7 @@ BTC
 ```BC1Q2Q7G83V9UXATK0YSPFVCU3YDNMESEU3Y7P9J9N```
 
 Your support keeps the project alive and evolving.
+
+## License
+
+This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.

@@ -1,5 +1,5 @@
-# Copyright (C) 2026 Genyleap LLC.
-# SPDX-License-Identifier: LicenseRef-Geny-Commercial OR MIT
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Genyleap Labs.
 
 cmake_minimum_required(VERSION 3.28)
 
@@ -680,6 +680,7 @@ set(qml_controls
     ui/Controls/DateTimeField.qml
     ui/Controls/ToolTip.qml
     ui/Controls/SidebarTreeItem.qml
+    ui/Controls/DropZone.qml
     ui/Controls/LayoutButton.qml
     ui/Controls/Switch.qml
     ui/Controls/MiniButton.qml

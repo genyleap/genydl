@@ -36,7 +36,7 @@ Support:
 support@genyleap.com
 
 License:
-MIT License
+GNU General Public License v3.0 (GPL-3.0-or-later)
 
 Copyright:
 Copyright (c) 2026 Genyleap Labs. All rights reserved.

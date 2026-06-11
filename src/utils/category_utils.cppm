@@ -56,7 +56,13 @@ enum class DownloadCategory : unsigned char {
     Code,
     Torrents,
     NFT,
-    Other
+    Other,
+    // Appended (stable numeric values for older string-persisted data).
+    AppWindows,
+    AppMacOS,
+    AppLinux,
+    AppAndroid,
+    Games
 };
 
 /*!

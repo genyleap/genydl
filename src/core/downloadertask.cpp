@@ -317,9 +317,9 @@ void DownloaderTask::setProxyPassword(const QString& value)
 
 void DownloaderTask::setUserAgent(const QString& value)
 {
-    const QString next = value.trimmed().isEmpty()
-        ? QStringLiteral("genydl/1.0")
-        : value.trimmed();
+    QString next = value.trimmed();
+    if (next.isEmpty())
+        next = QStringLiteral("genydl/1.0");
     if (m_userAgent == next) return;
     m_userAgent = next;
     emit networkOptionsChanged();

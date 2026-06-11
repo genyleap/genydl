@@ -153,7 +153,7 @@ ApplicationWindow {
     readonly property string developerXUrl: "https://x.com/thecompez"
     readonly property string developerGithubUrl: "https://github.com/thecompez"
     readonly property string projectRepositoryUrl: "https://github.com/genyleap/genydl"
-    readonly property string projectLicenseUrl: "https://github.com/genyleap/genydl?tab=MIT-1-ov-file#readme"
+    readonly property string projectLicenseUrl: "https://github.com/genyleap/genydl/blob/main/LICENSE"
     readonly property string qtOpenSourceUrl: "https://doc.qt.io/qt-6/licensing.html"
     readonly property string genyleapWebsiteUrl: "https://genyleap.com"
     readonly property string genyleapSupportUrl: "https://genyleap.com/support"
@@ -168,23 +168,18 @@ ApplicationWindow {
     readonly property string genyTokenBaseExplorerUrl: "https://basescan.org/address/0x2a3d6f8c1fc4AcDcf3A75d19b445bae02F03676B"
     readonly property string genyTokenXUrl: "https://x.com/genyleap"
     readonly property string genyTokenTelegramUrl: "https://t.me/genyleap"
-    readonly property string mitLicenseText: "MIT License\n\n"
-                                              + "Copyright (c) 2026 Genyleap Labs\n\n"
-                                              + "Permission is hereby granted, free of charge, to any person obtaining a copy\n"
-                                              + "of this software and associated documentation files (the \"Software\"), to deal\n"
-                                              + "in the Software without restriction, including without limitation the rights\n"
-                                              + "to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n"
-                                              + "copies of the Software, and to permit persons to whom the Software is\n"
-                                              + "furnished to do so, subject to the following conditions:\n\n"
-                                              + "The above copyright notice and this permission notice shall be included in all\n"
-                                              + "copies or substantial portions of the Software.\n\n"
-                                              + "THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n"
-                                              + "IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n"
-                                              + "FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n"
-                                              + "AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n"
-                                              + "LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n"
-                                              + "OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\n"
-                                              + "SOFTWARE."
+    readonly property string gplLicenseText: "GNU General Public License v3.0\n\n"
+                                              + "Copyright (c) 2026 Genyleap Labs. All rights reserved.\n\n"
+                                              + "This program is free software: you can redistribute it and/or modify\n"
+                                              + "it under the terms of the GNU General Public License as published by\n"
+                                              + "the Free Software Foundation, either version 3 of the License, or\n"
+                                              + "(at your option) any later version.\n\n"
+                                              + "This program is distributed in the hope that it will be useful,\n"
+                                              + "but WITHOUT ANY WARRANTY; without even the implied warranty of\n"
+                                              + "MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n"
+                                              + "GNU General Public License for more details.\n\n"
+                                              + "You should have received a copy of the GNU General Public License\n"
+                                              + "along with this program.  If not, see <https://www.gnu.org/licenses/>."
     readonly property int fileNameRole: Qt.UserRole + 1
     readonly property int progressRole: Qt.UserRole + 2
     readonly property int finishedRole: Qt.UserRole + 3
@@ -310,6 +305,13 @@ ApplicationWindow {
     function scheduleRebuildDownloadTableRows() { return Utils.scheduleRebuildDownloadTableRows.apply(this, arguments) }
     function addDownloadFromInputs() { return Utils.addDownloadFromInputs.apply(this, arguments) }
     function openAddUrlDialog() { return Utils.openAddUrlDialog.apply(this, arguments) }
+    // Open the Add URL dialog pre-filled with a dropped link/file for review.
+    function openAddUrlWith(text) {
+        appRoot.openAddUrlDialog()
+        const t = (text || "").trim()
+        if (t.length > 0)
+            addDialogUrlField.text = t
+    }
     function isTorrentLikeInput() { return Utils.isTorrentLikeInput.apply(this, arguments) }
     function loadQueueEditor() { return Utils.loadQueueEditor.apply(this, arguments) }
     function applyQueueEditor() { return Utils.applyQueueEditor.apply(this, arguments) }
@@ -1245,8 +1247,8 @@ ApplicationWindow {
         height: 680
         title: "License & Open Source"
         type: "info"
-        desc: "MIT License and source access"
-        message: "GENYDL is distributed under the MIT License. Review the repository and full license text below."
+        desc: "GNU General Public License v3.0"
+        message: "GENYDL is distributed under the GNU General Public License v3.0. Review the repository and full license text below."
 
         ColumnLayout {
             Layout.fillWidth: true
@@ -1345,7 +1347,7 @@ ApplicationWindow {
                                 }
 
                                 Text {
-                                    text: "Published MIT license page in the repository."
+                                    text: "Published GPL license page in the repository."
                                     color: Colors.textSecondary
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t3
@@ -1431,7 +1433,7 @@ ApplicationWindow {
             }
 
             Controls.GroupBox {
-                title: "MIT License"
+                title: "GNU GPL v3.0 License"
                 Layout.fillWidth: true
                 implicitHeight: licenseTextLayout.implicitHeight + topPadding + bottomPadding
 
@@ -1450,7 +1452,7 @@ ApplicationWindow {
                             width: parent.width
                             readOnly: true
                             wrapMode: TextEdit.Wrap
-                            text: appRoot.mitLicenseText
+                            text: appRoot.gplLicenseText
                             font.family: FontSystem.getContentFont.font.family
                             selectByMouse: true
                             background: null
@@ -1463,7 +1465,7 @@ ApplicationWindow {
                         Controls.Button {
                             text: "Copy License"
                             style: "success"
-                            onClicked: appRoot.copyToClipboard(appRoot.mitLicenseText, "MIT license copied")
+                            onClicked: appRoot.copyToClipboard(appRoot.gplLicenseText, "GPL license copied")
                         }
                         Item { Layout.fillWidth: true }
                     }
@@ -4791,7 +4793,7 @@ ApplicationWindow {
             spacing: 8
 
             Rectangle {
-                Layout.preferredWidth: 128
+                Layout.preferredWidth: 142
                 Layout.preferredHeight: 42
                 Layout.alignment: Qt.AlignVCenter
                 radius: Metrics.innerRadius
@@ -4800,26 +4802,20 @@ ApplicationWindow {
 
                 RowLayout {
                     anchors.centerIn: parent
-                    spacing: 10
+                    spacing: 9
 
-                    Item { Layout.preferredWidth: 5; }
+                    Item { Layout.preferredWidth: 2; }
 
+                    // Wordmark / logotype.
                     Controls.Text {
-                        font.family: FontSystem.getAwesomeSolid.name
-                        font.pixelSize: Typography.h2
-                        font.weight: Font.Bold
-                        color: Colors.warning
-                        text: "\ue0b7"
-                    }
-
-                    Controls.Text {
-                        font.family: FontSystem.getContentFont.name
+                        font.family: FontSystem.getContentFontBold.name
                         font.pixelSize: Typography.h3
+                        font.letterSpacing: 0.6
                         color: Colors.textPrimary
-                        text: "GENYDL"
+                        text: "GENY<strong>DL</strong>"
                     }
 
-                    Item { Layout.preferredWidth: 5; }
+                    Item { Layout.preferredWidth: 2; }
                 }
 
             }
@@ -5173,6 +5169,12 @@ ApplicationWindow {
                     Layout.minimumWidth: 280
                     Layout.maximumWidth: 320
                     Layout.fillHeight: true
+                    // Inset the scrolling content vertically by the corner radius so
+                    // the ScrollView's rectangular clip stays inside the straight part
+                    // of the rounded background. Without this, scrolled rows bleed into
+                    // the top/bottom corners and visually square them off.
+                    topPadding: Metrics.outerRadius
+                    bottomPadding: Metrics.outerRadius
                     background: Rectangle {
                         color: Colors.backgroundActivated
                         radius: Metrics.outerRadius
@@ -5182,10 +5184,17 @@ ApplicationWindow {
                         anchors.fill: parent
                         spacing: Metrics.margins
 
-                        ScrollView {
-                            id: sidebarScroll
+                        // Hosts the scroll area plus top/bottom fade overlays so rows
+                        // feather out at the edges instead of being hard-clipped where
+                        // the list meets the drop zone.
+                        Item {
+                            id: sidebarScrollArea
                             Layout.fillWidth: true
                             Layout.fillHeight: true
+
+                        ScrollView {
+                            id: sidebarScroll
+                            anchors.fill: parent
                             contentWidth: availableWidth
                             contentHeight: sidebarContent.implicitHeight
                             ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
@@ -5238,22 +5247,6 @@ ApplicationWindow {
                                                 Controls.SidebarTreeItem {
                                                     Layout.fillWidth: true
                                                     child: true
-                                                    text: "Musics"
-                                                    iconGlyph: "\uf001"
-                                                    selected: appRoot.categoryFilter === "Audio" && appRoot.statusFilter === "All"
-                                                    onClicked: appRoot.setCategoryScope("Audio")
-                                                }
-                                                Controls.SidebarTreeItem {
-                                                    Layout.fillWidth: true
-                                                    child: true
-                                                    text: "Compressed"
-                                                    iconGlyph: "\uf1c6"
-                                                    selected: appRoot.categoryFilter === "Archives" && appRoot.statusFilter === "All"
-                                                    onClicked: appRoot.setCategoryScope("Archives")
-                                                }
-                                                Controls.SidebarTreeItem {
-                                                    Layout.fillWidth: true
-                                                    child: true
                                                     text: "Videos"
                                                     iconGlyph: "\uf03d"
                                                     selected: appRoot.categoryFilter === "Video" && appRoot.statusFilter === "All"
@@ -5262,10 +5255,18 @@ ApplicationWindow {
                                                 Controls.SidebarTreeItem {
                                                     Layout.fillWidth: true
                                                     child: true
-                                                    text: "Programs"
-                                                    iconGlyph: "\uf15b"
-                                                    selected: appRoot.categoryFilter === "Programs" && appRoot.statusFilter === "All"
-                                                    onClicked: appRoot.setCategoryScope("Programs")
+                                                    text: "Music"
+                                                    iconGlyph: "\uf001"
+                                                    selected: appRoot.categoryFilter === "Audio" && appRoot.statusFilter === "All"
+                                                    onClicked: appRoot.setCategoryScope("Audio")
+                                                }
+                                                Controls.SidebarTreeItem {
+                                                    Layout.fillWidth: true
+                                                    child: true
+                                                    text: "Images"
+                                                    iconGlyph: "\uf03e"
+                                                    selected: appRoot.categoryFilter === "Images" && appRoot.statusFilter === "All"
+                                                    onClicked: appRoot.setCategoryScope("Images")
                                                 }
                                                 Controls.SidebarTreeItem {
                                                     Layout.fillWidth: true
@@ -5278,18 +5279,78 @@ ApplicationWindow {
                                                 Controls.SidebarTreeItem {
                                                     Layout.fillWidth: true
                                                     child: true
-                                                    text: "APKs"
-                                                    iconGlyph: "\uf2db"
-                                                    selected: appRoot.categoryFilter === "Programs" && appRoot.statusFilter === "All"
-                                                    onClicked: appRoot.setCategoryScope("Programs")
+                                                    text: "Archives"
+                                                    iconGlyph: "\uf1c6"
+                                                    selected: appRoot.categoryFilter === "Archives" && appRoot.statusFilter === "All"
+                                                    onClicked: appRoot.setCategoryScope("Archives")
                                                 }
                                                 Controls.SidebarTreeItem {
                                                     Layout.fillWidth: true
                                                     child: true
-                                                    text: "Images"
-                                                    iconGlyph: "\uf03e"
-                                                    selected: appRoot.categoryFilter === "Images" && appRoot.statusFilter === "All"
-                                                    onClicked: appRoot.setCategoryScope("Images")
+                                                    text: "Windows"
+                                                    iconGlyph: "\uf17a"
+                                                    iconBrand: true
+                                                    selected: appRoot.categoryFilter === "Windows" && appRoot.statusFilter === "All"
+                                                    onClicked: appRoot.setCategoryScope("Windows")
+                                                }
+                                                Controls.SidebarTreeItem {
+                                                    Layout.fillWidth: true
+                                                    child: true
+                                                    text: "macOS"
+                                                    iconGlyph: "\uf179"
+                                                    iconBrand: true
+                                                    selected: appRoot.categoryFilter === "macOS" && appRoot.statusFilter === "All"
+                                                    onClicked: appRoot.setCategoryScope("macOS")
+                                                }
+                                                Controls.SidebarTreeItem {
+                                                    Layout.fillWidth: true
+                                                    child: true
+                                                    text: "Linux"
+                                                    iconGlyph: "\uf17c"
+                                                    iconBrand: true
+                                                    selected: appRoot.categoryFilter === "Linux" && appRoot.statusFilter === "All"
+                                                    onClicked: appRoot.setCategoryScope("Linux")
+                                                }
+                                                Controls.SidebarTreeItem {
+                                                    Layout.fillWidth: true
+                                                    child: true
+                                                    text: "Android"
+                                                    iconGlyph: "\uf17b"
+                                                    iconBrand: true
+                                                    selected: appRoot.categoryFilter === "Android" && appRoot.statusFilter === "All"
+                                                    onClicked: appRoot.setCategoryScope("Android")
+                                                }
+                                                Controls.SidebarTreeItem {
+                                                    Layout.fillWidth: true
+                                                    child: true
+                                                    text: "Disk Images"
+                                                    iconGlyph: "\uf51f"
+                                                    selected: appRoot.categoryFilter === "Disk Images" && appRoot.statusFilter === "All"
+                                                    onClicked: appRoot.setCategoryScope("Disk Images")
+                                                }
+                                                Controls.SidebarTreeItem {
+                                                    Layout.fillWidth: true
+                                                    child: true
+                                                    text: "Games"
+                                                    iconGlyph: "\uf11b"
+                                                    selected: appRoot.categoryFilter === "Games" && appRoot.statusFilter === "All"
+                                                    onClicked: appRoot.setCategoryScope("Games")
+                                                }
+                                                Controls.SidebarTreeItem {
+                                                    Layout.fillWidth: true
+                                                    child: true
+                                                    text: "Torrents"
+                                                    iconGlyph: "\uf076"
+                                                    selected: appRoot.categoryFilter === "Torrents" && appRoot.statusFilter === "All"
+                                                    onClicked: appRoot.setCategoryScope("Torrents")
+                                                }
+                                                Controls.SidebarTreeItem {
+                                                    Layout.fillWidth: true
+                                                    child: true
+                                                    text: "NFTs"
+                                                    iconGlyph: "\uf3a5"
+                                                    selected: appRoot.categoryFilter === "NFT" && appRoot.statusFilter === "All"
+                                                    onClicked: appRoot.setCategoryScope("NFT")
                                                 }
                                             }
                                         }
@@ -5622,7 +5683,40 @@ ApplicationWindow {
                                     }
                                 }
                             }
-                        }
+                        } // ScrollView
+
+                            // Edge fades: short gradients matching the panel background.
+                            // Disabled for input so scroll/clicks pass through, and each
+                            // only appears when there is clipped content in its direction.
+                            // Fading to the bg colour at zero alpha (not "transparent",
+                            // which is transparent black) avoids a dark fringe.
+                            Rectangle {
+                                id: topFade
+                                anchors { left: parent.left; right: parent.right; top: parent.top }
+                                height: Metrics.outerRadius
+                                enabled: false
+                                readonly property color bg: Colors.backgroundActivated
+                                readonly property Flickable flick: sidebarScroll.contentItem
+                                opacity: flick ? Math.min(1, flick.contentY / 18) : 0
+                                gradient: Gradient {
+                                    GradientStop { position: 0.0; color: topFade.bg }
+                                    GradientStop { position: 1.0; color: Qt.rgba(topFade.bg.r, topFade.bg.g, topFade.bg.b, 0) }
+                                }
+                            }
+                            Rectangle {
+                                id: bottomFade
+                                anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                                height: Metrics.outerRadius
+                                enabled: false
+                                readonly property color bg: Colors.backgroundActivated
+                                readonly property Flickable flick: sidebarScroll.contentItem
+                                opacity: flick ? Math.min(1, Math.max(0, (flick.contentHeight - flick.height - flick.contentY) / 18)) : 0
+                                gradient: Gradient {
+                                    GradientStop { position: 0.0; color: Qt.rgba(bottomFade.bg.r, bottomFade.bg.g, bottomFade.bg.b, 0) }
+                                    GradientStop { position: 1.0; color: bottomFade.bg }
+                                }
+                            }
+                        } // sidebarScrollArea
 
                         Controls.GroupBox {
                             id: runtimeCard
@@ -5760,6 +5854,17 @@ ApplicationWindow {
                                 }
                             }
 
+                        }
+
+                        // Persistent drag-and-drop target pinned to the bottom of
+                        // the sidebar. Accepts dropped links/files and also opens
+                        // the Add URL dialog (prefilled) when clicked.
+                        Controls.DropZone {
+                            Layout.fillWidth: true
+                            Layout.topMargin: 4
+                            compact: true
+                            onClicked: appRoot.openAddUrlDialog()
+                            onDropped: (text) => appRoot.openAddUrlWith(text)
                         }
 
                     }
@@ -6585,6 +6690,19 @@ ApplicationWindow {
 
                                     ScrollBar.vertical: ScrollBar { }
                                 }
+
+                                // Empty-state: fill the list area with a friendly
+                                // drag-and-drop target when there are no downloads.
+                                Controls.DropZone {
+                                    anchors.fill: parent
+                                    anchors.margins: Metrics.padding
+                                    visible: downloadList.count === 0
+                                    title: "No downloads yet"
+                                    subtitle: "Drag a link, magnet, or .torrent here — or click to add manually"
+                                    activeTitle: "Drop to add a download"
+                                    onClicked: appRoot.openAddUrlDialog()
+                                    onDropped: (text) => appRoot.openAddUrlWith(text)
+                                }
                             }
                         }
 
@@ -6602,62 +6720,110 @@ ApplicationWindow {
                                                                   ? Math.min(1.0, downloadManager.totalReceived / downloadManager.totalSize)
                                                                   : 0.0
 
+                            // One footer metric: a Font Awesome glyph that names the
+                            // value at a glance, the value itself, and a hover tooltip
+                            // spelling out what it is. The glyph replaces the old
+                            // "Label: " prefix so the row reads as icons, not text.
+                            component StatItem: RowLayout {
+                                id: stat
+                                property string glyph: ""
+                                property string value: ""
+                                property string hint: ""
+                                property color tint: Colors.textSecondary
+                                property int minValueWidth: 0
+                                spacing: 6
+
+                                Text {
+                                    text: stat.glyph
+                                    font.family: FontSystem.getAwesomeSolid.name
+                                    font.weight: Font.Black   // selects the Solid face; without it Qt falls back to Regular and the glyph renders as tofu
+                                    font.pixelSize: 12
+                                    color: stat.tint
+                                    Layout.alignment: Qt.AlignVCenter
+                                }
+                                Controls.Label {
+                                    text: stat.value
+                                    color: Colors.textPrimary
+                                    elide: Text.ElideRight
+                                    Layout.minimumWidth: stat.minValueWidth
+                                    Layout.alignment: Qt.AlignVCenter
+                                }
+                                HoverHandler { id: statHover }
+                                Controls.ToolTip {
+                                    text: stat.hint
+                                    active: statHover.hovered
+                                    above: true
+                                }
+                            }
+
                             RowLayout {
                                 anchors.fill: parent
                                 anchors.leftMargin: 18
                                 anchors.rightMargin: 18
-                                spacing: 12
+                                spacing: 16
 
-                                Controls.Label {
-                                    Layout.preferredWidth: 72
-                                    elide: Text.ElideRight
-                                    text: "Visible: "
-                                          + downloadManager.model.filteredCount(appRoot.queueFilter, appRoot.statusFilter, appRoot.categoryFilter, appRoot.searchText)
+                                StatItem {
+                                    glyph: String.fromCharCode(0xf06e)   // eye
+                                    hint: "Visible downloads (current filter)"
+                                    minValueWidth: 18
+                                    value: downloadManager.model.filteredCount(appRoot.queueFilter, appRoot.statusFilter, appRoot.categoryFilter, appRoot.searchText)
                                 }
-                                Controls.Label {
-                                    Layout.preferredWidth: 130
-                                    elide: Text.ElideRight
-                                    text: "Speed: " + appRoot.formatSpeed(downloadManager.totalSpeed)
+                                StatItem {
+                                    glyph: String.fromCharCode(0xf625)   // gauge-high
+                                    hint: "Total download speed"
+                                    tint: downloadManager.totalSpeed > 0 ? Colors.textAccent : Colors.textSecondary
+                                    minValueWidth: 78
+                                    value: appRoot.formatSpeed(downloadManager.totalSpeed)
                                 }
-                                Controls.Label {
-                                    Layout.preferredWidth: 96
-                                    elide: Text.ElideRight
-                                    text: "Transfer: " + Math.round(runtimeFooter.transferRatio * 100) + "%"
+                                StatItem {
+                                    glyph: String.fromCharCode(0xf0ed)   // cloud-arrow-down
+                                    hint: "Transferred (received / total)"
+                                    minValueWidth: 36
+                                    value: Math.round(runtimeFooter.transferRatio * 100) + "%"
                                 }
-                                Controls.Label {
-                                    Layout.preferredWidth: 80
-                                    elide: Text.ElideRight
-                                    text: "CPU: " + downloadManager.processCpuLoad.toFixed(1) + "%"
+                                StatItem {
+                                    glyph: String.fromCharCode(0xf2db)   // microchip
+                                    hint: "App CPU usage"
+                                    minValueWidth: 40
+                                    value: downloadManager.processCpuLoad.toFixed(1) + "%"
                                 }
-                                Controls.Label {
-                                    Layout.preferredWidth: 96
-                                    elide: Text.ElideRight
-                                    text: "Mem: " + appRoot.formatBytes(downloadManager.processMemoryBytes)
+                                StatItem {
+                                    glyph: String.fromCharCode(0xf538)   // memory
+                                    hint: "App memory usage"
+                                    minValueWidth: 56
+                                    value: appRoot.formatBytes(downloadManager.processMemoryBytes)
                                 }
-                                Controls.Label {
-                                    Layout.preferredWidth: 100
-                                    elide: Text.ElideRight
-                                    text: "Disk: " + appRoot.formatBytes(downloadManager.diskFreeBytes)
+                                StatItem {
+                                    glyph: String.fromCharCode(0xf0a0)   // hard-drive
+                                    hint: "Free disk space"
+                                    minValueWidth: 60
+                                    value: appRoot.formatBytes(downloadManager.diskFreeBytes)
                                 }
-                                Controls.Label {
-                                    Layout.preferredWidth: 66
-                                    elide: Text.ElideRight
-                                    text: downloadManager.networkReachability
-                                    color: downloadManager.networkReachability === "Online"
-                                           ? Colors.success
-                                           : (downloadManager.networkReachability === "Offline"
-                                              ? Colors.error
-                                              : Colors.warning)
-                                }
-                                Controls.Label {
-                                    Layout.preferredWidth: 54
-                                    elide: Text.ElideRight
-                                    text: downloadManager.onBattery ? "Battery" : "AC"
-                                    color: downloadManager.onBattery ? Colors.warning : Colors.success
-                                }
-                                // Spacer keeps the runtime stats left-aligned now that the
-                                // "Selected:" label has been removed.
+
+                                // Spacer pushes the connectivity indicators to the far
+                                // right, separating live stats from system status.
                                 Item { Layout.fillWidth: true }
+
+                                StatItem {
+                                    glyph: downloadManager.networkReachability === "Offline"
+                                           ? String.fromCharCode(0xf071)   // triangle-exclamation (no connection)
+                                           : String.fromCharCode(0xf1eb)   // wifi
+                                    hint: "Network: " + downloadManager.networkReachability
+                                    tint: downloadManager.networkReachability === "Online"
+                                          ? Colors.success
+                                          : (downloadManager.networkReachability === "Offline"
+                                             ? Colors.error
+                                             : Colors.warning)
+                                    value: downloadManager.networkReachability
+                                }
+                                StatItem {
+                                    glyph: downloadManager.onBattery
+                                           ? String.fromCharCode(0xf240)   // battery-full
+                                           : String.fromCharCode(0xf1e6)   // plug
+                                    hint: downloadManager.onBattery ? "Running on battery" : "Plugged in (AC power)"
+                                    tint: downloadManager.onBattery ? Colors.warning : Colors.success
+                                    value: downloadManager.onBattery ? "Battery" : "AC"
+                                }
                             }
                         }
                     }
