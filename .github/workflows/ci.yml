@@ -377,13 +377,10 @@ jobs:
 
   linux-x64:
     name: Build GenyDL-linux-x86_64
-    runs-on: ubuntu-latest
-
-    container:
-      image: a12e/docker-qt:6.8-linux
-      options: --user 0
+    runs-on: ubuntu-22.04
 
     env:
+      QT_VERSION: "6.11.0"
       TARGET_ARCH: x86_64
       APPIMAGE_ARCH: x86_64
       LANG: C.UTF-8
@@ -393,16 +390,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install CMake
+        uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: ${{ env.CMAKE_VERSION }}
+
       - name: Prepare Linux x64 toolchain
         shell: bash
         run: |
           set -euo pipefail
 
-          apt-get update
-          apt-get install -y \
+          sudo apt-get update
+          sudo apt-get install -y \
             locales \
+            python3 python3-pip python3-venv imagemagick \
             wget curl gnupg lsb-release software-properties-common ca-certificates \
-            unzip zip file tar gzip patchelf desktop-file-utils fakeroot fuse libfuse2 imagemagick \
+            unzip zip p7zip-full file tar gzip patchelf desktop-file-utils fakeroot fuse libfuse2 \
             libgl1 libgl1-mesa-dev libegl1 libegl1-mesa-dev \
             libxkbcommon0 libxkbcommon-dev libxkbcommon-x11-0 libxkbcommon-x11-dev \
             libxcb1 libxcb1-dev libxcb-cursor0 libxcb-cursor-dev libxcb-icccm4 libxcb-icccm4-dev \
@@ -412,25 +415,48 @@ jobs:
             libfreetype6 libfreetype6-dev libglib2.0-0 libglib2.0-dev \
             libharfbuzz0b libharfbuzz-dev libpng16-16 libpng-dev zsync
 
-          locale-gen C.UTF-8 || true
-          update-locale LANG=C.UTF-8 || true
+          sudo locale-gen C.UTF-8 || true
+          sudo update-locale LANG=C.UTF-8 || true
 
           wget -O /tmp/llvm.sh https://apt.llvm.org/llvm.sh
           chmod +x /tmp/llvm.sh
-          /tmp/llvm.sh 20
+          sudo /tmp/llvm.sh 20
 
-          apt-get install -y clang-20 clang-tools-20 lld-20 llvm-20 ninja-build
+          sudo apt-get install -y clang-20 clang-tools-20 lld-20 llvm-20 ninja-build
 
-          NINJA_VERSION="1.13.1"
-          wget -O /tmp/ninja-linux.zip "https://github.com/ninja-build/ninja/releases/download/v${NINJA_VERSION}/ninja-linux.zip"
-          unzip -o /tmp/ninja-linux.zip -d /usr/local/bin
-          chmod +x /usr/local/bin/ninja
-
-          echo "/usr/local/bin" >> "$GITHUB_PATH"
           echo "CC=/usr/bin/clang-20" >> "$GITHUB_ENV"
           echo "CXX=/usr/bin/clang++-20" >> "$GITHUB_ENV"
           echo "CLANG_SCAN_DEPS=/usr/bin/clang-scan-deps-20" >> "$GITHUB_ENV"
           echo "APPIMAGE_EXTRACT_AND_RUN=1" >> "$GITHUB_ENV"
+
+      - name: Install Qt Linux x64
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python3 -m pip install --user --upgrade pip
+          python3 -m pip install --user aqtinstall
+
+          export PATH="${HOME}/.local/bin:${PATH}"
+
+          aqt list-qt linux desktop || true
+
+          aqt install-qt linux desktop "${QT_VERSION}" linux_gcc_64 -O "${HOME}/Qt"
+
+          QT_CONFIG="$(find "${HOME}/Qt" -type f -path "*/lib/cmake/Qt6/Qt6Config.cmake" | head -n 1)"
+
+          if [[ -z "${QT_CONFIG}" || ! -f "${QT_CONFIG}" ]]; then
+            echo "Qt x64 install failed."
+            find "${HOME}/Qt" -maxdepth 6 -type f | sort || true
+            exit 1
+          fi
+
+          QT_ROOT="$(dirname "$(dirname "$(dirname "$(dirname "${QT_CONFIG}")")")")"
+
+          echo "QT_ROOT_DIR=${QT_ROOT}" >> "$GITHUB_ENV"
+          echo "${QT_ROOT}/bin" >> "$GITHUB_PATH"
+
+          echo "Qt x64 installed at: ${QT_ROOT}"
 
       - name: Configure Linux x64
         shell: bash
@@ -439,6 +465,8 @@ jobs:
 
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="${QT_ROOT_DIR}" \
+            -DQt6_DIR="${QT_ROOT_DIR}/lib/cmake/Qt6" \
             -DCMAKE_C_COMPILER="${CC}" \
             -DCMAKE_CXX_COMPILER="${CXX}" \
             -DCMAKE_CXX_STANDARD=23 \

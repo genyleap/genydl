@@ -5,7 +5,7 @@ cmake_minimum_required(VERSION 3.28)
 
 # -----------------------------------------------------------------------------
 # GENYDL CMakeLists
-# - Cross-platform build with Qt 6.8+
+# - Cross-platform build with Qt 6.9+
 # - C++23 + C++20 modules
 # - Packaging via CPack:
 #     Windows: NSIS + ZIP
@@ -447,7 +447,7 @@ if(CMAKE_PREFIX_PATH)
     set(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH}" CACHE STRING "Qt search prefixes" FORCE)
 endif()
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS
+find_package(Qt6 6.9 REQUIRED COMPONENTS
     Core
     Quick
     QuickControls2
@@ -457,7 +457,7 @@ find_package(Qt6 6.8 REQUIRED COMPONENTS
     Widgets
 )
 
-qt_standard_project_setup(REQUIRES 6.8)
+qt_standard_project_setup(REQUIRES 6.9)
 
 message(STATUS "Qt6_DIR: ${Qt6_DIR}")
 message(STATUS "CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
@@ -879,7 +879,7 @@ target_include_directories(${APP_NAME}
 if(GENYDL_BUILD_TESTS)
     enable_testing()
 
-    find_package(Qt6 6.8 REQUIRED COMPONENTS Core Test Gui Network Concurrent Widgets)
+    find_package(Qt6 6.9 REQUIRED COMPONENTS Core Test Gui Network Concurrent Widgets)
 
     qt_add_executable(genydl_backend_tests
         tests/backend_tests.cpp
