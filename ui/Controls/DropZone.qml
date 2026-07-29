@@ -20,10 +20,10 @@ Item {
 
     // Compact = sidebar variant; otherwise the larger empty-state variant.
     property bool compact: false
-    property string title: "Drop link or file"
-    property string subtitle: "or click to add manually"
+    property string title: qsTr("Drop link or file")
+    property string subtitle: qsTr("or click to add manually")
     property string iconGlyph: "" // link
-    property string activeTitle: "Drop to add"
+    property string activeTitle: qsTr("Drop to add")
 
     signal clicked()
     signal dropped(string text)
@@ -98,7 +98,7 @@ Item {
                 font.family: FontSystem.getContentFontSemiBold.name
                 font.pixelSize: root.compact ? Typography.t2 : Typography.t1
                 color: Colors.textPrimary
-                elide: Text.ElideRight
+                elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
             }
 
             Text {

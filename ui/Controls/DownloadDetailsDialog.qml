@@ -12,6 +12,7 @@ import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import "../Core" as Core
+import "../utils.js" as Utils
 
 QQC2.Dialog {
     id: root
@@ -47,43 +48,27 @@ QQC2.Dialog {
     readonly property string statusText: task ? task.stateString : ""
 
     title: {
-        if (!task) return "Download Details"
-        return Math.round(progressRatio * 100) + "% " + baseName(task.fileName())
+        if (!task) return qsTr("Download Details")
+        return Utils.formatPercent(Math.round(progressRatio * 100), 0) + " " + baseName(task.fileName())
     }
 
     function baseName(path) {
-        if (!path || path.length === 0) return "Unknown"
+        if (!path || path.length === 0) return qsTr("Unknown")
         const idx = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"))
         if (idx >= 0 && idx + 1 < path.length) return path.substring(idx + 1)
         return path
     }
 
     function formatBytes(value) {
-        var v = Number(value)
-        if (!isFinite(v) || v < 0) v = 0
-        const units = ["B", "KB", "MB", "GB", "TB"]
-        var i = 0
-        while (v >= 1024 && i < units.length - 1) {
-            v /= 1024
-            i += 1
-        }
-        const digits = v >= 100 ? 0 : (v >= 10 ? 1 : 2)
-        return v.toFixed(digits) + " " + units[i]
+        return Utils.formatBytes(value)
     }
 
     function formatSpeed(value) {
-        return formatBytes(value) + "/s"
+        return Utils.formatSpeed(value)
     }
 
     function formatEta(seconds) {
-        var s = Number(seconds)
-        if (!isFinite(s) || s < 0) return "—"
-        if (s < 60) return Math.floor(s) + " sec"
-        const m = Math.floor(s / 60)
-        const sec = Math.floor(s % 60)
-        if (m < 60) return m + " min " + sec + " sec"
-        const h = Math.floor(m / 60)
-        return h + " h " + (m % 60) + " min"
+        return Utils.formatEta(seconds)
     }
 
     background: Rectangle {
@@ -112,7 +97,7 @@ QQC2.Dialog {
             Item { Layout.fillWidth: true }
 
             Label {
-                text: statusText
+                text: languageManager.statusLabel(statusText)
                 role: "caption"
                 tone: statusText === "Error"
                       ? "danger"
@@ -130,9 +115,9 @@ QQC2.Dialog {
             id: tabs
             Layout.fillWidth: true
 
-            QQC2.TabButton { text: "Download status" }
-            QQC2.TabButton { text: "Speed Limiter" }
-            QQC2.TabButton { text: "Options on completion" }
+            QQC2.TabButton { text: qsTr("Download status") }
+            QQC2.TabButton { text: qsTr("Speed Limiter") }
+            QQC2.TabButton { text: qsTr("Options on completion") }
         }
 
         StackLayout {
@@ -165,7 +150,7 @@ QQC2.Dialog {
                                 }
 
                                 Button {
-                                    text: "Copy URL"
+                                    text: qsTr("Copy URL")
                                     variant: "secondary"
                                     compact: true
                                     enabled: task
@@ -181,34 +166,34 @@ QQC2.Dialog {
                                 columnSpacing: 14
                                 rowSpacing: 6
 
-                                Label { text: "Status"; role: "caption"; tone: "secondary" }
+                                Label { text: qsTr("Status"); role: "caption"; tone: "secondary" }
                                 Label {
-                                    text: statusText === "Active" ? "Receiving data..." : statusText
+                                    text: statusText === "Active" ? qsTr("Receiving data...") : languageManager.statusLabel(statusText)
                                     role: "caption"
                                     tone: statusText === "Error"
                                           ? "danger"
                                           : (statusText === "Active" ? "accent" : "secondary")
                                 }
 
-                                Label { text: "File size"; role: "caption"; tone: "secondary" }
+                                Label { text: qsTr("File size"); role: "caption"; tone: "secondary" }
                                 Label { text: formatBytes(bytesTotal); role: "mono" }
 
-                                Label { text: "Downloaded"; role: "caption"; tone: "secondary" }
+                                Label { text: qsTr("Downloaded"); role: "caption"; tone: "secondary" }
                                 Label {
                                     text: formatBytes(bytesReceived)
-                                          + (bytesTotal > 0 ? " (" + (progressRatio * 100).toFixed(2) + " %)" : "")
+                                          + (bytesTotal > 0 ? " (" + Utils.formatPercent(progressRatio * 100, 2) + ")" : "")
                                     role: "mono"
                                 }
 
-                                Label { text: "Transfer rate"; role: "caption"; tone: "secondary" }
+                                Label { text: qsTr("Transfer rate"); role: "caption"; tone: "secondary" }
                                 Label { text: formatSpeed(speedValue); role: "mono" }
 
-                                Label { text: "Time left"; role: "caption"; tone: "secondary" }
+                                Label { text: qsTr("Time left"); role: "caption"; tone: "secondary" }
                                 Label { text: formatEta(etaValue); role: "mono" }
 
-                                Label { text: "Resume capability"; role: "caption"; tone: "secondary" }
+                                Label { text: qsTr("Resume capability"); role: "caption"; tone: "secondary" }
                                 Label {
-                                    text: task && task.resumeWarning.length > 0 ? "Limited" : "Yes"
+                                    text: task && task.resumeWarning.length > 0 ? qsTr("Limited") : qsTr("Yes")
                                     role: "caption"
                                     tone: task && task.resumeWarning.length > 0 ? "warning" : "success"
                                 }
@@ -235,19 +220,23 @@ QQC2.Dialog {
 
                             Label {
                                 text: {
-                                    if (!task) return "Segments: 0"
+                                    if (!task)
+                                        return qsTr("Segments: %1").arg(
+                                                    Number(0).toLocaleString(Qt.locale(languageManager.currentLocale), "f", 0))
                                     const configured = task.segments()
                                     const active = task.effectiveSegments()
+                                    const configuredText = Number(configured).toLocaleString(Qt.locale(languageManager.currentLocale), "f", 0)
+                                    const activeText = Number(active).toLocaleString(Qt.locale(languageManager.currentLocale), "f", 0)
                                     return active !== configured
-                                            ? ("Segments: " + configured + " (" + active + " active)")
-                                            : ("Segments: " + configured)
+                                            ? qsTr("Segments: %1 (%2 active)").arg(configuredText).arg(activeText)
+                                            : qsTr("Segments: %1").arg(configuredText)
                                 }
                                 role: "caption"
                                 tone: "secondary"
                             }
 
                             Label {
-                                text: "Start positions and download progress by connections"
+                                text: qsTr("Start positions and download progress by connections")
                                 role: "caption"
                                 tone: "secondary"
                             }
@@ -304,9 +293,9 @@ QQC2.Dialog {
                                 Layout.fillWidth: true
                                 spacing: 8
 
-                                Label { text: "N."; role: "caption"; tone: "secondary"; Layout.preferredWidth: 40 }
-                                Label { text: "Downloaded"; role: "caption"; tone: "secondary"; Layout.preferredWidth: 160 }
-                                Label { text: "Info"; role: "caption"; tone: "secondary"; Layout.fillWidth: true }
+                                Label { text: qsTr("N."); role: "caption"; tone: "secondary"; Layout.preferredWidth: 40 }
+                                Label { text: qsTr("Downloaded"); role: "caption"; tone: "secondary"; Layout.preferredWidth: 160 }
+                                Label { text: qsTr("Info"); role: "caption"; tone: "secondary"; Layout.fillWidth: true }
                             }
 
                             ListView {
@@ -333,7 +322,7 @@ QQC2.Dialog {
                                         spacing: 8
 
                                         Label {
-                                            text: String(index + 1)
+                                            text: Number(index + 1).toLocaleString(Qt.locale(languageManager.currentLocale), "f", 0)
                                             role: "mono"
                                             Layout.preferredWidth: 40
                                         }
@@ -345,7 +334,7 @@ QQC2.Dialog {
                                         }
 
                                         Label {
-                                            text: segState
+                                            text: languageManager.statusLabel(segState)
                                             role: "caption"
                                             tone: segState === "Receiving Data"
                                                   ? "accent"
@@ -379,7 +368,7 @@ QQC2.Dialog {
                             columnSpacing: 12
                             rowSpacing: 8
 
-                            Label { text: "Task speed cap (MB/s)"; role: "caption"; tone: "secondary" }
+                            Label { text: qsTr("Task speed cap (MB/s)"); role: "caption"; tone: "secondary" }
 
                             SpinBox {
                                 id: capSpin
@@ -388,20 +377,20 @@ QQC2.Dialog {
                                 value: row >= 0 ? Math.round(downloadManager.taskMaxSpeed(row) / (1024 * 1024)) : 0
                             }
 
-                            Label { text: "Global cap"; role: "caption"; tone: "secondary" }
+                            Label { text: qsTr("Global cap"); role: "caption"; tone: "secondary" }
                             Label {
-                                text: downloadManager.globalMaxSpeed > 0 ? formatSpeed(downloadManager.globalMaxSpeed) : "Unlimited"
+                                text: downloadManager.globalMaxSpeed > 0 ? formatSpeed(downloadManager.globalMaxSpeed) : qsTr("Unlimited")
                                 role: "mono"
                             }
 
-                            Label { text: "Queue"; role: "caption"; tone: "secondary" }
-                            Label { text: queueName; role: "caption" }
+                            Label { text: qsTr("Queue"); role: "caption"; tone: "secondary" }
+                            Label { text: languageManager.queueLabel(queueName); role: "caption" }
 
-                            Label { text: "Queue cap"; role: "caption"; tone: "secondary" }
+                            Label { text: qsTr("Queue cap"); role: "caption"; tone: "secondary" }
                             Label {
                                 text: queueName.length > 0 && downloadManager.queueMaxSpeed(queueName) > 0
                                       ? formatSpeed(downloadManager.queueMaxSpeed(queueName))
-                                      : "Unlimited"
+                                      : qsTr("Unlimited")
                                 role: "mono"
                             }
 
@@ -410,7 +399,7 @@ QQC2.Dialog {
                                 spacing: 8
 
                                 Button {
-                                    text: "Apply"
+                                    text: qsTr("Apply")
                                     onClicked: {
                                         if (row >= 0) {
                                             root.setSpeedCapRequested(row, capSpin.value * 1024 * 1024)
@@ -419,7 +408,7 @@ QQC2.Dialog {
                                 }
 
                                 Button {
-                                    text: "Unlimited"
+                                    text: qsTr("Unlimited")
                                     variant: "secondary"
                                     onClicked: {
                                         capSpin.value = 0
@@ -450,19 +439,19 @@ QQC2.Dialog {
                             spacing: 8
 
                             Switch {
-                                text: "Open file when completed"
+                                text: qsTr("Open file when completed")
                                 checked: task ? task.postOpenFile : false
                                 onToggled: if (task) task.postOpenFile = checked
                             }
 
                             Switch {
-                                text: "Show in folder when completed"
+                                text: qsTr("Show in folder when completed")
                                 checked: task ? task.postRevealFolder : false
                                 onToggled: if (task) task.postRevealFolder = checked
                             }
 
                             Switch {
-                                text: "Extract after completion"
+                                text: qsTr("Extract after completion")
                                 checked: task ? task.postExtract : false
                                 onToggled: if (task) task.postExtract = checked
                             }
@@ -471,7 +460,7 @@ QQC2.Dialog {
                                 Layout.fillWidth: true
 
                                 Label {
-                                    text: "Post-completion script"
+                                    text: qsTr("Post-completion script")
                                     role: "caption"
                                     tone: "secondary"
                                 }
@@ -479,7 +468,7 @@ QQC2.Dialog {
                                 TextField {
                                     Layout.fillWidth: true
                                     text: task ? task.postScript : ""
-                                    placeholderText: "Optional script command"
+                                    placeholderText: qsTr("Optional script command")
                                     onEditingFinished: if (task) task.postScript = text
                                 }
                             }
@@ -489,7 +478,7 @@ QQC2.Dialog {
                                 spacing: 8
 
                                 Label {
-                                    text: "Retry max"
+                                    text: qsTr("Retry max")
                                     role: "caption"
                                     tone: "secondary"
                                 }
@@ -502,7 +491,7 @@ QQC2.Dialog {
                                 }
 
                                 Label {
-                                    text: "Retry delay (sec)"
+                                    text: qsTr("Retry delay (sec)")
                                     role: "caption"
                                     tone: "secondary"
                                 }
@@ -528,27 +517,27 @@ QQC2.Dialog {
                             columnSpacing: 12
                             rowSpacing: 6
 
-                            Label { text: "User-Agent"; role: "caption"; tone: "secondary" }
+                            Label { text: qsTr("User-Agent"); role: "caption"; tone: "secondary" }
                             Label { text: task ? task.userAgent : ""; role: "caption" }
 
-                            Label { text: "Proxy"; role: "caption"; tone: "secondary" }
+                            Label { text: qsTr("Proxy"); role: "caption"; tone: "secondary" }
                             Label {
                                 text: task
-                                      ? (task.proxyHost.length > 0 ? task.proxyHost + ":" + task.proxyPort : "None")
+                                      ? (task.proxyHost.length > 0 ? task.proxyHost + ":" + task.proxyPort : qsTr("None"))
                                       : ""
                                 role: "caption"
                             }
 
-                            Label { text: "SSL Policy"; role: "caption"; tone: "secondary" }
+                            Label { text: qsTr("SSL Policy"); role: "caption"; tone: "secondary" }
                             Label {
-                                text: task && task.allowInsecureSsl ? "Allow insecure" : "Strict"
+                                text: task && task.allowInsecureSsl ? qsTr("Allow insecure") : qsTr("Strict")
                                 role: "caption"
                                 tone: task && task.allowInsecureSsl ? "warning" : "success"
                             }
 
-                            Label { text: "Checksum"; role: "caption"; tone: "secondary" }
+                            Label { text: qsTr("Checksum"); role: "caption"; tone: "secondary" }
                             Label {
-                                text: task ? (task.checksumState + (task.checksumAlgorithm.length > 0 ? " (" + task.checksumAlgorithm + ")" : "")) : ""
+                                text: task ? (languageManager.statusLabel(task.checksumState) + (task.checksumAlgorithm.length > 0 ? " (" + task.checksumAlgorithm + ")" : "")) : ""
                                 role: "caption"
                             }
                         }
@@ -570,20 +559,20 @@ QQC2.Dialog {
             spacing: 8
 
             Button {
-                text: statusText === "Active" ? "Pause" : "Resume"
+                text: statusText === "Active" ? qsTr("Pause") : qsTr("Resume")
                 enabled: row >= 0 && (statusText === "Active" || statusText === "Paused")
                 onClicked: root.pauseResumeRequested(row)
             }
 
             Button {
-                text: "Retry"
+                text: qsTr("Retry")
                 variant: "secondary"
                 enabled: row >= 0
                 onClicked: root.retryRequested(row)
             }
 
             Button {
-                text: "Cancel"
+                text: qsTr("Cancel")
                 variant: "danger"
                 enabled: row >= 0 && (statusText === "Active" || statusText === "Paused" || statusText === "Queued")
                 onClicked: root.cancelRequested(row)
@@ -592,35 +581,35 @@ QQC2.Dialog {
             Item { Layout.fillWidth: true }
 
             Button {
-                text: "Open"
+                text: qsTr("Open")
                 variant: "secondary"
                 enabled: row >= 0 && statusText === "Done"
                 onClicked: root.openRequested(row)
             }
 
             Button {
-                text: "Show in Folder"
+                text: qsTr("Show in Folder")
                 variant: "secondary"
                 enabled: row >= 0
                 onClicked: root.revealRequested(row)
             }
 
             Button {
-                text: "Verify"
+                text: qsTr("Verify")
                 variant: "secondary"
                 enabled: row >= 0
                 onClicked: root.verifyRequested(row)
             }
 
             Button {
-                text: "Remove"
+                text: qsTr("Remove")
                 variant: "danger"
                 enabled: row >= 0
                 onClicked: root.removeRequested(row)
             }
 
             Button {
-                text: "Close"
+                text: qsTr("Close")
                 variant: "ghost"
                 onClicked: root.close()
             }

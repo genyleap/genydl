@@ -14,6 +14,7 @@
 
 import genydl.core.downloadmanager;
 import genydl.core.appcontroller;
+import genydl.core.language_manager;
 import genydl.services.github_release_service;
 import genydl.services.release_center_service;
 import genydl.services.update_client;
@@ -88,6 +89,15 @@ inline void configureGraphicsBackend()
 
 auto main(int argc, char *argv[]) -> int
 {
+#ifdef Q_OS_MACOS
+    // Native Cocoa context menus may ask AppKit to synthesize placeholder
+    // images for otherwise icon-less actions. On macOS 26 this can enter the
+    // ImageIO ICNS/PNG decoder and crash while opening the status-bar menu.
+    // GenyDL's native menus are intentionally text-only, so prevent Qt from
+    // attaching menu-item icons before QApplication creates the Cocoa backend.
+    QCoreApplication::setAttribute(Qt::AA_DontShowIconsInMenus);
+#endif
+
     QApplication app(argc, argv);
     QCoreApplication::setOrganizationName(QStringLiteral("Genyleap"));
     QCoreApplication::setApplicationName(QStringLiteral("GenyDL"));
@@ -109,6 +119,7 @@ auto main(int argc, char *argv[]) -> int
     GitHubReleaseService githubReleaseService;
     GitHubReleaseTrackerService releaseCenterService;
     AppController appController(&manager);
+    LanguageManager languageManager;
 
     const QString appDir = QCoreApplication::applicationDirPath();
     const QString fontFileName = QStringLiteral("fa-solid-900.ttf");
@@ -130,6 +141,10 @@ auto main(int argc, char *argv[]) -> int
 
     // Set up QML engine
     QQmlApplicationEngine engine;
+    QObject::connect(&languageManager, &LanguageManager::currentLanguageChanged,
+                     &appController, &AppController::retranslateUi);
+    languageManager.setQmlEngine(&engine);
+    appController.retranslateUi();
 
     // Expose the manager to QML
     engine.rootContext()->setContextProperty("downloadManager", &manager);
@@ -139,6 +154,7 @@ auto main(int argc, char *argv[]) -> int
     engine.rootContext()->setContextProperty("githubReleaseService", &githubReleaseService);
     engine.rootContext()->setContextProperty("releaseCenterService", &releaseCenterService);
     engine.rootContext()->setContextProperty("appController", &appController);
+    engine.rootContext()->setContextProperty("languageManager", &languageManager);
     QString downloadsRoot = QDir(QStandardPaths::writableLocation(QStandardPaths::DownloadLocation)).filePath(QStringLiteral("GenyDL"));
     if (downloadsRoot.isEmpty()) {
         downloadsRoot = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
@@ -154,8 +170,9 @@ auto main(int argc, char *argv[]) -> int
     {
         QStringList downloadRoots;
         if (!downloadsRoot.isEmpty()) downloadRoots << downloadsRoot;
-        const QString plainDownloads = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
-        if (!plainDownloads.isEmpty()) downloadRoots << plainDownloads;
+        // Release downloads and category folders live below the GenyDL root.
+        // Scanning the user's entire Downloads directory synchronously can block
+        // application startup when it contains cloud/file-provider entries.
         releaseCenterService.setDownloadRoots(downloadRoots);
     }
 

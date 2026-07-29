@@ -86,7 +86,7 @@ T.Button {
             font.bold: control.isBold ? Font.Bold : Font.Normal
             font.weight: control.isBold ? Font.Bold : Font.Normal
             verticalAlignment: Text.AlignVCenter
-            horizontalAlignment: control.setIconEnd ? Text.AlignLeft : Text.AlignHCenter
+            horizontalAlignment: control.setIconEnd ? Text.AlignLeading : Text.AlignHCenter
 
             anchors.fill: parent
             anchors.left: parent.left
@@ -113,7 +113,7 @@ T.Button {
                     easing.type: Easing.Linear;
                 }
             }
-            elide: Text.ElideRight
+            elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
 
             scale: control.pressed ? 0.9 : 1.0
             Behavior on scale { NumberAnimation { duration: 200; } }

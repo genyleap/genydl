@@ -4,6 +4,7 @@ module;
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLocale>
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QRegularExpression>
@@ -144,7 +145,7 @@ QVariantMap ReleaseInfo::toVariantMap() const
         {QStringLiteral("htmlUrl"), htmlUrl.toString()},
         {QStringLiteral("publishedAt"), publishedAt},
         {QStringLiteral("publishedText"), publishedAt.isValid()
-             ? publishedAt.toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm"))
+             ? QLocale().toString(publishedAt.toLocalTime(), QLocale::ShortFormat)
              : QString()},
         {QStringLiteral("prerelease"), prerelease},
         {QStringLiteral("draft"), draft}
@@ -339,31 +340,31 @@ QString humanSize(qint64 bytes)
 QString userFriendlyApiError(int statusCode, const QByteArray& responseBody, bool rateLimitExhausted)
 {
     if (rateLimitExhausted) {
-        return QStringLiteral("GitHub API rate limit reached. Try again later or configure a GitHub token when token support is enabled.");
+        return QCoreApplication::translate("GitHubReleaseService", "GitHub API rate limit reached. Try again later or configure a GitHub token when token support is enabled.");
     }
 
     switch (statusCode) {
     case 401:
-        return QStringLiteral("GitHub refused the request. This release may require authentication.");
+        return QCoreApplication::translate("GitHubReleaseService", "GitHub refused the request. This release may require authentication.");
     case 403:
-        return QStringLiteral("GitHub refused the request. This can happen for private repositories or API rate limits.");
+        return QCoreApplication::translate("GitHubReleaseService", "GitHub refused the request. This can happen for private repositories or API rate limits.");
     case 404:
-        return QStringLiteral("GitHub repository or release was not found.");
+        return QCoreApplication::translate("GitHubReleaseService", "GitHub repository or release was not found.");
     case 422:
-        return QStringLiteral("GitHub could not resolve that release tag.");
+        return QCoreApplication::translate("GitHubReleaseService", "GitHub could not resolve that release tag.");
     default:
         break;
     }
 
     const QString message = apiErrorMessageFromBody(responseBody);
     if (!message.isEmpty()) {
-        return QStringLiteral("GitHub API error: %1").arg(message);
+        return QCoreApplication::translate("GitHubReleaseService", "GitHub API error: %1").arg(message);
     }
 
     if (statusCode > 0) {
-        return QStringLiteral("GitHub API request failed with HTTP %1.").arg(statusCode);
+        return QCoreApplication::translate("GitHubReleaseService", "GitHub API request failed with HTTP %1.").arg(statusCode);
     }
-    return QStringLiteral("GitHub release request failed.");
+    return QCoreApplication::translate("GitHubReleaseService", "GitHub release request failed.");
 }
 
 std::optional<ReleaseInfo> parseReleaseJson(const QByteArray& data, QString* errorMessage)
@@ -372,7 +373,7 @@ std::optional<ReleaseInfo> parseReleaseJson(const QByteArray& data, QString* err
     const QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
     if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
         if (errorMessage) {
-            *errorMessage = QStringLiteral("GitHub returned malformed release data.");
+            *errorMessage = QCoreApplication::translate("GitHubReleaseService", "GitHub returned malformed release data.");
         }
         return std::nullopt;
     }
@@ -433,7 +434,7 @@ std::optional<RepositoryInfo> parseRepositoryJson(const QByteArray& data, QStrin
     const QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
     if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
         if (errorMessage) {
-            *errorMessage = QStringLiteral("GitHub returned malformed repository data.");
+            *errorMessage = QCoreApplication::translate("GitHubReleaseService", "GitHub returned malformed repository data.");
         }
         return std::nullopt;
     }
@@ -457,7 +458,7 @@ std::optional<RepositoryInfo> parseRepositoryJson(const QByteArray& data, QStrin
 
     if (!info.isValid()) {
         if (errorMessage) {
-            *errorMessage = QStringLiteral("GitHub repository metadata is missing owner or repository name.");
+            *errorMessage = QCoreApplication::translate("GitHubReleaseService", "GitHub repository metadata is missing owner or repository name.");
         }
         return std::nullopt;
     }
@@ -472,7 +473,7 @@ std::optional<ReleaseInfo> parseLatestReleaseFromListJson(const QByteArray& data
     const QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
     if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
         if (errorMessage) {
-            *errorMessage = QStringLiteral("GitHub returned malformed release list data.");
+            *errorMessage = QCoreApplication::translate("GitHubReleaseService", "GitHub returned malformed release list data.");
         }
         return std::nullopt;
     }
@@ -501,7 +502,7 @@ std::optional<ReleaseInfo> parseLatestReleaseFromListJson(const QByteArray& data
     }
 
     if (!latest && errorMessage) {
-        *errorMessage = QStringLiteral("This repository does not publish matching releases.");
+        *errorMessage = QCoreApplication::translate("GitHubReleaseService", "This repository does not publish matching releases.");
     }
     return latest;
 }
@@ -578,7 +579,7 @@ void GitHubReleaseService::fetchRelease(const QString& value)
 {
     const auto request = genydl::github::parseReleaseUrl(value);
     if (!request) {
-        finishWithError(QStringLiteral("This is not a supported GitHub release URL."));
+        finishWithError(QCoreApplication::translate("GitHubReleaseService", "This is not a supported GitHub release URL."));
         return;
     }
 
@@ -636,7 +637,7 @@ void GitHubReleaseService::fetchRelease(const QString& value)
         QString parseError;
         auto release = genydl::github::parseReleaseJson(responseBody, &parseError);
         if (!release) {
-            finishWithError(parseError.isEmpty() ? QStringLiteral("GitHub returned malformed release data.") : parseError);
+            finishWithError(parseError.isEmpty() ? QCoreApplication::translate("GitHubReleaseService", "GitHub returned malformed release data.") : parseError);
             return;
         }
 
@@ -732,17 +733,17 @@ QString GitHubReleaseService::networkErrorMessage(QNetworkReply::NetworkError er
 {
     switch (error) {
     case QNetworkReply::TimeoutError:
-        return QStringLiteral("GitHub release request timed out. Check the connection and try again.");
+        return QCoreApplication::translate("GitHubReleaseService", "GitHub release request timed out. Check the connection and try again.");
     case QNetworkReply::HostNotFoundError:
-        return QStringLiteral("Could not reach GitHub. Check the network connection and try again.");
+        return QCoreApplication::translate("GitHubReleaseService", "Could not reach GitHub. Check the network connection and try again.");
     case QNetworkReply::ConnectionRefusedError:
     case QNetworkReply::RemoteHostClosedError:
     case QNetworkReply::TemporaryNetworkFailureError:
     case QNetworkReply::NetworkSessionFailedError:
-        return QStringLiteral("Network connection failed while contacting GitHub. Try again later.");
+        return QCoreApplication::translate("GitHubReleaseService", "Network connection failed while contacting GitHub. Try again later.");
     default:
         break;
     }
 
-    return QStringLiteral("Network error while contacting GitHub: %1").arg(detail);
+    return QCoreApplication::translate("GitHubReleaseService", "Network error while contacting GitHub: %1").arg(detail);
 }

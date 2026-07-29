@@ -30,10 +30,17 @@ import GenyDL 1.0
 ApplicationWindow {
     id: appRoot
     visible: true
+    LayoutMirroring.enabled: Qt.application.layoutDirection === Qt.RightToLeft
+    LayoutMirroring.childrenInherit: true
+
+    Binding {
+        target: AppGlobals
+        property: "rtl"
+        value: languageManager.rightToLeft
+    }
 
     QtObject {
         id: appAttributes
-        property string name: "GenyDL - Internet Download Manager"
         property int width: 1280
         property int height: 800
         property int interiorWidth : appRoot.width
@@ -47,7 +54,7 @@ ApplicationWindow {
 
     // flags: Qt.ApplicationModal | Qt.MaximizeUsingFullscreenGeometryHint
 
-    title: qsTr(appAttributes.name)
+    title: qsTr("GenyDL - Internet Download Manager")
 
     Overlay.modal: Rectangle {
         id: dimLayer
@@ -76,7 +83,7 @@ ApplicationWindow {
         id: appRootObjects
         property bool isOnline               : false
         property bool isLogin                : true
-        property bool isLeftToRight          : true
+        readonly property bool isLeftToRight : !languageManager.rightToLeft
         property bool isDarkMode             : false
     }
 
@@ -141,11 +148,42 @@ ApplicationWindow {
     readonly property real detailsProgress: detailsIsDone
                                             ? 1.0
                                             : (detailsBytesTotal > 0 ? Math.min(1.0, detailsBytesReceived / detailsBytesTotal) : 0.0)
-    readonly property var statusOptions: ["All", "Unfinished", "History", "Active", "Queued", "Paused", "Done", "Error", "Canceled"]
-    readonly property var sortOptions: ["Name", "Status", "Received", "Total", "Queue", "Category"]
-    readonly property var themeOptions: ["System", "Dark", "Light"]
-    readonly property var queuePostActionOptions: ["Do nothing", "Exit application", "Sleep", "Shutdown system"]
+    readonly property var statusOptionIds: ["All", "Unfinished", "History", "Active", "Queued", "Paused", "Done", "Error", "Canceled"]
+    readonly property var statusOptions: [
+        qsTr("All"), qsTr("Unfinished"), qsTr("History"), qsTr("Active"), qsTr("Queued"),
+        qsTr("Paused"), qsTr("Done"), qsTr("Error"), qsTr("Canceled")
+    ]
+    readonly property var sortOptions: [
+        qsTr("Name"), qsTr("Status"), qsTr("Received"), qsTr("Total"), qsTr("Queue"), qsTr("Category")
+    ]
+    readonly property var themeOptions: [qsTr("System"), qsTr("Dark"), qsTr("Light")]
+    readonly property var updateModeIds: ["custom", "automatic"]
+    readonly property var updateModeOptions: [qsTr("Custom"), qsTr("Automatic")]
+    readonly property var updateChannelIds: ["stable", "beta"]
+    readonly property var updateChannelOptions: [qsTr("Stable"), qsTr("Beta")]
+    readonly property var updateSourceIds: ["auto", "website", "github"]
+    readonly property var updateSourceOptions: [qsTr("Automatic"), qsTr("Website"), qsTr("GitHub")]
+    readonly property var queuePostActionOptions: [
+        qsTr("Do nothing"), qsTr("Exit application"), qsTr("Sleep"), qsTr("Shutdown system")
+    ]
     readonly property var queuePostActionIds: ["none", "exit", "sleep", "shutdown"]
+    readonly property var languageOptions: languageManager.availableLanguages
+    readonly property var queueOptions: {
+        const languageDependency = languageManager.currentLanguage
+        const names = downloadManager.queueNames
+        var result = []
+        for (var i = 0; i < names.length; ++i)
+            result.push({ id: names[i], text: languageManager.queueLabel(names[i]) })
+        return result
+    }
+    readonly property var categoryOptions: {
+        const languageDependency = languageManager.currentLanguage
+        const names = downloadManager.categoryNames()
+        var result = []
+        for (var i = 0; i < names.length; ++i)
+            result.push({ id: names[i], text: languageManager.categoryLabel(names[i]) })
+        return result
+    }
     readonly property string donationAddress: "0x6E99f7564d060AA141dcC47ede34379Bad0cDCCC"
     readonly property string donationBaseExplorerUrl: "https://basescan.org/address/0x6E99f7564d060AA141dcC47ede34379Bad0cDCCC"
     readonly property string donationMainnetExplorerUrl: "https://etherscan.io/address/0x6E99f7564d060AA141dcC47ede34379Bad0cDCCC"
@@ -162,7 +200,7 @@ ApplicationWindow {
     readonly property string copyrightOwner: "Genyleap Labs"
     readonly property string genyTokenName: "Genyleap"
     readonly property string genyTokenSymbol: "GENY"
-    readonly property string genyTokenDescription: "An ERC20 token with a fixed supply of 256 million, designed to empower creators and drive innovation in the Genyleap ecosystem."
+    readonly property string genyTokenDescription: qsTr("An ERC20 token with a fixed supply of 256 million, designed to empower creators and drive innovation in the Genyleap ecosystem.")
     readonly property string genyTokenImageUrl: "https://genyleap.com/assets/token/images/geny-logo.svg"
     readonly property string genyTokenContractAddress: "0x2a3d6f8c1fc4AcDcf3A75d19b445bae02F03676B"
     readonly property string genyTokenBaseExplorerUrl: "https://basescan.org/address/0x2a3d6f8c1fc4AcDcf3A75d19b445bae02F03676B"
@@ -200,6 +238,20 @@ ApplicationWindow {
 
     function compactCount(value) { return Utils.compactCount(value) }
     function formatReleaseDate(value) { return Utils.formatReleaseDate(value, appRoot.releaseDateFormat) }
+    function formatVersionNumber(value) {
+        return Utils.localizeDigits(Utils.versionNumber(value))
+    }
+    function formatReleaseTag(value) {
+        const raw = String(value || "").trim()
+        const number = appRoot.formatVersionNumber(raw)
+        if (number.length === 0)
+            return ""
+        // Persian prose does not use the Latin release-tag prefix "v".
+        // U+0654 supplies the correct ezafe in «نسخهٔ».
+        if (String(languageManager.currentLocale).toLowerCase().indexOf("fa") === 0)
+            return qsTr("Version") + "\u0654 " + number
+        return Utils.localizeDigits(raw)
+    }
 
     // Open the GitHub asset picker for a tracked Release Center app (shared by the
     // card, the details dialog, and the one-click update fallback).
@@ -228,7 +280,7 @@ ApplicationWindow {
         appRoot.releaseAssetPickerSourceAssets = app.latestSourceAssets || []
         appRoot.releaseAssetPickerLoading = false
         appRoot.releaseAssetPickerError = appRoot.releaseAssetPickerAssets.length > 0
-                ? "" : "This release does not publish downloadable assets."
+                ? "" : qsTr("This release does not publish downloadable assets.")
         githubReleaseAssetPicker.open()
     }
 
@@ -247,8 +299,8 @@ ApplicationWindow {
                         appRoot.addDefaultCategory, appRoot.addDefaultStartPaused,
                         appRoot.addDefaultSegments, appRoot.addDefaultAdaptive)
         if (added > 0) {
-            appRoot.appendNotification("Updating " + (app.displayName || app.repo),
-                                       "Downloading " + picks[0].name + " …", "success")
+            appRoot.appendNotification(qsTr("Updating %1").arg(app.displayName || app.repo),
+                                       qsTr("Downloading %1 …").arg(picks[0].name), "success")
             releaseCenterService.markLatestKnown(app.rowIndex)
             appRoot.pageIndex = 0   // show the download on Home
         }
@@ -290,7 +342,50 @@ ApplicationWindow {
     function openPropertiesForSelection() { return Utils.openPropertiesForSelection.apply(this, arguments) }
     function shareSelectedTargets() { return Utils.shareSelectedTargets.apply(this, arguments) }
     function resolveTaskRow() { return Utils.resolveTaskRow.apply(this, arguments) }
-    function taskStatusText() { return Utils.taskStatusText.apply(this, arguments) }
+    function statusLabel(status) {
+        const languageDependency = languageManager.currentLanguage
+        return languageManager.statusLabel(status)
+    }
+    function categoryLabel(category) {
+        const languageDependency = languageManager.currentLanguage
+        return languageManager.categoryLabel(category)
+    }
+    function queueLabel(queue) {
+        const languageDependency = languageManager.currentLanguage
+        return languageManager.queueLabel(queue)
+    }
+    function taskStatusText(taskObj, fallbackStatus) {
+        const state = taskObj ? taskObj.stateString : fallbackStatus
+        const translatedState = statusLabel(state || "")
+        if (!taskObj || state !== "Paused")
+            return translatedState
+        const reason = taskObj.pauseReason ? String(taskObj.pauseReason) : ""
+        if (reason.length === 0 || reason === "User")
+            return translatedState
+        return translatedState + " (" + languageManager.pauseReasonLabel(reason) + ")"
+    }
+    function safeReleaseNotes(value) {
+        // On macOS 26.5, Qt's render thread can crash in ImageIO while CoreText
+        // rasterizes color-emoji PNG glyphs from remote release notes. Keep the
+        // original text in the backend, but remove emoji presentation sequences
+        // before they reach QQuickTextArea.
+        const input = String(value || "")
+        var output = ""
+        for (var i = 0; i < input.length; ++i) {
+            const codePoint = input.codePointAt(i)
+            if (codePoint > 0xffff)
+                ++i
+            const emoji = (codePoint >= 0x1f000 && codePoint <= 0x1faff)
+                       || (codePoint >= 0x2600 && codePoint <= 0x27bf)
+                       || codePoint === 0xfe0e
+                       || codePoint === 0xfe0f
+                       || codePoint === 0x200d
+                       || codePoint === 0x20e3
+            if (!emoji)
+                output += String.fromCodePoint(codePoint)
+        }
+        return output
+    }
     function taskFileNameValue() { return Utils.taskFileNameValue.apply(this, arguments) }
     function setCategoryPreset() { return Utils.setCategoryPreset.apply(this, arguments) }
     function openDetailsFor() { return Utils.openDetailsFor.apply(this, arguments) }
@@ -321,10 +416,13 @@ ApplicationWindow {
     function refreshDetailsSnapshot() { return Utils.refreshDetailsSnapshot.apply(this, arguments) }
     function resetDetailsSamples() { return Utils.resetDetailsSamples.apply(this, arguments) }
     function pushDetailsSpeedSample() { return Utils.pushDetailsSpeedSample.apply(this, arguments) }
-    function notificationTimestamp() { return Qt.formatDateTime(new Date(), "yyyy-MM-dd hh:mm") }
+    function notificationTimestamp() {
+        return Utils.localizeDigits(
+                    new Date().toLocaleString(Qt.locale(languageManager.currentLocale), Locale.ShortFormat))
+    }
     function appendNotification(title, message, type) {
         notificationModel.insert(0, {
-            title: title && title.length > 0 ? title : "Notification",
+            title: title && title.length > 0 ? title : qsTr("Notification"),
             message: message && message.length > 0 ? message : "",
             time: notificationTimestamp(),
             type: type && type.length > 0 ? type : "default"
@@ -337,16 +435,19 @@ ApplicationWindow {
         if (!url || url.length === 0)
             return
         Qt.openUrlExternally(url)
-        appRoot.appendNotification(label && label.length > 0 ? label : "Opened link", url, "info")
+        appRoot.appendNotification(label && label.length > 0 ? label : qsTr("Opened link"), url, "info")
     }
     function minutesToClockText(minutes) {
         const total = Math.max(0, Math.min(1439, Number(minutes) || 0))
         const hour = Math.floor(total / 60)
         const minute = total % 60
-        return String(hour).padStart(2, "0") + ":" + String(minute).padStart(2, "0")
+        return Utils.localizeDigits(
+                    String(hour).padStart(2, "0")
+                    + ":"
+                    + String(minute).padStart(2, "0"))
     }
     function clockTextToMinutes(text, fallback) {
-        const raw = String(text || "").trim().toLowerCase()
+        const raw = Utils.asciiDigits(text).trim().toLowerCase()
         const match = raw.match(/^(\d{1,2})(?::(\d{1,2}))?\s*(am|pm)?$/)
         if (!match)
             return fallback
@@ -367,11 +468,18 @@ ApplicationWindow {
         const idx = queuePostActionIds.indexOf(action && action.length > 0 ? action : "none")
         return idx >= 0 ? idx : 0
     }
+    function languageIndex(languageCode) {
+        for (var i = 0; i < languageOptions.length; ++i) {
+            if (languageOptions[i].code === languageCode)
+                return i
+        }
+        return 0
+    }
     function copyToClipboard(value, label) {
         if (!value || value.length === 0)
             return
         downloadManager.copyText(value)
-        appRoot.appendNotification(label && label.length > 0 ? label : "Copied to clipboard", value, "success")
+        appRoot.appendNotification(label && label.length > 0 ? label : qsTr("Copied to clipboard"), value, "success")
     }
     function restoreUiDefaults() {
         uiSettings.savedPageIndex = 0
@@ -468,9 +576,9 @@ ApplicationWindow {
 
     QQD.FileDialog {
         id: importDialog
-        title: "Import Download List"
+        title: qsTr("Import Download List")
         fileMode: QQD.FileDialog.OpenFile
-        nameFilters: ["Download Lists (*.json *.txt)", "All files (*)"]
+        nameFilters: [qsTr("Download Lists (*.json *.txt)"), qsTr("All files (*)")]
         onAccepted: {
             const p = selectedFile.toString().replace("file://", "")
             downloadManager.importList(p)
@@ -479,9 +587,9 @@ ApplicationWindow {
 
     QQD.FileDialog {
         id: exportDialog
-        title: "Export Download List"
+        title: qsTr("Export Download List")
         fileMode: QQD.FileDialog.SaveFile
-        nameFilters: ["JSON (*.json)", "Text (*.txt)"]
+        nameFilters: [qsTr("JSON (*.json)"), qsTr("Text (*.txt)")]
         onAccepted: {
             const p = selectedFile.toString().replace("file://", "")
             downloadManager.exportList(p)
@@ -490,15 +598,15 @@ ApplicationWindow {
 
     Controls.Dialog {
         id: backgroundCloseDialog
-        title: "Downloads still running"
+        title: qsTr("Downloads still running")
         type: "warning"
-        desc: "GenyDL can keep downloads active after the window is closed."
+        desc: qsTr("GenyDL can keep downloads active after the window is closed.")
         message: appController.trayAvailable
-                 ? "Use the tray icon to restore the main window or exit the application."
-                 : "This system does not expose a tray icon right now. Use Exit to stop the application, or cancel and keep the window open."
+                 ? qsTr("Use the tray icon to restore the main window or exit the application.")
+                 : qsTr("This system does not expose a tray icon right now. Use Exit to stop the application, or cancel and keep the window open.")
         standardButtons: Dialog.Cancel | Dialog.Discard
-        cancelTextOverride: "Keep Open"
-        discardTextOverride: "Exit GenyDL"
+        cancelTextOverride: qsTr("Keep Open")
+        discardTextOverride: qsTr("Exit GenyDL")
         onDiscarded: appController.quitApplication()
     }
 
@@ -507,10 +615,10 @@ ApplicationWindow {
         width: Math.min(appRoot.width - 60, 620)
         height: 520
 
-        title: "About GenyDL"
+        title: qsTr("About GenyDL")
         type: "info"
-        desc: "GenyDL Download Manager"
-        message: "GenyDL provides segmented downloading, queue control, adaptive segment scheduling, runtime policies, and update delivery in a desktop workflow."
+        desc: qsTr("GenyDL Download Manager")
+        message: qsTr("GenyDL provides segmented downloading, queue control, adaptive segment scheduling, runtime policies, and update delivery in a desktop workflow.")
 
         standardButtons: Dialog.Close
 
@@ -555,7 +663,7 @@ ApplicationWindow {
                         Text {
                             anchors.centerIn: parent
                             visible: genydlAboutImage.status !== Image.Ready
-                            text: "GENYDL"
+                            text: qsTr("GENYDL")
                             color: Colors.textPrimary
                             font.family: FontSystem.getTitleBoldFont.font.family
                             font.pixelSize: Typography.t2
@@ -570,7 +678,7 @@ ApplicationWindow {
 
                         Text {
                             Layout.fillWidth: true
-                            text: "GenyDL Download Manager"
+                            text: qsTr("GenyDL Download Manager")
                             color: Colors.textPrimary
                             font.family: FontSystem.getTitleBoldFont.font.family
                             font.pixelSize: Typography.h4
@@ -580,7 +688,7 @@ ApplicationWindow {
 
                         Text {
                             Layout.fillWidth: true
-                            text: "Modern segmented downloading with queue control, runtime policies, and update delivery."
+                            text: qsTr("Modern segmented downloading with queue control, runtime policies, and update delivery.")
                             color: Colors.textSecondary
                             font.family: FontSystem.getContentFontRegular.name
                             font.pixelSize: Typography.t2
@@ -595,18 +703,18 @@ ApplicationWindow {
                 columnSpacing: 24
                 rowSpacing: 8
 
-                Controls.Label { text: "Name" }
-                Controls.Label { text: "GenyDL Download Manager" }
-                Controls.Label { text: "Version" }
+                Controls.Label { text: qsTr("Name") }
+                Controls.Label { text: qsTr("GenyDL Download Manager") }
+                Controls.Label { text: qsTr("Version") }
                 Controls.Label { text: Qt.application.version }
-                Controls.Label { text: "Framework" }
-                Controls.Label { text: "Qt 6.10.2" }
-                Controls.Label { text: "Creator" }
+                Controls.Label { text: qsTr("Framework") }
+                Controls.Label { text: qsTr("Qt 6.10.2") }
+                Controls.Label { text: qsTr("Creator") }
                 Controls.Label { text: appRoot.creatorName }
-                Controls.Label { text: "Copyright" }
-                Controls.Label { text: "2026 " + appRoot.copyrightOwner }
-                Controls.Label { text: "Engine written with" }
-                Controls.Label { text: "C++23 (ISO/IEC 14882:2024)" }
+                Controls.Label { text: qsTr("Copyright") }
+                Controls.Label { text: qsTr("2026 ") + appRoot.copyrightOwner }
+                Controls.Label { text: qsTr("Engine written with") }
+                Controls.Label { text: qsTr("C++23 (ISO/IEC 14882:2024)") }
             }
 
             Controls.HorizontalLine {}
@@ -614,10 +722,10 @@ ApplicationWindow {
             ColumnLayout {
                 spacing: 6
 
-                Controls.Label { text: "• Segmented downloads with optional adaptive segment control" }
-                Controls.Label { text: "• Queue routing, quota, schedule, and bandwidth policies" }
-                Controls.Label { text: "• Proxy, SSL, user-agent, retry, and resume support" }
-                Controls.Label { text: "• Update discovery and package delivery workflow" }
+                Controls.Label { text: qsTr("• Segmented downloads with optional adaptive segment control") }
+                Controls.Label { text: qsTr("• Queue routing, quota, schedule, and bandwidth policies") }
+                Controls.Label { text: qsTr("• Proxy, SSL, user-agent, retry, and resume support") }
+                Controls.Label { text: qsTr("• Update discovery and package delivery workflow") }
             }
         }
     }
@@ -626,7 +734,7 @@ ApplicationWindow {
         id: updateDialog
         width: Math.min(appRoot.width - 48, 760)
         height: Math.min(appRoot.height - 32, 900)
-        title: "Updates"
+        title: qsTr("Updates")
         type: "info"
         message: ""
 
@@ -644,7 +752,7 @@ ApplicationWindow {
                 spacing: 12
 
                 Controls.GroupBox {
-                    title: "Current State"
+                    title: qsTr("Current State")
                     Layout.fillWidth: true
                     implicitHeight: updateCurrentStateLayout.implicitHeight + topPadding + bottomPadding
 
@@ -655,19 +763,19 @@ ApplicationWindow {
                         columnSpacing: 12
                         rowSpacing: 8
 
-                        Controls.Label { text: "Current version" }
+                        Controls.Label { text: qsTr("Current version") }
                         Controls.Label { text: updateClient.currentVersion }
-                        Controls.Label { text: "Latest version" }
+                        Controls.Label { text: qsTr("Latest version") }
                         Controls.Label { text: updateClient.latestVersion.length > 0 ? updateClient.latestVersion : "--" }
-                        Controls.Label { text: "Status" }
+                        Controls.Label { text: qsTr("Status") }
                         Controls.Label { text: updateClient.status }
-                        Controls.Label { text: "Source" }
+                        Controls.Label { text: qsTr("Source") }
                         Controls.Label { text: updateClient.sourcePreference }
                     }
                 }
 
                 Controls.GroupBox {
-                    title: "Actions"
+                    title: qsTr("Actions")
                     Layout.fillWidth: true
                     implicitHeight: updateActionsLayout.implicitHeight + topPadding + bottomPadding
 
@@ -676,11 +784,11 @@ ApplicationWindow {
                         width: parent.width
                         spacing: 10
 
-                        Controls.Button { text: "Check Now"; onClicked: updateClient.checkNow() }
-                        Controls.Button { text: "Download"; enabled: updateClient.updateAvailable; onClicked: updateClient.downloadUpdate() }
-                        Controls.Button { text: "Install"; enabled: updateClient.downloadReady; onClicked: updateClient.installUpdate() }
+                        Controls.Button { text: qsTr("Check Now"); onClicked: updateClient.checkNow() }
+                        Controls.Button { text: qsTr("Download"); enabled: updateClient.updateAvailable; onClicked: updateClient.downloadUpdate() }
+                        Controls.Button { text: qsTr("Install"); enabled: updateClient.downloadReady; onClicked: updateClient.installUpdate() }
                         Controls.Button {
-                            text: "Settings"
+                            text: qsTr("Settings")
                             onClicked: appRoot.openConfigurationDialog(3)
                         }
                         Item { Layout.fillWidth: true }
@@ -688,7 +796,7 @@ ApplicationWindow {
                 }
 
                 Controls.GroupBox {
-                    title: "Preferences"
+                    title: qsTr("Preferences")
                     Layout.fillWidth: true
                     implicitHeight: updatePreferencesLayout.implicitHeight + topPadding + bottomPadding
 
@@ -699,54 +807,54 @@ ApplicationWindow {
                         columnSpacing: 12
                         rowSpacing: 8
 
-                        Controls.Label { text: "Check on startup" }
-                        Controls.Label { text: "Always" }
+                        Controls.Label { text: qsTr("Check on startup") }
+                        Controls.Label { text: qsTr("Always") }
 
-                        Controls.Label { text: "Update mode" }
+                        Controls.Label { text: qsTr("Update mode") }
                         Controls.ComboBox {
                             Layout.preferredWidth: 220
-                            model: ["custom", "automatic"]
-                            currentIndex: Math.max(0, ["custom", "automatic"].indexOf(updateClient.updateMode))
-                            onActivated: updateClient.updateMode = currentText
+                            model: appRoot.updateModeOptions
+                            currentIndex: Math.max(0, appRoot.updateModeIds.indexOf(updateClient.updateMode))
+                            onActivated: updateClient.updateMode = appRoot.updateModeIds[currentIndex]
                         }
 
-                        Controls.Label { text: "Channel" }
+                        Controls.Label { text: qsTr("Channel") }
                         Controls.ComboBox {
                             Layout.preferredWidth: 220
-                            model: ["stable", "beta"]
-                            currentIndex: Math.max(0, ["stable", "beta"].indexOf(updateClient.channel))
-                            onActivated: updateClient.channel = currentText
+                            model: appRoot.updateChannelOptions
+                            currentIndex: Math.max(0, appRoot.updateChannelIds.indexOf(updateClient.channel))
+                            onActivated: updateClient.channel = appRoot.updateChannelIds[currentIndex]
                         }
 
-                        Controls.Label { text: "Source" }
+                        Controls.Label { text: qsTr("Source") }
                         Controls.ComboBox {
                             Layout.preferredWidth: 220
-                            model: ["auto", "website", "github"]
-                            currentIndex: Math.max(0, ["auto", "website", "github"].indexOf(updateClient.sourcePreference))
-                            onActivated: updateClient.sourcePreference = currentText
+                            model: appRoot.updateSourceOptions
+                            currentIndex: Math.max(0, appRoot.updateSourceIds.indexOf(updateClient.sourcePreference))
+                            onActivated: updateClient.sourcePreference = appRoot.updateSourceIds[currentIndex]
                         }
 
-                        Controls.Label { text: "Require signature" }
+                        Controls.Label { text: qsTr("Require signature") }
                         Controls.Switch {
                             checked: updateClient.requireSignature
                             onToggled: updateClient.requireSignature = checked
                         }
 
-                        Controls.Label { text: "GitHub repo" }
+                        Controls.Label { text: qsTr("GitHub repo") }
                         Controls.TextField {
                             Layout.fillWidth: true
                             text: updateClient.githubRepo
                             onEditingFinished: updateClient.githubRepo = text
                         }
 
-                        Controls.Label { text: "Manifest URL" }
+                        Controls.Label { text: qsTr("Manifest URL") }
                         Controls.TextField {
                             Layout.fillWidth: true
                             text: updateClient.manifestUrl
                             onEditingFinished: updateClient.manifestUrl = text
                         }
 
-                        Controls.Label { text: "Public key" }
+                        Controls.Label { text: qsTr("Public key") }
                         Controls.TextField {
                             Layout.fillWidth: true
                             text: updateClient.publicKeyPath
@@ -756,7 +864,7 @@ ApplicationWindow {
                 }
 
                 Controls.GroupBox {
-                    title: "Progress"
+                    title: qsTr("Progress")
                     Layout.fillWidth: true
                     implicitHeight: updateProgressLayout.implicitHeight + topPadding + bottomPadding
 
@@ -768,26 +876,26 @@ ApplicationWindow {
                         Controls.ProgressBar {
                             Layout.fillWidth: true
                             value: Math.max(0.0, Math.min(1.0, updateClient.downloadProgress))
-                            indeterminate: updateClient.status.toLowerCase().indexOf("downloading") >= 0
+                            indeterminate: updateClient.downloadInProgress
                                            && updateClient.downloadProgress <= 0
                             statusLevel: updateClient.lastError.length > 0 ? "Error" : (updateClient.updateAvailable ? "Paused" : "Done")
                         }
                         Controls.Label {
                             Layout.fillWidth: true
-                            text: updateClient.status.length > 0 ? updateClient.status : "Idle"
+                            text: updateClient.status.length > 0 ? updateClient.status : qsTr("Idle")
                         }
                         Controls.Label {
                             Layout.fillWidth: true
                             visible: updateClient.lastError.length > 0
                             color: Colors.error
-                            text: updateClient.lastError.length > 0 ? ("Error: " + updateClient.lastError) : ""
+                            text: updateClient.lastError.length > 0 ? qsTr("Error: %1").arg(updateClient.lastError) : ""
                             wrapMode: Text.Wrap
                         }
                     }
                 }
 
                 Controls.GroupBox {
-                    title: "Release Notes"
+                    title: qsTr("Release Notes")
                     Layout.fillWidth: true
                     implicitHeight: updateNotesLayout.implicitHeight + topPadding + bottomPadding
 
@@ -800,8 +908,9 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 128
                             readOnly: true
-                            text: updateClient.releaseNotes
-                            placeholderText: "Release notes"
+                            text: appRoot.safeReleaseNotes(updateClient.releaseNotes)
+                            placeholderText: qsTr("Release notes")
+                            font.family: FontSystem.getContentFontRegular.name
                         }
                     }
                 }
@@ -814,10 +923,10 @@ ApplicationWindow {
         id: supportDialog
         width: Math.min(appRoot.width - 60, 820)
         height: 620
-        title: "Support & Community"
+        title: qsTr("Support & Community")
         type: "info"
-        desc: "Official Genyleap resources"
-        message: "Production links for GENYDL, Genyleap, and the developer profile."
+        desc: qsTr("Official Genyleap resources")
+        message: qsTr("Production links for GENYDL, Genyleap, and the developer profile.")
 
         ColumnLayout {
             Layout.fillWidth: true
@@ -847,7 +956,7 @@ ApplicationWindow {
 
                         Text {
                             anchors.centerIn: parent
-                            text: "GENYDL"
+                            text: qsTr("GENYDL")
                             color: Colors.textPrimary
                             font.family: FontSystem.getTitleBoldFont.font.family
                             font.pixelSize: Typography.t2
@@ -861,7 +970,7 @@ ApplicationWindow {
 
                         Text {
                             Layout.fillWidth: true
-                            text: "Official support and developer channels"
+                            text: qsTr("Official support and developer channels")
                             color: Colors.textPrimary
                             font.family: FontSystem.getTitleBoldFont.font.family
                             font.pixelSize: Typography.h4
@@ -871,7 +980,7 @@ ApplicationWindow {
 
                         Text {
                             Layout.fillWidth: true
-                            text: "Use the direct links below for website, repository, Farcaster, X, GitHub, and support."
+                            text: qsTr("Use the direct links below for website, repository, Farcaster, X, GitHub, and support.")
                             color: Colors.textSecondary
                             font.family: FontSystem.getContentFontRegular.name
                             font.pixelSize: Typography.t2
@@ -882,7 +991,7 @@ ApplicationWindow {
             }
 
             Controls.GroupBox {
-                title: "Project Links"
+                title: qsTr("Project Links")
                 Layout.fillWidth: true
                 implicitHeight: supportProjectLayout.implicitHeight + topPadding + bottomPadding
 
@@ -911,7 +1020,7 @@ ApplicationWindow {
                                 spacing: 4
 
                                 Text {
-                                    text: "Official Website"
+                                    text: qsTr("Official Website")
                                     color: Colors.textPrimary
                                     font.family: FontSystem.getTitleBoldFont.font.family
                                     font.pixelSize: Typography.t2
@@ -919,7 +1028,7 @@ ApplicationWindow {
                                 }
 
                                 Text {
-                                    text: "Genyleap Labs home for GENYDL and ecosystem updates."
+                                    text: qsTr("Genyleap Labs home for GENYDL and ecosystem updates.")
                                     color: Colors.textSecondary
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t3
@@ -929,9 +1038,9 @@ ApplicationWindow {
                                 Text {
                                     Layout.fillWidth: true
                                     textFormat: Text.RichText
-                                    text: "<a href=\"" + appRoot.genyleapWebsiteUrl + "\"><span style=\"color:#3a86ff;text-decoration:underline;\">"
+                                    text: qsTr("<a href=\"") + appRoot.genyleapWebsiteUrl + "\"><span style=\"color:#3a86ff;text-decoration:underline;\">"
                                           + appRoot.genyleapWebsiteUrl + "</span></a>"
-                                    onLinkActivated: appRoot.openExternalLink(link, "Opened Genyleap website")
+                                    onLinkActivated: appRoot.openExternalLink(link, qsTr("Opened Genyleap website"))
                                     color: Colors.textAccent
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t2
@@ -941,8 +1050,8 @@ ApplicationWindow {
 
                             Controls.Button {
                                 Layout.alignment: Qt.AlignTop | Qt.AlignRight
-                                text: "Copy"
-                                onClicked: appRoot.copyToClipboard(appRoot.genyleapWebsiteUrl, "Website link copied")
+                                text: qsTr("Copy")
+                                onClicked: appRoot.copyToClipboard(appRoot.genyleapWebsiteUrl, qsTr("Website link copied"))
                             }
                         }
                     }
@@ -967,7 +1076,7 @@ ApplicationWindow {
                                 spacing: 4
 
                                 Text {
-                                    text: "Source Repository"
+                                    text: qsTr("Source Repository")
                                     color: Colors.textPrimary
                                     font.family: FontSystem.getTitleBoldFont.font.family
                                     font.pixelSize: Typography.t2
@@ -975,7 +1084,7 @@ ApplicationWindow {
                                 }
 
                                 Text {
-                                    text: "Main open source repository for GENYDL."
+                                    text: qsTr("Main open source repository for GENYDL.")
                                     color: Colors.textSecondary
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t3
@@ -984,9 +1093,9 @@ ApplicationWindow {
                                 Text {
                                     Layout.fillWidth: true
                                     textFormat: Text.RichText
-                                    text: "<a href=\"" + appRoot.projectRepositoryUrl + "\"><span style=\"color:#3a86ff;text-decoration:underline;\">"
+                                    text: qsTr("<a href=\"") + appRoot.projectRepositoryUrl + "\"><span style=\"color:#3a86ff;text-decoration:underline;\">"
                                           + appRoot.projectRepositoryUrl + "</span></a>"
-                                    onLinkActivated: appRoot.openExternalLink(link, "Opened GENYDL repository")
+                                    onLinkActivated: appRoot.openExternalLink(link, qsTr("Opened GENYDL repository"))
                                     color: Colors.textAccent
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t2
@@ -996,8 +1105,8 @@ ApplicationWindow {
 
                             Controls.Button {
                                 Layout.alignment: Qt.AlignTop | Qt.AlignRight
-                                text: "Copy"
-                                onClicked: appRoot.copyToClipboard(appRoot.projectRepositoryUrl, "Repository link copied")
+                                text: qsTr("Copy")
+                                onClicked: appRoot.copyToClipboard(appRoot.projectRepositoryUrl, qsTr("Repository link copied"))
                             }
                         }
                     }
@@ -1022,7 +1131,7 @@ ApplicationWindow {
                                 spacing: 4
 
                                 Text {
-                                    text: "Support Email"
+                                    text: qsTr("Support Email")
                                     color: Colors.textPrimary
                                     font.family: FontSystem.getTitleBoldFont.font.family
                                     font.pixelSize: Typography.t2
@@ -1030,7 +1139,7 @@ ApplicationWindow {
                                 }
 
                                 Text {
-                                    text: "Direct support channel for project and token questions."
+                                    text: qsTr("Direct support channel for project and token questions.")
                                     color: Colors.textSecondary
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t3
@@ -1040,9 +1149,9 @@ ApplicationWindow {
                                 Text {
                                     Layout.fillWidth: true
                                     textFormat: Text.RichText
-                                    text: "<a href=\"mailto:" + appRoot.genyleapSupportEmail + "\"><span style=\"color:#3a86ff;text-decoration:underline;\">"
+                                    text: qsTr("<a href=\"mailto:") + appRoot.genyleapSupportEmail + "\"><span style=\"color:#3a86ff;text-decoration:underline;\">"
                                           + appRoot.genyleapSupportEmail + "</span></a>"
-                                    onLinkActivated: appRoot.openExternalLink(link, "Opened support email")
+                                    onLinkActivated: appRoot.openExternalLink(link, qsTr("Opened support email"))
                                     color: Colors.textAccent
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t2
@@ -1052,8 +1161,8 @@ ApplicationWindow {
 
                             Controls.Button {
                                 Layout.alignment: Qt.AlignTop | Qt.AlignRight
-                                text: "Copy"
-                                onClicked: appRoot.copyToClipboard(appRoot.genyleapSupportEmail, "Support email copied")
+                                text: qsTr("Copy")
+                                onClicked: appRoot.copyToClipboard(appRoot.genyleapSupportEmail, qsTr("Support email copied"))
                             }
                         }
                     }
@@ -1061,7 +1170,7 @@ ApplicationWindow {
             }
 
             Controls.GroupBox {
-                title: "Developer Links"
+                title: qsTr("Developer Links")
                 Layout.fillWidth: true
                 implicitHeight: supportDeveloperLayout.implicitHeight + topPadding + bottomPadding
 
@@ -1090,7 +1199,7 @@ ApplicationWindow {
                                 spacing: 4
 
                                 Text {
-                                    text: "Farcaster"
+                                    text: qsTr("Farcaster")
                                     color: Colors.textPrimary
                                     font.family: FontSystem.getTitleBoldFont.font.family
                                     font.pixelSize: Typography.t2
@@ -1098,7 +1207,7 @@ ApplicationWindow {
                                 }
 
                                 Text {
-                                    text: "Developer profile on Farcaster."
+                                    text: qsTr("Developer profile on Farcaster.")
                                     color: Colors.textSecondary
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t3
@@ -1107,9 +1216,9 @@ ApplicationWindow {
                                 Text {
                                     Layout.fillWidth: true
                                     textFormat: Text.RichText
-                                    text: "<a href=\"" + appRoot.developerFarcasterUrl + "\"><span style=\"color:#3a86ff;text-decoration:underline;\">"
+                                    text: qsTr("<a href=\"") + appRoot.developerFarcasterUrl + "\"><span style=\"color:#3a86ff;text-decoration:underline;\">"
                                           + appRoot.developerFarcasterUrl + "</span></a>"
-                                    onLinkActivated: appRoot.openExternalLink(link, "Opened Farcaster profile")
+                                    onLinkActivated: appRoot.openExternalLink(link, qsTr("Opened Farcaster profile"))
                                     color: Colors.textAccent
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t2
@@ -1119,8 +1228,8 @@ ApplicationWindow {
 
                             Controls.Button {
                                 Layout.alignment: Qt.AlignTop | Qt.AlignRight
-                                text: "Copy"
-                                onClicked: appRoot.copyToClipboard(appRoot.developerFarcasterUrl, "Farcaster link copied")
+                                text: qsTr("Copy")
+                                onClicked: appRoot.copyToClipboard(appRoot.developerFarcasterUrl, qsTr("Farcaster link copied"))
                             }
                         }
                     }
@@ -1145,7 +1254,7 @@ ApplicationWindow {
                                 spacing: 4
 
                                 Text {
-                                    text: "X"
+                                    text: qsTr("X")
                                     color: Colors.textPrimary
                                     font.family: FontSystem.getTitleBoldFont.font.family
                                     font.pixelSize: Typography.t2
@@ -1153,7 +1262,7 @@ ApplicationWindow {
                                 }
 
                                 Text {
-                                    text: "@thecompez"
+                                    text: qsTr("@thecompez")
                                     color: Colors.textSecondary
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t3
@@ -1162,9 +1271,9 @@ ApplicationWindow {
                                 Text {
                                     Layout.fillWidth: true
                                     textFormat: Text.RichText
-                                    text: "<a href=\"" + appRoot.developerXUrl + "\"><span style=\"color:#3a86ff;text-decoration:underline;\">"
+                                    text: qsTr("<a href=\"") + appRoot.developerXUrl + "\"><span style=\"color:#3a86ff;text-decoration:underline;\">"
                                           + appRoot.developerXUrl + "</span></a>"
-                                    onLinkActivated: appRoot.openExternalLink(link, "Opened X profile")
+                                    onLinkActivated: appRoot.openExternalLink(link, qsTr("Opened X profile"))
                                     color: Colors.textAccent
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t2
@@ -1174,8 +1283,8 @@ ApplicationWindow {
 
                             Controls.Button {
                                 Layout.alignment: Qt.AlignTop | Qt.AlignRight
-                                text: "Copy"
-                                onClicked: appRoot.copyToClipboard(appRoot.developerXUrl, "X link copied")
+                                text: qsTr("Copy")
+                                onClicked: appRoot.copyToClipboard(appRoot.developerXUrl, qsTr("X link copied"))
                             }
                         }
                     }
@@ -1200,7 +1309,7 @@ ApplicationWindow {
                                 spacing: 4
 
                                 Text {
-                                    text: "GitHub"
+                                    text: qsTr("GitHub")
                                     color: Colors.textPrimary
                                     font.family: FontSystem.getTitleBoldFont.font.family
                                     font.pixelSize: Typography.t2
@@ -1208,7 +1317,7 @@ ApplicationWindow {
                                 }
 
                                 Text {
-                                    text: "Developer account"
+                                    text: qsTr("Developer account")
                                     color: Colors.textSecondary
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t3
@@ -1217,9 +1326,9 @@ ApplicationWindow {
                                 Text {
                                     Layout.fillWidth: true
                                     textFormat: Text.RichText
-                                    text: "<a href=\"" + appRoot.developerGithubUrl + "\"><span style=\"color:#3a86ff;text-decoration:underline;\">"
+                                    text: qsTr("<a href=\"") + appRoot.developerGithubUrl + "\"><span style=\"color:#3a86ff;text-decoration:underline;\">"
                                           + appRoot.developerGithubUrl + "</span></a>"
-                                    onLinkActivated: appRoot.openExternalLink(link, "Opened GitHub profile")
+                                    onLinkActivated: appRoot.openExternalLink(link, qsTr("Opened GitHub profile"))
                                     color: Colors.textAccent
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t2
@@ -1229,8 +1338,8 @@ ApplicationWindow {
 
                             Controls.Button {
                                 Layout.alignment: Qt.AlignTop | Qt.AlignRight
-                                text: "Copy"
-                                onClicked: appRoot.copyToClipboard(appRoot.developerGithubUrl, "GitHub link copied")
+                                text: qsTr("Copy")
+                                onClicked: appRoot.copyToClipboard(appRoot.developerGithubUrl, qsTr("GitHub link copied"))
                             }
                         }
                     }
@@ -1245,17 +1354,17 @@ ApplicationWindow {
         id: licenseDialog
         width: Math.min(appRoot.width - 60, 860)
         height: 680
-        title: "License & Open Source"
+        title: qsTr("License & Open Source")
         type: "info"
-        desc: "GNU General Public License v3.0"
-        message: "GENYDL is distributed under the GNU General Public License v3.0. Review the repository and full license text below."
+        desc: qsTr("GNU General Public License v3.0")
+        message: qsTr("GENYDL is distributed under the GNU General Public License v3.0. Review the repository and full license text below.")
 
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 14
 
             Controls.GroupBox {
-                title: "Open Source Links"
+                title: qsTr("Open Source Links")
                 Layout.fillWidth: true
                 implicitHeight: licenseLinksLayout.implicitHeight + topPadding + bottomPadding
 
@@ -1284,7 +1393,7 @@ ApplicationWindow {
                                 spacing: 4
 
                                 Text {
-                                    text: "Repository"
+                                    text: qsTr("Repository")
                                     color: Colors.textPrimary
                                     font.family: FontSystem.getTitleBoldFont.font.family
                                     font.pixelSize: Typography.t2
@@ -1292,7 +1401,7 @@ ApplicationWindow {
                                 }
 
                                 Text {
-                                    text: "Main source repository for GENYDL."
+                                    text: qsTr("Main source repository for GENYDL.")
                                     color: Colors.textSecondary
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t3
@@ -1301,9 +1410,9 @@ ApplicationWindow {
                                 Text {
                                     Layout.fillWidth: true
                                     textFormat: Text.RichText
-                                    text: "<a href=\"" + appRoot.projectRepositoryUrl + "\"><span style=\"color:#3a86ff;text-decoration:underline;\">"
+                                    text: qsTr("<a href=\"") + appRoot.projectRepositoryUrl + "\"><span style=\"color:#3a86ff;text-decoration:underline;\">"
                                           + appRoot.projectRepositoryUrl + "</span></a>"
-                                    onLinkActivated: appRoot.openExternalLink(link, "Opened GENYDL repository")
+                                    onLinkActivated: appRoot.openExternalLink(link, qsTr("Opened GENYDL repository"))
                                     color: Colors.textAccent
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t2
@@ -1313,8 +1422,8 @@ ApplicationWindow {
 
                             Controls.Button {
                                 Layout.alignment: Qt.AlignTop | Qt.AlignRight
-                                text: "Copy"
-                                onClicked: appRoot.copyToClipboard(appRoot.projectRepositoryUrl, "Repository link copied")
+                                text: qsTr("Copy")
+                                onClicked: appRoot.copyToClipboard(appRoot.projectRepositoryUrl, qsTr("Repository link copied"))
                             }
                         }
                     }
@@ -1339,7 +1448,7 @@ ApplicationWindow {
                                 spacing: 4
 
                                 Text {
-                                    text: "License"
+                                    text: qsTr("License")
                                     color: Colors.textPrimary
                                     font.family: FontSystem.getTitleBoldFont.font.family
                                     font.pixelSize: Typography.t2
@@ -1347,7 +1456,7 @@ ApplicationWindow {
                                 }
 
                                 Text {
-                                    text: "Published GPL license page in the repository."
+                                    text: qsTr("Published GPL license page in the repository.")
                                     color: Colors.textSecondary
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t3
@@ -1356,9 +1465,9 @@ ApplicationWindow {
                                 Text {
                                     Layout.fillWidth: true
                                     textFormat: Text.RichText
-                                    text: "<a href=\"" + appRoot.projectLicenseUrl + "\"><span style=\"color:#3a86ff;text-decoration:underline;\">"
+                                    text: qsTr("<a href=\"") + appRoot.projectLicenseUrl + "\"><span style=\"color:#3a86ff;text-decoration:underline;\">"
                                           + appRoot.projectLicenseUrl + "</span></a>"
-                                    onLinkActivated: appRoot.openExternalLink(link, "Opened project license")
+                                    onLinkActivated: appRoot.openExternalLink(link, qsTr("Opened project license"))
                                     color: Colors.textAccent
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t2
@@ -1368,8 +1477,8 @@ ApplicationWindow {
 
                             Controls.Button {
                                 Layout.alignment: Qt.AlignTop | Qt.AlignRight
-                                text: "Copy"
-                                onClicked: appRoot.copyToClipboard(appRoot.projectLicenseUrl, "License link copied")
+                                text: qsTr("Copy")
+                                onClicked: appRoot.copyToClipboard(appRoot.projectLicenseUrl, qsTr("License link copied"))
                             }
                         }
                     }
@@ -1394,7 +1503,7 @@ ApplicationWindow {
                                 spacing: 4
 
                                 Text {
-                                    text: "Qt Open Source Framework"
+                                    text: qsTr("Qt Open Source Framework")
                                     color: Colors.textPrimary
                                     font.family: FontSystem.getTitleBoldFont.font.family
                                     font.pixelSize: Typography.t2
@@ -1402,7 +1511,7 @@ ApplicationWindow {
                                 }
 
                                 Text {
-                                    text: "GENYDL is built with Qt " + Qt.version + ". Review the official Qt open source licensing page."
+                                    text: qsTr("GENYDL is built with Qt ") + Qt.version + ". Review the official Qt open source licensing page."
                                     color: Colors.textSecondary
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t3
@@ -1412,9 +1521,9 @@ ApplicationWindow {
                                 Text {
                                     Layout.fillWidth: true
                                     textFormat: Text.RichText
-                                    text: "<a href=\"" + appRoot.qtOpenSourceUrl + "\"><span style=\"color:#3a86ff;text-decoration:underline;\">"
+                                    text: qsTr("<a href=\"") + appRoot.qtOpenSourceUrl + "\"><span style=\"color:#3a86ff;text-decoration:underline;\">"
                                           + appRoot.qtOpenSourceUrl + "</span></a>"
-                                    onLinkActivated: appRoot.openExternalLink(link, "Opened Qt licensing page")
+                                    onLinkActivated: appRoot.openExternalLink(link, qsTr("Opened Qt licensing page"))
                                     color: Colors.textAccent
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t2
@@ -1424,8 +1533,8 @@ ApplicationWindow {
 
                             Controls.Button {
                                 Layout.alignment: Qt.AlignTop | Qt.AlignRight
-                                text: "Copy"
-                                onClicked: appRoot.copyToClipboard(appRoot.qtOpenSourceUrl, "Qt licensing link copied")
+                                text: qsTr("Copy")
+                                onClicked: appRoot.copyToClipboard(appRoot.qtOpenSourceUrl, qsTr("Qt licensing link copied"))
                             }
                         }
                     }
@@ -1433,7 +1542,7 @@ ApplicationWindow {
             }
 
             Controls.GroupBox {
-                title: "GNU GPL v3.0 License"
+                title: qsTr("GNU GPL v3.0 License")
                 Layout.fillWidth: true
                 implicitHeight: licenseTextLayout.implicitHeight + topPadding + bottomPadding
 
@@ -1463,9 +1572,9 @@ ApplicationWindow {
                         Layout.fillWidth: true
 
                         Controls.Button {
-                            text: "Copy License"
+                            text: qsTr("Copy License")
                             style: "success"
-                            onClicked: appRoot.copyToClipboard(appRoot.gplLicenseText, "GPL license copied")
+                            onClicked: appRoot.copyToClipboard(appRoot.gplLicenseText, qsTr("GPL license copied"))
                         }
                         Item { Layout.fillWidth: true }
                     }
@@ -1480,10 +1589,10 @@ ApplicationWindow {
         id: donateDialog
         width: Math.min(appRoot.width - 60, 820)
         height: 520
-        title: "Donate"
+        title: qsTr("Donate")
         type: "info"
-        desc: "Support GENYDL on Base and Ethereum MainNet"
-        message: "Use the ERC20 donation address below on both supported networks."
+        desc: qsTr("Support GENYDL on Base and Ethereum MainNet")
+        message: qsTr("Use the ERC20 donation address below on both supported networks.")
 
         ColumnLayout {
             Layout.fillWidth: true
@@ -1505,7 +1614,7 @@ ApplicationWindow {
 
                     Text {
                         Layout.fillWidth: true
-                        text: "Donation address"
+                        text: qsTr("Donation address")
                         color: Colors.textPrimary
                         font.family: FontSystem.getTitleBoldFont.font.family
                         font.pixelSize: Typography.h4
@@ -1532,7 +1641,7 @@ ApplicationWindow {
 
                             Text {
                                 anchors.centerIn: parent
-                                text: "Base"
+                                text: qsTr("Base")
                                 color: Colors.textPrimary
                                 font.family: FontSystem.getTitleBoldFont.font.family
                                 font.pixelSize: Typography.t3
@@ -1549,7 +1658,7 @@ ApplicationWindow {
 
                             Text {
                                 anchors.centerIn: parent
-                                text: "Ethereum MainNet"
+                                text: qsTr("Ethereum MainNet")
                                 color: Colors.textPrimary
                                 font.family: FontSystem.getTitleBoldFont.font.family
                                 font.pixelSize: Typography.t3
@@ -1559,16 +1668,16 @@ ApplicationWindow {
                         Item { Layout.fillWidth: true }
 
                         Controls.Button {
-                            text: "Copy Address"
+                            text: qsTr("Copy Address")
                             style: "success"
-                            onClicked: appRoot.copyToClipboard(appRoot.donationAddress, "Donation address copied")
+                            onClicked: appRoot.copyToClipboard(appRoot.donationAddress, qsTr("Donation address copied"))
                         }
                     }
                 }
             }
 
             Controls.GroupBox {
-                title: "Explorer Links"
+                title: qsTr("Explorer Links")
                 Layout.fillWidth: true
                 implicitHeight: donateAddressLayout.implicitHeight + topPadding + bottomPadding
 
@@ -1597,7 +1706,7 @@ ApplicationWindow {
                                 spacing: 4
 
                                 Text {
-                                    text: "Base"
+                                    text: qsTr("Base")
                                     color: Colors.textPrimary
                                     font.family: FontSystem.getTitleBoldFont.font.family
                                     font.pixelSize: Typography.t2
@@ -1605,7 +1714,7 @@ ApplicationWindow {
                                 }
 
                                 Text {
-                                    text: "Donation address on Base explorer."
+                                    text: qsTr("Donation address on Base explorer.")
                                     color: Colors.textSecondary
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t3
@@ -1614,9 +1723,9 @@ ApplicationWindow {
                                 Text {
                                     Layout.fillWidth: true
                                     textFormat: Text.RichText
-                                    text: "<a href=\"" + appRoot.donationBaseExplorerUrl + "\"><span style=\"color:#3a86ff;text-decoration:underline;\">"
+                                    text: qsTr("<a href=\"") + appRoot.donationBaseExplorerUrl + "\"><span style=\"color:#3a86ff;text-decoration:underline;\">"
                                           + appRoot.donationBaseExplorerUrl + "</span></a>"
-                                    onLinkActivated: appRoot.openExternalLink(link, "Opened Base donation address")
+                                    onLinkActivated: appRoot.openExternalLink(link, qsTr("Opened Base donation address"))
                                     color: Colors.textAccent
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t2
@@ -1626,8 +1735,8 @@ ApplicationWindow {
 
                             Controls.Button {
                                 Layout.alignment: Qt.AlignTop | Qt.AlignRight
-                                text: "Copy Link"
-                                onClicked: appRoot.copyToClipboard(appRoot.donationBaseExplorerUrl, "Base explorer link copied")
+                                text: qsTr("Copy Link")
+                                onClicked: appRoot.copyToClipboard(appRoot.donationBaseExplorerUrl, qsTr("Base explorer link copied"))
                             }
                         }
                     }
@@ -1652,7 +1761,7 @@ ApplicationWindow {
                                 spacing: 4
 
                                 Text {
-                                    text: "Ethereum MainNet"
+                                    text: qsTr("Ethereum MainNet")
                                     color: Colors.textPrimary
                                     font.family: FontSystem.getTitleBoldFont.font.family
                                     font.pixelSize: Typography.t2
@@ -1660,7 +1769,7 @@ ApplicationWindow {
                                 }
 
                                 Text {
-                                    text: "Same donation address on Ethereum mainnet."
+                                    text: qsTr("Same donation address on Ethereum mainnet.")
                                     color: Colors.textSecondary
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t3
@@ -1669,9 +1778,9 @@ ApplicationWindow {
                                 Text {
                                     Layout.fillWidth: true
                                     textFormat: Text.RichText
-                                    text: "<a href=\"" + appRoot.donationMainnetExplorerUrl + "\"><span style=\"color:#3a86ff;text-decoration:underline;\">"
+                                    text: qsTr("<a href=\"") + appRoot.donationMainnetExplorerUrl + "\"><span style=\"color:#3a86ff;text-decoration:underline;\">"
                                           + appRoot.donationMainnetExplorerUrl + "</span></a>"
-                                    onLinkActivated: appRoot.openExternalLink(link, "Opened MainNet donation address")
+                                    onLinkActivated: appRoot.openExternalLink(link, qsTr("Opened MainNet donation address"))
                                     color: Colors.textAccent
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t2
@@ -1681,8 +1790,8 @@ ApplicationWindow {
 
                             Controls.Button {
                                 Layout.alignment: Qt.AlignTop | Qt.AlignRight
-                                text: "Copy Link"
-                                onClicked: appRoot.copyToClipboard(appRoot.donationMainnetExplorerUrl, "MainNet explorer link copied")
+                                text: qsTr("Copy Link")
+                                onClicked: appRoot.copyToClipboard(appRoot.donationMainnetExplorerUrl, qsTr("MainNet explorer link copied"))
                             }
                         }
                     }
@@ -1697,9 +1806,9 @@ ApplicationWindow {
         id: tokenDialog
         width: Math.min(appRoot.width - 60, 880)
         height: 700
-        title: "GenyToken"
+        title: qsTr("GenyToken")
         type: "info"
-        desc: "Token " + appRoot.genyTokenSymbol
+        desc: qsTr("Token ") + appRoot.genyTokenSymbol
         message: appRoot.genyTokenDescription
 
         ColumnLayout {
@@ -1734,7 +1843,7 @@ ApplicationWindow {
 
                         Text {
                             anchors.centerIn: parent
-                            text: "$" + appRoot.genyTokenSymbol
+                            text: qsTr("$") + appRoot.genyTokenSymbol
                             color: Colors.textPrimary
                             font.family: FontSystem.getTitleBoldFont.font.family
                             font.pixelSize: Typography.t2
@@ -1780,7 +1889,7 @@ ApplicationWindow {
 
                                 Text {
                                     anchors.centerIn: parent
-                                    text: "ERC20"
+                                    text: qsTr("ERC20")
                                     color: Colors.textPrimary
                                     font.family: FontSystem.getTitleBoldFont.font.family
                                     font.pixelSize: Typography.t3
@@ -1797,7 +1906,7 @@ ApplicationWindow {
 
                                 Text {
                                     anchors.centerIn: parent
-                                    text: "256M Supply"
+                                    text: qsTr("256M Supply")
                                     color: Colors.textPrimary
                                     font.family: FontSystem.getTitleBoldFont.font.family
                                     font.pixelSize: Typography.t3
@@ -1814,7 +1923,7 @@ ApplicationWindow {
 
                                 Text {
                                     anchors.centerIn: parent
-                                    text: "18 Decimals"
+                                    text: qsTr("18 Decimals")
                                     color: Colors.textPrimary
                                     font.family: FontSystem.getTitleBoldFont.font.family
                                     font.pixelSize: Typography.t3
@@ -1828,7 +1937,7 @@ ApplicationWindow {
             }
 
             Controls.GroupBox {
-                title: "Contract"
+                title: qsTr("Contract")
                 Layout.fillWidth: true
                 implicitHeight: tokenContractLayout.implicitHeight + topPadding + bottomPadding
 
@@ -1846,9 +1955,9 @@ ApplicationWindow {
                     Text {
                         Layout.fillWidth: true
                         textFormat: Text.RichText
-                        text: "<a href=\"" + appRoot.genyTokenBaseExplorerUrl + "\"><span style=\"color:#3a86ff;text-decoration:underline;\">"
+                        text: qsTr("<a href=\"") + appRoot.genyTokenBaseExplorerUrl + "\"><span style=\"color:#3a86ff;text-decoration:underline;\">"
                               + appRoot.genyTokenBaseExplorerUrl + "</span></a>"
-                        onLinkActivated: appRoot.openExternalLink(link, "Opened GENY explorer")
+                        onLinkActivated: appRoot.openExternalLink(link, qsTr("Opened GENY explorer"))
                         color: Colors.textAccent
                         font.family: FontSystem.getContentFontRegular.name
                         font.pixelSize: Typography.t2
@@ -1859,13 +1968,13 @@ ApplicationWindow {
                         Layout.fillWidth: true
 
                         Controls.Button {
-                            text: "Copy Contract"
+                            text: qsTr("Copy Contract")
                             style: "success"
-                            onClicked: appRoot.copyToClipboard(appRoot.genyTokenContractAddress, "GENY contract copied")
+                            onClicked: appRoot.copyToClipboard(appRoot.genyTokenContractAddress, qsTr("GENY contract copied"))
                         }
                         Controls.Button {
-                            text: "Copy Explorer"
-                            onClicked: appRoot.copyToClipboard(appRoot.genyTokenBaseExplorerUrl, "GENY explorer link copied")
+                            text: qsTr("Copy Explorer")
+                            onClicked: appRoot.copyToClipboard(appRoot.genyTokenBaseExplorerUrl, qsTr("GENY explorer link copied"))
                         }
                         Item { Layout.fillWidth: true }
                     }
@@ -1873,7 +1982,7 @@ ApplicationWindow {
             }
 
             Controls.GroupBox {
-                title: "Community & Support"
+                title: qsTr("Community & Support")
                 Layout.fillWidth: true
                 implicitHeight: tokenCommunityLayout.implicitHeight + topPadding + bottomPadding
 
@@ -1902,7 +2011,7 @@ ApplicationWindow {
                                 spacing: 4
 
                                 Text {
-                                    text: "Website"
+                                    text: qsTr("Website")
                                     color: Colors.textPrimary
                                     font.family: FontSystem.getTitleBoldFont.font.family
                                     font.pixelSize: Typography.t2
@@ -1912,9 +2021,9 @@ ApplicationWindow {
                                 Text {
                                     Layout.fillWidth: true
                                     textFormat: Text.RichText
-                                    text: "<a href=\"" + appRoot.genyleapWebsiteUrl + "\"><span style=\"color:#3a86ff;text-decoration:underline;\">"
+                                    text: qsTr("<a href=\"") + appRoot.genyleapWebsiteUrl + "\"><span style=\"color:#3a86ff;text-decoration:underline;\">"
                                           + appRoot.genyleapWebsiteUrl + "</span></a>"
-                                    onLinkActivated: appRoot.openExternalLink(link, "Opened Genyleap website")
+                                    onLinkActivated: appRoot.openExternalLink(link, qsTr("Opened Genyleap website"))
                                     color: Colors.textAccent
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t2
@@ -1924,8 +2033,8 @@ ApplicationWindow {
 
                             Controls.Button {
                                 Layout.alignment: Qt.AlignTop | Qt.AlignRight
-                                text: "Copy"
-                                onClicked: appRoot.copyToClipboard(appRoot.genyleapWebsiteUrl, "Website link copied")
+                                text: qsTr("Copy")
+                                onClicked: appRoot.copyToClipboard(appRoot.genyleapWebsiteUrl, qsTr("Website link copied"))
                             }
                         }
                     }
@@ -1945,7 +2054,7 @@ ApplicationWindow {
                             spacing: 8
 
                             Text {
-                                text: "Socials"
+                                text: qsTr("Socials")
                                 color: Colors.textPrimary
                                 font.family: FontSystem.getTitleBoldFont.font.family
                                 font.pixelSize: Typography.t2
@@ -1956,12 +2065,12 @@ ApplicationWindow {
                                 Layout.fillWidth: true
 
                                 Controls.Button {
-                                    text: "Copy X"
-                                    onClicked: appRoot.copyToClipboard(appRoot.genyTokenXUrl, "GENY X link copied")
+                                    text: qsTr("Copy X")
+                                    onClicked: appRoot.copyToClipboard(appRoot.genyTokenXUrl, qsTr("GENY X link copied"))
                                 }
                                 Controls.Button {
-                                    text: "Telegram"
-                                    onClicked: appRoot.copyToClipboard(appRoot.genyTokenTelegramUrl, "GENY Telegram link copied")
+                                    text: qsTr("Telegram")
+                                    onClicked: appRoot.copyToClipboard(appRoot.genyTokenTelegramUrl, qsTr("GENY Telegram link copied"))
                                 }
                                 Item { Layout.fillWidth: true }
                             }
@@ -1988,7 +2097,7 @@ ApplicationWindow {
                                 spacing: 4
 
                                 Text {
-                                    text: "Support"
+                                    text: qsTr("Support")
                                     color: Colors.textPrimary
                                     font.family: FontSystem.getTitleBoldFont.font.family
                                     font.pixelSize: Typography.t2
@@ -1998,9 +2107,9 @@ ApplicationWindow {
                                 Text {
                                     Layout.fillWidth: true
                                     textFormat: Text.RichText
-                                    text: "<a href=\"" + appRoot.genyleapSupportUrl + "\"><span style=\"color:#3a86ff;text-decoration:underline;\">"
+                                    text: qsTr("<a href=\"") + appRoot.genyleapSupportUrl + "\"><span style=\"color:#3a86ff;text-decoration:underline;\">"
                                           + appRoot.genyleapSupportUrl + "</span></a>"
-                                    onLinkActivated: appRoot.openExternalLink(link, "Opened GENY support")
+                                    onLinkActivated: appRoot.openExternalLink(link, qsTr("Opened GENY support"))
                                     color: Colors.textAccent
                                     font.family: FontSystem.getContentFontRegular.name
                                     font.pixelSize: Typography.t2
@@ -2010,8 +2119,8 @@ ApplicationWindow {
 
                             Controls.Button {
                                 Layout.alignment: Qt.AlignTop | Qt.AlignRight
-                                text: "Copy"
-                                onClicked: appRoot.copyToClipboard(appRoot.genyleapSupportUrl, "GENY support link copied")
+                                text: qsTr("Copy")
+                                onClicked: appRoot.copyToClipboard(appRoot.genyleapSupportUrl, qsTr("GENY support link copied"))
                             }
                         }
                     }
@@ -2024,9 +2133,9 @@ ApplicationWindow {
 
     QQD.FileDialog {
         id: addDialogFileDialog
-        title: "Choose URL or torrent file"
+        title: qsTr("Choose URL or torrent file")
         fileMode: QQD.FileDialog.OpenFile
-        nameFilters: ["Torrent files (*.torrent)", "All files (*)"]
+        nameFilters: [qsTr("Torrent files (*.torrent)"), qsTr("All files (*)")]
         onAccepted: {
             const raw = selectedFile.toString()
             addDialogUrlField.text = raw
@@ -2035,7 +2144,7 @@ ApplicationWindow {
 
     QQD.FolderDialog {
         id: addDialogFolderDialog
-        title: "Choose destination folder"
+        title: qsTr("Choose destination folder")
         onAccepted: {
             const raw = selectedFolder.toString()
             addDialogPathField.text = raw.startsWith("file://") ? decodeURIComponent(raw.slice(7)) : raw
@@ -2044,7 +2153,7 @@ ApplicationWindow {
 
     QQD.FolderDialog {
         id: categoryFolderDialog
-        title: "Choose category folder"
+        title: qsTr("Choose category folder")
         onAccepted: {
             const raw = selectedFolder.toString()
             queueDialogCategoryFolderField.text = raw.startsWith("file://") ? decodeURIComponent(raw.slice(7)) : raw
@@ -2053,7 +2162,7 @@ ApplicationWindow {
 
     Controls.Dialog {
         id: addUrlPopup
-        title: "Add download"
+        title: qsTr("Add download")
         type: "add"
 
 
@@ -2066,10 +2175,10 @@ ApplicationWindow {
         x: Math.round((parent ? parent.width - width : appRoot.width - width) / 2)
         y: Math.round((parent ? parent.height - height : appRoot.height - height) / 2)
 
-        okTextOverride: "Add"
+        okTextOverride: qsTr("Add")
 
         GroupBox {
-            title: "Add new file"
+            title: qsTr("Add new file")
             Layout.fillWidth: true
             Layout.preferredHeight: addDialogLayout.implicitHeight + 64
 
@@ -2085,12 +2194,12 @@ ApplicationWindow {
                     Controls.TextField {
                         id: addDialogUrlField
                         Layout.fillWidth: true
-                        placeholderText: "https://example.com/file.zip"
+                        placeholderText: qsTr("https://example.com/file.zip")
                         onTextChanged: if (addDialogErrorLabel.text.length > 0) addDialogErrorLabel.text = ""
                     }
 
                     Controls.Button {
-                        text: "Browse..."
+                        text: qsTr("Browse...")
                         Layout.preferredWidth: 130
                         Layout.minimumWidth: 130
                         isDefault: false
@@ -2114,11 +2223,11 @@ ApplicationWindow {
                         id: addDialogPathField
                         Layout.fillWidth: true
                         text: documentsFolder
-                        placeholderText: "Destination folder"
+                        placeholderText: qsTr("Destination folder")
                     }
 
                     Controls.Button {
-                        text: "Destination..."
+                        text: qsTr("Destination...")
                         Layout.preferredWidth: 130
                         Layout.minimumWidth: 130
                         isDefault: false
@@ -2134,18 +2243,20 @@ ApplicationWindow {
                     RowLayout {
                         Layout.fillWidth: true
                         Controls.Label {
-                            text: "Queue"
+                            text: qsTr("Queue")
                             Layout.alignment: Qt.AlignRight
                         }
                         Controls.ComboBox {
                             id: addDialogQueueCombo
                             width: 170
                             Layout.fillWidth: false
-                            model: downloadManager.queueNames
+                            model: appRoot.queueOptions
+                            textRole: "text"
+                            valueRole: "id"
                         }
 
                         Controls.Label {
-                            text: "Category"
+                            text: qsTr("Category")
                             Layout.fillWidth: false
                             Layout.alignment: Qt.AlignRight
 
@@ -2154,11 +2265,13 @@ ApplicationWindow {
                             id: addDialogCategoryCombo
                             width: 220
                             Layout.fillWidth: false
-                            model: downloadManager.categoryNames()
+                            model: appRoot.categoryOptions
+                            textRole: "text"
+                            valueRole: "id"
                         }
 
                         Controls.Label {
-                            text: "Segments"
+                            text: qsTr("Segments")
                         }
                         Controls.SpinBox {
                             id: addDialogSegmentsSpin
@@ -2174,11 +2287,11 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         Controls.Switch {
                             id: addDialogPausedSwitch
-                            text: "Start paused"
+                            text: qsTr("Start paused")
                         }
                         Controls.Switch {
                             id: addDialogAdaptiveSwitch
-                            text: "Adaptive segments"
+                            text: qsTr("Adaptive segments")
                             checked: false
                         }
 
@@ -2194,7 +2307,7 @@ ApplicationWindow {
                                 wrapMode: Text.WordWrap
                                 color: Colors.textPrimary
                                 textFormat: Text.AutoText
-                                text: "Adaptive note: when <strong>Adaptive Segment Controller</strong> is <strong>ON</strong>, segment count may change dynamically during download. When OFF, segment count stays fixed to your configured value."
+                                text: qsTr("Adaptive note: when <strong>Adaptive Segment Controller</strong> is <strong>ON</strong>, segment count may change dynamically during download. When OFF, segment count stays fixed to your configured value.")
                                 font.pixelSize: Typography.t3
                                 maximumLineCount: 2
                                 elide: Text.ElideLeft
@@ -2211,13 +2324,13 @@ ApplicationWindow {
                 //     Layout.fillWidth: true
                 //     Item { Layout.fillWidth: true }
                 //     Controls.Button {
-                //         text: "Cancel"
+                //         text: qsTr("Cancel")
                 //         Layout.preferredWidth: 140
                 //         Layout.minimumWidth: 140
                 //         onClicked: addUrlPopup.close()
                 //     }
                 //     Controls.Button {
-                //         text: "OK"
+                //         text: qsTr("OK")
                 //         Layout.preferredWidth: 140
                 //         Layout.minimumWidth: 140
                 //         enabled: addDialogUrlField.text.trim().length > 0
@@ -2231,7 +2344,7 @@ ApplicationWindow {
                 //                             addDialogUrlField.text,
                 //                             addDialogPathField.text,
                 //                             addDialogQueueCombo.currentText,
-                //                             addDialogCategoryCombo.currentText,
+                //                             addDialogCategoryCombo.currentValue,
                 //                             addDialogPausedSwitch.checked,
                 //                             addDialogSegmentsSpin.value,
                 //                             addDialogAdaptiveSwitch.checked
@@ -2242,7 +2355,7 @@ ApplicationWindow {
 
                 //             appRoot.addDefaultOutputPath = addDialogPathField.text.trim()
                 //             appRoot.addDefaultQueue = addDialogQueueCombo.currentText
-                //             appRoot.addDefaultCategory = addDialogCategoryCombo.currentText
+                //             appRoot.addDefaultCategory = addDialogCategoryCombo.currentValue
                 //             appRoot.addDefaultSegments = addDialogSegmentsSpin.value
                 //             appRoot.addDefaultAdaptive = addDialogAdaptiveSwitch.checked
                 //             appRoot.addDefaultStartPaused = addDialogPausedSwitch.checked
@@ -2259,17 +2372,17 @@ ApplicationWindow {
             addDialogErrorLabel.text = ""
             if (appRoot.isTorrentLikeInput(addDialogUrlField.text)) {
                 if (!torrentSession.available) {
-                    addDialogErrorLabel.text = "BitTorrent support is not available in this build."
+                    addDialogErrorLabel.text = qsTr("BitTorrent support is not available in this build.")
                     return
                 }
                 downloadManager.addTorrentDownload(
                             addDialogUrlField.text.trim(),
                             addDialogPathField.text.trim(),
-                            addDialogQueueCombo.currentText,
-                            addDialogCategoryCombo.currentText,
+                            addDialogQueueCombo.currentValue,
+                            addDialogCategoryCombo.currentValue,
                             addDialogPausedSwitch.checked)
                 appRoot.addDefaultOutputPath = addDialogPathField.text.trim()
-                appRoot.addDefaultQueue = addDialogQueueCombo.currentText
+                appRoot.addDefaultQueue = addDialogQueueCombo.currentValue
                 appRoot.addDefaultStartPaused = addDialogPausedSwitch.checked
                 addDialogUrlField.text = ""
                 addUrlPopup.close()
@@ -2277,8 +2390,8 @@ ApplicationWindow {
             }
             if (githubReleaseService.isReleaseUrl(addDialogUrlField.text)) {
                 appRoot.addDefaultOutputPath = addDialogPathField.text.trim()
-                appRoot.addDefaultQueue = addDialogQueueCombo.currentText
-                appRoot.addDefaultCategory = addDialogCategoryCombo.currentText
+                appRoot.addDefaultQueue = addDialogQueueCombo.currentValue
+                appRoot.addDefaultCategory = addDialogCategoryCombo.currentValue
                 appRoot.addDefaultSegments = addDialogSegmentsSpin.value
                 appRoot.addDefaultAdaptive = addDialogAdaptiveSwitch.checked
                 appRoot.addDefaultStartPaused = addDialogPausedSwitch.checked
@@ -2298,8 +2411,8 @@ ApplicationWindow {
             const added = appRoot.submitDownload(
                             addDialogUrlField.text,
                             addDialogPathField.text,
-                            addDialogQueueCombo.currentText,
-                            addDialogCategoryCombo.currentText,
+                            addDialogQueueCombo.currentValue,
+                            addDialogCategoryCombo.currentValue,
                             addDialogPausedSwitch.checked,
                             addDialogSegmentsSpin.value,
                             addDialogAdaptiveSwitch.checked
@@ -2309,8 +2422,8 @@ ApplicationWindow {
             }
 
             appRoot.addDefaultOutputPath = addDialogPathField.text.trim()
-            appRoot.addDefaultQueue = addDialogQueueCombo.currentText
-            appRoot.addDefaultCategory = addDialogCategoryCombo.currentText
+            appRoot.addDefaultQueue = addDialogQueueCombo.currentValue
+            appRoot.addDefaultCategory = addDialogCategoryCombo.currentValue
             appRoot.addDefaultSegments = addDialogSegmentsSpin.value
             appRoot.addDefaultAdaptive = addDialogAdaptiveSwitch.checked
             appRoot.addDefaultStartPaused = addDialogPausedSwitch.checked
@@ -2324,7 +2437,7 @@ ApplicationWindow {
 
     Controls.Dialog {
         id: releaseCenterAddDialog
-        title: "Add GitHub App"
+        title: qsTr("Add GitHub App")
         type: "info"
         standardButtons: Dialog.NoButton
         width: Math.min(appRoot.width - 40, 760)
@@ -2339,7 +2452,7 @@ ApplicationWindow {
 
             Controls.Label {
                 Layout.fillWidth: true
-                text: "Paste a GitHub repository or releases page URL."
+                text: qsTr("Paste a GitHub repository or releases page URL.")
                 color: Colors.textSecondary
             }
 
@@ -2350,12 +2463,12 @@ ApplicationWindow {
                 Controls.TextField {
                     id: releaseCenterUrlField
                     Layout.fillWidth: true
-                    placeholderText: "https://github.com/owner/repo/releases"
+                    placeholderText: qsTr("https://github.com/owner/repo/releases")
                     onTextChanged: releaseCenterNameField.text = ""
                 }
 
                 Controls.Button {
-                    text: releaseCenterService.loading ? "Checking..." : "Preview"
+                    text: releaseCenterService.loading ? qsTr("Checking...") : qsTr("Preview")
                     enabled: !releaseCenterService.loading && releaseCenterUrlField.text.trim().length > 0
                     onClicked: releaseCenterService.previewApp(releaseCenterUrlField.text.trim())
                 }
@@ -2440,13 +2553,13 @@ ApplicationWindow {
                                 font.weight: Font.Bold
                                 font.pixelSize: Typography.h4
                                 color: Colors.textPrimary
-                                elide: Text.ElideRight
+                                elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
                             }
                             Controls.Label {
                                 Layout.fillWidth: true
                                 text: releaseCenterService.preview.repository || ""
                                 color: Colors.textSecondary
-                                elide: Text.ElideRight
+                                elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
                             }
                             Controls.Label {
                                 Layout.fillWidth: true
@@ -2455,7 +2568,7 @@ ApplicationWindow {
                                 color: Colors.textSecondary
                                 wrapMode: Text.WordWrap
                                 maximumLineCount: 2
-                                elide: Text.ElideRight
+                                elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
                             }
                         }
                     }
@@ -2508,18 +2621,18 @@ ApplicationWindow {
                     Controls.Label {
                         Layout.fillWidth: true
                         text: {
-                            const tag = String(releaseCenterService.preview.latestTag || "--")
+                            const tag = appRoot.formatReleaseTag(releaseCenterService.preview.latestTag || "--")
                             const when = releaseCenterService.preview.latestPublishedAt
                                        ? appRoot.formatReleaseDate(releaseCenterService.preview.latestPublishedAt)
                                        : ""
                             const n = releaseCenterService.previewAssets.length
-                            return "Latest " + tag
+                            return qsTr("Latest %1").arg(tag)
                                  + (when.length > 0 ? "  •  " + when : "")
                                  + "  •  " + n + " asset" + (n === 1 ? "" : "s")
                         }
                         color: Colors.textSecondary
                         font.pixelSize: Typography.t3
-                        elide: Text.ElideRight
+                        elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
                     }
                 }
             }
@@ -2528,7 +2641,7 @@ ApplicationWindow {
                 id: releaseCenterNameField
                 Layout.fillWidth: true
                 visible: releaseCenterAddDialog.hasPreview
-                placeholderText: releaseCenterService.preview.displayName || "Display name"
+                placeholderText: releaseCenterService.preview.displayName || qsTr("Display name")
             }
 
             RowLayout {
@@ -2536,18 +2649,18 @@ ApplicationWindow {
                 Layout.topMargin: 4
                 Item { Layout.fillWidth: true }
                 Controls.Button {
-                    text: "Cancel"
+                    text: qsTr("Cancel")
                     onClicked: releaseCenterAddDialog.close()
                 }
                 Controls.Button {
-                    text: "Add to Release Center"
+                    text: qsTr("Add to Release Center")
                     isDefault: true
                     enabled: releaseCenterAddDialog.hasPreview
                     Layout.preferredWidth: 180
                     onClicked: {
                         if (releaseCenterService.confirmPreview(releaseCenterNameField.text)) {
-                            appRoot.appendNotification("Release Center",
-                                                       "GitHub app added to Release Center.",
+                            appRoot.appendNotification(qsTr("Release Center"),
+                                                       qsTr("GitHub app added to Release Center."),
                                                        "success")
                             releaseCenterAddDialog.close()
                         }
@@ -2592,8 +2705,8 @@ ApplicationWindow {
                             appRoot.addDefaultAdaptive
                             )
             if (added > 0) {
-                appRoot.appendNotification("GitHub release assets added",
-                                           added + " asset" + (added === 1 ? "" : "s") + " added to the download queue.",
+                appRoot.appendNotification(qsTr("GitHub release assets added"),
+                                           qsTr("%n asset(s) added to the download queue.", "", added),
                                            "success")
                 // Record this release as the installed version for the tracked app so
                 // the Release Center compares future releases against what we downloaded.
@@ -2616,7 +2729,7 @@ ApplicationWindow {
         }
         onOpenUrl: function(url) {
             if (url && url.length > 0)
-                appRoot.openExternalLink(url, "Opened link")
+                appRoot.openExternalLink(url, qsTr("Opened link"))
         }
         onDownloadAssets: function(app) { appRoot.openAssetPickerForApp(app) }
         onUpdateApp: function(app) { appRoot.startAppUpdate(app) }
@@ -2634,8 +2747,8 @@ ApplicationWindow {
                                 appRoot.addDefaultCategory, appRoot.addDefaultStartPaused,
                                 appRoot.addDefaultSegments, appRoot.addDefaultAdaptive)
                 if (added > 0) {
-                    appRoot.appendNotification("Update download started",
-                                               assets[0].name + " is downloading.", "success")
+                    appRoot.appendNotification(qsTr("Update download started"),
+                                               qsTr("%1 is downloading.").arg(assets[0].name), "success")
                     releaseCenterService.markLatestKnown(index)
                     appRoot.pageIndex = 0
                 }
@@ -2676,7 +2789,7 @@ ApplicationWindow {
             RowLayout {
                 Layout.fillWidth: true
                 Controls.Label {
-                    text: "Configuration"
+                    text: qsTr("Configuration")
                     font.pixelSize: Typography.h3
                     font.bold: true
                 }
@@ -2689,11 +2802,11 @@ ApplicationWindow {
                 currentIndex: appRoot.configurationTabIndex
                 onCurrentIndexChanged: appRoot.configurationTabIndex = currentIndex
 
-                Controls.TabButton { text: "General" }
-                Controls.TabButton { text: "Queues" }
-                Controls.TabButton { text: "Network" }
-                Controls.TabButton { text: "Updates" }
-                Controls.TabButton { text: "Release Center" }
+                Controls.TabButton { text: qsTr("General") }
+                Controls.TabButton { text: qsTr("Queues") }
+                Controls.TabButton { text: qsTr("Network") }
+                Controls.TabButton { text: qsTr("Updates") }
+                Controls.TabButton { text: qsTr("Release Center") }
             }
 
             StackLayout {
@@ -2712,7 +2825,7 @@ ApplicationWindow {
                         spacing: 12
 
                         Controls.GroupBox {
-                            title: "General"
+                            title: qsTr("General")
                             Layout.fillWidth: true
                             implicitHeight: appearanceConfigLayout.implicitHeight + topPadding + bottomPadding
 
@@ -2724,7 +2837,7 @@ ApplicationWindow {
                                 columnSpacing: 12
                                 rowSpacing: 8
 
-                                Controls.Label { text: "Theme" }
+                                Controls.Label { text: qsTr("Theme") }
                                 Controls.ComboBox {
                                     Layout.preferredWidth: 220
                                     model: appRoot.themeOptions
@@ -2735,7 +2848,20 @@ ApplicationWindow {
                                     }
                                 }
 
-                                Controls.Label { text: "Close behavior" }
+                                Controls.Label { text: qsTr("Language") }
+                                Controls.ComboBox {
+                                    id: languageCombo
+                                    Layout.preferredWidth: 220
+                                    model: appRoot.languageOptions
+                                    textRole: "name"
+                                    currentIndex: appRoot.languageIndex(languageManager.currentLanguage)
+                                    onActivated: function(index) {
+                                        if (index >= 0 && index < appRoot.languageOptions.length)
+                                            languageManager.setLanguage(appRoot.languageOptions[index].code)
+                                    }
+                                }
+
+                                Controls.Label { text: qsTr("Close behavior") }
                                 Controls.Switch {
                                     checked: uiSettings.keepRunningInBackground
                                     onCheckedChanged: {
@@ -2744,7 +2870,7 @@ ApplicationWindow {
                                     }
                                 }
 
-                                Controls.Label { text: "Runtime footer" }
+                                Controls.Label { text: qsTr("Runtime footer") }
                                 Controls.Switch {
                                     checked: uiSettings.showRuntimeFooter
                                     onCheckedChanged: uiSettings.showRuntimeFooter = checked
@@ -2754,13 +2880,13 @@ ApplicationWindow {
                                     Layout.columnSpan: 2
                                     Layout.fillWidth: true
                                     wrapMode: Text.WordWrap
-                                    text: "System follows the OS appearance. Closing the window can keep downloads active in the tray when background mode is enabled."
+                                    text: qsTr("System follows the OS appearance. Closing the window can keep downloads active in the tray when background mode is enabled.")
                                 }
                             }
                         }
 
                         Controls.GroupBox {
-                            title: "Restore Defaults"
+                            title: qsTr("Restore Defaults")
                             Layout.fillWidth: true
                             implicitHeight: generalResetLayout.implicitHeight + topPadding + bottomPadding
 
@@ -2773,14 +2899,14 @@ ApplicationWindow {
                                     Layout.fillWidth: true
                                     wrapMode: Text.WordWrap
                                     color: Colors.textMuted
-                                    text: "Restore GENYDL defaults and clear persisted session/configuration state without deleting downloaded files."
+                                    text: qsTr("Restore GENYDL defaults and clear persisted session/configuration state without deleting downloaded files.")
                                 }
 
                                 RowLayout {
                                     Layout.fillWidth: true
 
                                     Controls.Button {
-                                        text: "Restore All"
+                                        text: qsTr("Restore All")
                                         style: "danger"
                                         onClicked: resetSettingsDialog.open()
                                     }
@@ -2803,7 +2929,7 @@ ApplicationWindow {
                         spacing: 12
 
                         Controls.GroupBox {
-                            title: "Queue Configuration"
+                            title: qsTr("Queue Configuration")
                             Layout.fillWidth: true
                             implicitHeight: queueConfigLayout.implicitHeight + topPadding + bottomPadding
 
@@ -2817,18 +2943,20 @@ ApplicationWindow {
                                     Controls.ComboBox {
                                         id: queueDialogQueueCombo
                                         Layout.preferredWidth: 260
-                                        model: downloadManager.queueNames
+                                        model: appRoot.queueOptions
+                                        textRole: "text"
+                                        valueRole: "id"
                                         currentIndex: Math.max(0, downloadManager.queueNames.indexOf(appRoot.queueEditorName))
                                         onActivated: {
-                                            appRoot.queueEditorName = currentText
+                                            appRoot.queueEditorName = currentValue
                                             appRoot.loadQueueEditor()
                                         }
                                     }
                                     Item { Layout.fillWidth: true }
                                     Controls.Button {
-                                        text: "Reload"
+                                        text: qsTr("Reload")
                                         onClicked: {
-                                            const q = queueDialogQueueCombo.currentText
+                                            const q = queueDialogQueueCombo.currentValue
                                             if (!q || q.length === 0) return
                                             queueDialogMaxConcurrent.value = downloadManager.queueMaxConcurrent(q)
                                             queueDialogMaxSpeed.value = Math.round(downloadManager.queueMaxSpeed(q) / (1024 * 1024))
@@ -2844,9 +2972,9 @@ ApplicationWindow {
                                         }
                                     }
                                     Controls.Button {
-                                        text: "Apply Policy"
+                                        text: qsTr("Apply Policy")
                                         onClicked: {
-                                            const q = queueDialogQueueCombo.currentText
+                                            const q = queueDialogQueueCombo.currentValue
                                             if (!q || q.length === 0) return
                                             downloadManager.setQueueMaxConcurrent(q, queueDialogMaxConcurrent.value)
                                             downloadManager.setQueueMaxSpeed(q, queueDialogMaxSpeed.value * 1024 * 1024)
@@ -2868,10 +2996,10 @@ ApplicationWindow {
                                     Controls.TextField {
                                         id: queueDialogNewQueueField
                                         Layout.fillWidth: true
-                                        placeholderText: "New queue name"
+                                        placeholderText: qsTr("New queue name")
                                     }
                                     Controls.Button {
-                                        text: "Create"
+                                        text: qsTr("Create")
                                         enabled: queueDialogNewQueueField.text.trim().length > 0
                                         onClicked: {
                                             if (appRoot.createQueueFromEditor(queueDialogNewQueueField.text.trim())) {
@@ -2887,10 +3015,10 @@ ApplicationWindow {
                                     Controls.TextField {
                                         id: queueDialogRenameQueueField
                                         Layout.fillWidth: true
-                                        placeholderText: "Rename selected queue"
+                                        placeholderText: qsTr("Rename selected queue")
                                     }
                                     Controls.Button {
-                                        text: "Rename"
+                                        text: qsTr("Rename")
                                         enabled: appRoot.queueEditorName.length > 0 && queueDialogRenameQueueField.text.trim().length > 0
                                         onClicked: {
                                             if (appRoot.renameCurrentQueueTo(queueDialogRenameQueueField.text.trim())) {
@@ -2900,7 +3028,7 @@ ApplicationWindow {
                                         }
                                     }
                                     Controls.Button {
-                                        text: "Remove"
+                                        text: qsTr("Remove")
                                         enabled: appRoot.queueEditorName.length > 0 && appRoot.queueEditorName !== downloadManager.defaultQueueName()
                                         onClicked: {
                                             if (appRoot.removeCurrentQueue()) {
@@ -2913,7 +3041,7 @@ ApplicationWindow {
                                 Controls.Label {
                                     Layout.fillWidth: true
                                     wrapMode: Text.WordWrap
-                                    text: "Queues are custom download lanes for scheduling, routing, and per-queue limits. 'General' is the default queue. Entries like 'Test' are just user-created queues saved in the session. Use Create, Rename, and Remove here to manage them."
+                                    text: qsTr("Queues are custom download lanes for scheduling, routing, and per-queue limits. 'General' is the default queue. Entries like 'Test' are just user-created queues saved in the session. Use Create, Rename, and Remove here to manage them.")
                                     color: Colors.textMuted
                                 }
 
@@ -2923,11 +3051,11 @@ ApplicationWindow {
                                     columnSpacing: 12
                                     rowSpacing: 8
 
-                                    Controls.Label { text: "Max concurrent" }
+                                    Controls.Label { text: qsTr("Max concurrent") }
                                     Controls.SpinBox { id: queueDialogMaxConcurrent; from: 1; to: 64; value: 2 }
-                                    Controls.Label { text: "Queue speed (MB/s)" }
+                                    Controls.Label { text: qsTr("Queue speed (MB/s)") }
                                     Controls.SpinBox { id: queueDialogMaxSpeed; from: 0; to: 4096; value: 0 }
-                                    Controls.Label { text: "Run on schedule" }
+                                    Controls.Label { text: qsTr("Run on schedule") }
                                     Controls.Switch { id: queueDialogSchedule }
 
                                     RowLayout {
@@ -2939,7 +3067,7 @@ ApplicationWindow {
                                             font.pixelSize: 13
                                             color: Colors.textSecondary
                                         }
-                                        Controls.Label { text: "Use calendar dates" }
+                                        Controls.Label { text: qsTr("Use calendar dates") }
                                     }
                                     Controls.Switch {
                                         id: queueDialogUseDates
@@ -2951,8 +3079,8 @@ ApplicationWindow {
                                         Layout.columnSpan: 2
                                         Layout.fillWidth: true
                                         text: queueDialogUseDates.checked
-                                              ? "On: runs once, only inside the exact calendar window you pick below."
-                                              : "Off: repeats every day between the two clock times below. Turn on to pick exact calendar dates."
+                                              ? qsTr("On: runs once, only inside the exact calendar window you pick below.")
+                                              : qsTr("Off: repeats every day between the two clock times below. Turn on to pick exact calendar dates.")
                                         color: Colors.textMuted
                                         font.pixelSize: Typography.t3
                                         wrapMode: Text.WordWrap
@@ -2960,53 +3088,53 @@ ApplicationWindow {
 
                                     // Daily clock window (shown when NOT using a date range).
                                     Controls.Label {
-                                        text: "Start time"
+                                        text: qsTr("Start time")
                                         visible: !queueDialogUseDates.checked
                                     }
                                     Controls.TextField {
                                         id: queueDialogStartTime
                                         visible: !queueDialogUseDates.checked
-                                        placeholderText: "02:00 AM"
-                                        text: "00:00"
+                                        placeholderText: Utils.localizeDigits(qsTr("02:00 AM"))
+                                        text: Utils.localizeDigits(qsTr("00:00"))
                                     }
                                     Controls.Label {
-                                        text: "End time"
+                                        text: qsTr("End time")
                                         visible: !queueDialogUseDates.checked
                                     }
                                     Controls.TextField {
                                         id: queueDialogEndTime
                                         visible: !queueDialogUseDates.checked
-                                        placeholderText: "07:00 AM"
-                                        text: "00:00"
+                                        placeholderText: Utils.localizeDigits(qsTr("07:00 AM"))
+                                        text: Utils.localizeDigits(qsTr("00:00"))
                                     }
 
                                     // Absolute datetime window with calendar pickers.
                                     Controls.Label {
-                                        text: "Start date"
+                                        text: qsTr("Start date")
                                         visible: queueDialogUseDates.checked
                                     }
                                     Controls.DateTimeField {
                                         id: queueDialogStartDate
                                         Layout.fillWidth: true
                                         visible: queueDialogUseDates.checked
-                                        placeholder: "Pick a start date/time"
+                                        placeholder: qsTr("Pick a start date/time")
                                     }
                                     Controls.Label {
-                                        text: "End date"
+                                        text: qsTr("End date")
                                         visible: queueDialogUseDates.checked
                                     }
                                     Controls.DateTimeField {
                                         id: queueDialogEndDate
                                         Layout.fillWidth: true
                                         visible: queueDialogUseDates.checked
-                                        placeholder: "Pick an end date/time"
+                                        placeholder: qsTr("Pick an end date/time")
                                     }
 
-                                    Controls.Label { text: "Enable quota" }
+                                    Controls.Label { text: qsTr("Enable quota") }
                                     Controls.Switch { id: queueDialogQuota }
-                                    Controls.Label { text: "Quota (GB/day)" }
+                                    Controls.Label { text: qsTr("Quota (GB/day)") }
                                     Controls.SpinBox { id: queueDialogQuotaBytes; from: 0; to: 100000; value: 0 }
-                                    Controls.Label { text: "After queue finishes" }
+                                    Controls.Label { text: qsTr("After queue finishes") }
                                     Controls.ComboBox {
                                         id: queueDialogPostAction
                                         Layout.preferredWidth: 220
@@ -3017,7 +3145,7 @@ ApplicationWindow {
                         }
 
                         Controls.GroupBox {
-                            title: "Category Routing"
+                            title: qsTr("Category Routing")
                             Layout.fillWidth: true
                             implicitHeight: categoryRoutingLayout.implicitHeight + topPadding + bottomPadding
 
@@ -3029,20 +3157,22 @@ ApplicationWindow {
                                 RowLayout {
                                     Layout.fillWidth: true
                                     Controls.Label {
-                                        text: "Category"
+                                        text: qsTr("Category")
                                         Layout.alignment: Qt.AlignVCenter
                                     }
                                     Controls.ComboBox {
                                         id: queueDialogCategoryCombo
                                         Layout.preferredWidth: 220
-                                        model: downloadManager.categoryNames()
+                                        model: appRoot.categoryOptions
+                                        textRole: "text"
+                                        valueRole: "id"
                                         onActivated: {
-                                            queueDialogCategoryFolderField.text = downloadManager.categoryFolder(currentText)
+                                            queueDialogCategoryFolderField.text = downloadManager.categoryFolder(currentValue)
                                         }
                                         Component.onCompleted: {
                                             if (model.length > 0) {
                                                 currentIndex = 0
-                                                queueDialogCategoryFolderField.text = downloadManager.categoryFolder(currentText)
+                                                queueDialogCategoryFolderField.text = downloadManager.categoryFolder(currentValue)
                                             }
                                         }
                                     }
@@ -3054,10 +3184,10 @@ ApplicationWindow {
                                     Controls.TextField {
                                         id: queueDialogCategoryFolderField
                                         Layout.fillWidth: true
-                                        placeholderText: "Optional custom folder for selected category"
+                                        placeholderText: qsTr("Optional custom folder for selected category")
                                     }
                                     Controls.Button {
-                                        text: "Browse..."
+                                        text: qsTr("Browse...")
                                         onClicked: categoryFolderDialog.open()
                                     }
                                 }
@@ -3067,15 +3197,15 @@ ApplicationWindow {
                                     Controls.Label {
                                         Layout.fillWidth: true
                                         wrapMode: Text.WordWrap
-                                        text: "Map a category to a destination folder. Files detected in that category will default to this folder."
+                                        text: qsTr("Map a category to a destination folder. Files detected in that category will default to this folder.")
                                         color: Colors.textMuted
                                     }
                                     Controls.Button {
-                                        text: "Apply"
-                                        enabled: queueDialogCategoryCombo.currentText.length > 0
+                                        text: qsTr("Apply")
+                                        enabled: String(queueDialogCategoryCombo.currentValue || "").length > 0
                                         onClicked: {
                                             downloadManager.setCategoryFolder(
-                                                        queueDialogCategoryCombo.currentText,
+                                                        queueDialogCategoryCombo.currentValue,
                                                         queueDialogCategoryFolderField.text.trim())
                                         }
                                     }
@@ -3096,7 +3226,7 @@ ApplicationWindow {
                         spacing: 12
 
                         Controls.GroupBox {
-                            title: "Network Settings"
+                            title: qsTr("Network Settings")
                             Layout.fillWidth: true
                             implicitHeight: networkSettingsLayout.implicitHeight + topPadding + bottomPadding
 
@@ -3107,25 +3237,25 @@ ApplicationWindow {
                                 columnSpacing: 12
                                 rowSpacing: 8
 
-                                Controls.Label { text: "User-Agent" }
+                                Controls.Label { text: qsTr("User-Agent") }
                                 Controls.TextField { Layout.fillWidth: true; text: downloadManager.defaultUserAgent; onEditingFinished: downloadManager.defaultUserAgent = text }
-                                Controls.Label { text: "Proxy host" }
+                                Controls.Label { text: qsTr("Proxy host") }
                                 Controls.TextField { Layout.fillWidth: true; text: downloadManager.defaultProxyHost; onEditingFinished: downloadManager.defaultProxyHost = text }
-                                Controls.Label { text: "Proxy port" }
+                                Controls.Label { text: qsTr("Proxy port") }
                                 Controls.SpinBox { Layout.preferredWidth: 180; from: 0; to: 65535; value: downloadManager.defaultProxyPort; onValueModified: downloadManager.defaultProxyPort = value }
-                                Controls.Label { text: "Proxy user" }
+                                Controls.Label { text: qsTr("Proxy user") }
                                 Controls.TextField { Layout.fillWidth: true; text: downloadManager.defaultProxyUser; onEditingFinished: downloadManager.defaultProxyUser = text }
-                                Controls.Label { text: "Proxy password" }
+                                Controls.Label { text: qsTr("Proxy password") }
                                 Controls.TextField { Layout.fillWidth: true; echoMode: TextInput.Password; text: downloadManager.defaultProxyPassword; onEditingFinished: downloadManager.defaultProxyPassword = text }
-                                Controls.Label { text: "Allow insecure SSL" }
+                                Controls.Label { text: qsTr("Allow insecure SSL") }
                                 Controls.Switch { checked: downloadManager.defaultAllowInsecureSsl; onToggled: downloadManager.defaultAllowInsecureSsl = checked }
-                                Controls.Label { text: "Per-host concurrent" }
+                                Controls.Label { text: qsTr("Per-host concurrent") }
                                 Controls.SpinBox { from: 1; to: 64; value: downloadManager.perHostMaxConcurrent; onValueModified: downloadManager.perHostMaxConcurrent = value }
                             }
                         }
 
                         Controls.GroupBox {
-                            title: "URL Probe"
+                            title: qsTr("URL Probe")
                             Layout.fillWidth: true
                             implicitHeight: networkProbeLayout.implicitHeight + topPadding + bottomPadding
 
@@ -3136,15 +3266,15 @@ ApplicationWindow {
 
                                 Controls.Label {
                                     Layout.fillWidth: true
-                                    text: "Test a URL with the current network configuration."
+                                    text: qsTr("Test a URL with the current network configuration.")
                                     color: Colors.textMuted
                                     wrapMode: Text.WordWrap
                                 }
                                 RowLayout {
                                     Layout.fillWidth: true
-                                    Controls.TextField { id: networkProbeUrl; Layout.fillWidth: true; placeholderText: "https://example.com/file.zip" }
+                                    Controls.TextField { id: networkProbeUrl; Layout.fillWidth: true; placeholderText: qsTr("https://example.com/file.zip") }
                                     Controls.Button {
-                                        text: downloadManager.networkTestRunning ? "Testing..." : "Run Test"
+                                        text: downloadManager.networkTestRunning ? qsTr("Testing...") : qsTr("Run Test")
                                         enabled: !downloadManager.networkTestRunning && networkProbeUrl.text.trim().length > 0
                                         onClicked: downloadManager.testUrl(networkProbeUrl.text.trim())
                                     }
@@ -3154,7 +3284,7 @@ ApplicationWindow {
                         }
 
                         Controls.GroupBox {
-                            title: "BitTorrent"
+                            title: qsTr("BitTorrent")
                             Layout.fillWidth: true
                             implicitHeight: torrentSettingsLayout.implicitHeight + topPadding + bottomPadding
 
@@ -3166,8 +3296,8 @@ ApplicationWindow {
                                 Controls.Label {
                                     Layout.fillWidth: true
                                     text: downloadManager.torrentAvailable
-                                          ? "Seeding stops when either limit is reached. 0 = unlimited."
-                                          : "BitTorrent support is not available in this build."
+                                          ? qsTr("Seeding stops when either limit is reached. 0 = unlimited.")
+                                          : qsTr("BitTorrent support is not available in this build.")
                                     color: Colors.textMuted
                                     wrapMode: Text.WordWrap
                                 }
@@ -3179,7 +3309,7 @@ ApplicationWindow {
                                     rowSpacing: 8
                                     enabled: downloadManager.torrentAvailable
 
-                                    Controls.Label { text: "Seed ratio limit" }
+                                    Controls.Label { text: qsTr("Seed ratio limit") }
                                     Controls.SpinBox {
                                         Layout.preferredWidth: 180
                                         from: 0
@@ -3189,11 +3319,13 @@ ApplicationWindow {
                                         property int scale: 10
                                         value: Math.round(downloadManager.torrentSeedRatio * scale)
                                         onValueModified: downloadManager.torrentSeedRatio = value / scale
-                                        textFromValue: function(v) { return (v / scale).toFixed(1) }
-                                        valueFromText: function(t) { return Math.round(parseFloat(t) * scale) }
+                                        textFromValue: function(v) { return (v / scale).toLocaleString(Qt.locale(languageManager.currentLocale), "f", 1) }
+                                        valueFromText: function(t) {
+                                            return Math.round(Number.fromLocaleString(Qt.locale(languageManager.currentLocale), t) * scale)
+                                        }
                                     }
 
-                                    Controls.Label { text: "Seed time limit (min)" }
+                                    Controls.Label { text: qsTr("Seed time limit (min)") }
                                     Controls.SpinBox {
                                         Layout.preferredWidth: 180
                                         from: 0
@@ -3210,7 +3342,7 @@ ApplicationWindow {
                         // prioritize, disable, reorder, or add their own gateways.
                         Controls.GroupBox {
                             id: gatewaysGroup
-                            title: "IPFS Gateways (Smart Gateway System)"
+                            title: qsTr("IPFS Gateways (Smart Gateway System)")
                             Layout.fillWidth: true
                             implicitHeight: gatewaysLayout.implicitHeight + topPadding + bottomPadding
 
@@ -3237,13 +3369,14 @@ ApplicationWindow {
                                         Layout.fillWidth: true
                                         wrapMode: Text.WordWrap
                                         color: Colors.textMuted
-                                        text: "Content is resolved through these gateways, ordered by preference, live health, and response time, with automatic fallback. "
-                                              + gatewayService.healthyCount + " of " + gatewayService.enabledCount + " enabled gateway(s) healthy"
-                                              + (gatewayService.localNodeAvailable ? "  ·  Local node detected" : "")
+                                        text: qsTr("Content is resolved through these gateways, ordered by preference, live health, and response time, with automatic fallback. %1 of %2 enabled gateway(s) healthy%3")
+                                              .arg(gatewayService.healthyCount)
+                                              .arg(gatewayService.enabledCount)
+                                              .arg(gatewayService.localNodeAvailable ? qsTr(" · Local node detected") : "")
                                     }
 
                                     Controls.Button {
-                                        text: gatewayService.checking ? "Checking…" : "Check now"
+                                        text: gatewayService.checking ? qsTr("Checking…") : qsTr("Check now")
                                         enabled: !gatewayService.checking
                                         onClicked: gatewayService.checkHealthNow()
                                     }
@@ -3281,7 +3414,7 @@ ApplicationWindow {
                                                 spacing: 6
 
                                                 Controls.Label {
-                                                    elide: Text.ElideRight
+                                                    elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
                                                     font.bold: true
                                                     text: modelData.host
                                                 }
@@ -3295,7 +3428,7 @@ ApplicationWindow {
                                                     Text {
                                                         id: tagText
                                                         anchors.centerIn: parent
-                                                        text: modelData.local ? "local node" : "custom"
+                                                        text: modelData.local ? qsTr("local node") : qsTr("custom")
                                                         color: Colors.textMuted
                                                         font.pixelSize: 10
                                                     }
@@ -3305,8 +3438,11 @@ ApplicationWindow {
 
                                             Controls.Label {
                                                 color: gatewaysGroup.statusColor(modelData.statusKind)
-                                                text: modelData.status
-                                                      + (modelData.responseMs >= 0 ? "   ·   " + modelData.responseMs + " ms" : "")
+                                                text: languageManager.gatewayHealthLabel(modelData.health)
+                                                      + (modelData.responseMs >= 0
+                                                         ? qsTr(" · %1 ms").arg(
+                                                               Number(modelData.responseMs).toLocaleString(Qt.locale(languageManager.currentLocale), "f", 0))
+                                                         : "")
                                             }
                                         }
 
@@ -3364,12 +3500,12 @@ ApplicationWindow {
                                     Controls.TextField {
                                         id: customGatewayField
                                         Layout.fillWidth: true
-                                        placeholderText: "https://my-gateway.example"
+                                        placeholderText: qsTr("https://my-gateway.example")
                                         onAccepted: addGatewayButton.clicked()
                                     }
                                     Controls.Button {
                                         id: addGatewayButton
-                                        text: "Add gateway"
+                                        text: qsTr("Add gateway")
                                         onClicked: {
                                             var v = customGatewayField.text.trim()
                                             if (v.length > 0) {
@@ -3379,7 +3515,7 @@ ApplicationWindow {
                                         }
                                     }
                                     Controls.Button {
-                                        text: "Reset"
+                                        text: qsTr("Reset")
                                         style: "danger"
                                         onClicked: gatewayService.resetToDefaults()
                                     }
@@ -3400,7 +3536,7 @@ ApplicationWindow {
                         spacing: 12
 
                         Controls.GroupBox {
-                            title: "Update Settings"
+                            title: qsTr("Update Settings")
                             Layout.fillWidth: true
                             implicitHeight: updatesConfigLayout.implicitHeight + topPadding + bottomPadding
 
@@ -3410,41 +3546,42 @@ ApplicationWindow {
                                 spacing: 10
 
                                 RowLayout {
-                                    Controls.Label { text: "Current" }
+                                    Controls.Label { text: qsTr("Current") }
                                     Controls.Label { text: updateClient.currentVersion }
                                     Item { Layout.fillWidth: true }
-                                    Controls.Label { text: "Latest" }
+                                    Controls.Label { text: qsTr("Latest") }
                                     Controls.Label { text: updateClient.latestVersion.length > 0 ? updateClient.latestVersion : "--" }
                                 }
 
                                 RowLayout {
                                     Layout.fillWidth: true
-                                    Controls.Button { text: "Check Now"; onClicked: updateClient.checkNow() }
-                                    Controls.Button { text: "Download"; enabled: updateClient.updateAvailable; onClicked: updateClient.downloadUpdate() }
-                                    Controls.Button { text: "Install"; enabled: updateClient.downloadReady; onClicked: updateClient.installUpdate() }
+                                    Controls.Button { text: qsTr("Check Now"); onClicked: updateClient.checkNow() }
+                                    Controls.Button { text: qsTr("Download"); enabled: updateClient.updateAvailable; onClicked: updateClient.downloadUpdate() }
+                                    Controls.Button { text: qsTr("Install"); enabled: updateClient.downloadReady; onClicked: updateClient.installUpdate() }
                                 }
 
                                 Controls.ProgressBar {
                                     Layout.fillWidth: true
                                     value: Math.max(0.0, Math.min(1.0, updateClient.downloadProgress))
-                                    indeterminate: updateClient.status.toLowerCase().indexOf("downloading") >= 0
+                                    indeterminate: updateClient.downloadInProgress
                                                    && updateClient.downloadProgress <= 0
                                 }
 
-                                Controls.Label { Layout.fillWidth: true; text: "Status: " + updateClient.status }
+                                Controls.Label { Layout.fillWidth: true; text: qsTr("Status: ") + updateClient.status }
                                 Controls.Label {
                                     Layout.fillWidth: true
                                     visible: updateClient.lastError.length > 0
                                     color: Colors.error
-                                    text: updateClient.lastError.length > 0 ? ("Error: " + updateClient.lastError) : ""
+                                    text: updateClient.lastError.length > 0 ? qsTr("Error: %1").arg(updateClient.lastError) : ""
                                     wrapMode: Text.Wrap
                                 }
                                 TextArea {
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 220
                                     readOnly: true
-                                    text: updateClient.releaseNotes
-                                    placeholderText: "Release notes"
+                                    text: appRoot.safeReleaseNotes(updateClient.releaseNotes)
+                                    placeholderText: qsTr("Release notes")
+                                    font.family: FontSystem.getContentFontRegular.name
                                 }
                             }
                         }
@@ -3472,7 +3609,7 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 Item { Layout.fillWidth: true }
                 Controls.Button {
-                    text: "Close"
+                    text: qsTr("Close")
                     onClicked: configurationDialog.close()
                 }
             }
@@ -3501,7 +3638,7 @@ ApplicationWindow {
 
         AppGlobals.appPalette = palette
         AppGlobals.appWindow = appRoot
-        AppGlobals.rtl = appRootObjects.isLeftToRight ? false : true
+        AppGlobals.rtl = languageManager.rightToLeft
         appController.setMainWindow(appRoot)
         appController.keepRunningInBackground = uiSettings.keepRunningInBackground
 
@@ -3604,7 +3741,26 @@ ApplicationWindow {
         }
 
         function onToastRequested(message, kind) {
-            appRoot.appendNotification("Downloads", message, kind)
+            appRoot.appendNotification(qsTr("Downloads"), message, kind)
+        }
+    }
+
+    Connections {
+        target: languageManager
+
+        function onCurrentLanguageChanged() {
+            AppGlobals.rtl = languageManager.rightToLeft
+            // These fields are populated imperatively from backend minute
+            // values, so reformat them explicitly when the locale changes.
+            appRoot.loadQueueEditor()
+            const queueName = queueDialogQueueCombo.currentValue
+            if (queueName && queueName.length > 0) {
+                queueDialogStartTime.text = appRoot.minutesToClockText(
+                            downloadManager.queueScheduleStartMinutes(queueName))
+                queueDialogEndTime.text = appRoot.minutesToClockText(
+                            downloadManager.queueScheduleEndMinutes(queueName))
+            }
+            appRoot.rebuildDownloadTableRows()
         }
     }
 
@@ -3615,12 +3771,12 @@ ApplicationWindow {
         function onUpdateAvailableChanged() {
             if (!updateClient.updateAvailable)
                 return
-            const version = updateClient.latestVersion.length > 0 ? updateClient.latestVersion : "new release"
+            const version = updateClient.latestVersion.length > 0 ? updateClient.latestVersion : qsTr("new release")
             if (appRoot.lastUpdateNotificationVersion === version)
                 return
             appRoot.lastUpdateNotificationVersion = version
-            appRoot.appendNotification("Update available",
-                                       "Version " + version + " is available. Current version: " + updateClient.currentVersion + ".",
+            appRoot.appendNotification(qsTr("Update available"),
+                                       qsTr("Version %1 is available. Current version: %2.").arg(version).arg(updateClient.currentVersion),
                                        "info")
             notificationDrawer.open()
             updateAvailableDialog.open()
@@ -3653,10 +3809,9 @@ ApplicationWindow {
         function onAppUpdateFound(displayName, tagName, index) {
             appRoot.pageIndex = 1
             appRoot.lastUpdateAppIndex = index
-            const message = displayName + " " + tagName + " is available. "
-                          + "Click to view details."
-            appRoot.appendNotification("New update available", message, "info")
-            appController.showNotification("New update available", message)
+            const message = qsTr("%1 %2 is available. Click to view details.").arg(displayName).arg(tagName)
+            appRoot.appendNotification(qsTr("New update available"), message, "info")
+            appController.showNotification(qsTr("New update available"), message)
             notificationDrawer.open()
         }
     }
@@ -3974,6 +4129,9 @@ ApplicationWindow {
     Window {
         id: detailsWindow
 
+        LayoutMirroring.enabled: Qt.application.layoutDirection === Qt.RightToLeft
+        LayoutMirroring.childrenInherit: true
+
         width: 860
         height: 640
         minimumWidth: 860
@@ -3983,7 +4141,10 @@ ApplicationWindow {
 
         flags: Qt.Widget
 
-        title: appRoot.detailsTask ? Math.round(appRoot.detailsProgress * 100) + "% " + appRoot.baseName(appRoot.taskFileNameValue(appRoot.detailsTask)) : "Download Details"
+        title: appRoot.detailsTask
+               ? Utils.formatPercent(Math.round(appRoot.detailsProgress * 100), 0)
+                 + " " + appRoot.baseName(appRoot.taskFileNameValue(appRoot.detailsTask))
+               : qsTr("Download Details")
         visible: false
 
         property int tabIndex: 0
@@ -4063,10 +4224,10 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 Text {
                     Layout.fillWidth: true
-                    text: appRoot.detailsTask ? appRoot.baseName(appRoot.taskFileNameValue(appRoot.detailsTask)) : "No selection"
+                    text: appRoot.detailsTask ? appRoot.baseName(appRoot.taskFileNameValue(appRoot.detailsTask)) : qsTr("No selection")
                     font.pixelSize: 22
                     font.bold: true
-                    elide: Text.ElideRight
+                    elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
                 }
                 Label {
                     text: appRoot.detailsTask ? appRoot.taskStatusText(appRoot.detailsTask, appRoot.detailsTask.stateString) : ""
@@ -4087,11 +4248,11 @@ ApplicationWindow {
                 currentIndex: detailsWindow.tabIndex
                 onCurrentIndexChanged: detailsWindow.tabIndex = currentIndex
 
-                TabButton { text: "General" }
-                TabButton { text: "Progress" }
-                TabButton { text: "Connections" }
-                TabButton { text: "Limits" }
-                TabButton { text: "Completion" }
+                TabButton { text: qsTr("General") }
+                TabButton { text: qsTr("Progress") }
+                TabButton { text: qsTr("Connections") }
+                TabButton { text: qsTr("Limits") }
+                TabButton { text: qsTr("Completion") }
             }
 
             StackLayout {
@@ -4110,7 +4271,7 @@ ApplicationWindow {
                         spacing: 8
 
                         GroupBox {
-                            title: "Status"
+                            title: qsTr("Status")
                             Layout.fillWidth: true
                             Layout.preferredHeight: statusGrid.implicitHeight + 64
 
@@ -4122,50 +4283,55 @@ ApplicationWindow {
                                 columnSpacing: 16
                                 rowSpacing: 6
 
-                                Controls.Label { text: "URL" }
+                                Controls.Label { text: qsTr("URL") }
                                 Controls.Label {
                                     text: appRoot.detailsTask ? appRoot.detailsTask.url() : ""
                                     elide: Text.ElideMiddle
                                     Layout.fillWidth: true
                                 }
 
-                                Controls.Label { text: "State" }
+                                Controls.Label { text: qsTr("State") }
                                 Controls.Label { text: appRoot.detailsTask ? appRoot.taskStatusText(appRoot.detailsTask, appRoot.detailsTask.stateString) : "" }
 
-                                Controls.Label { text: "File size" }
+                                Controls.Label { text: qsTr("File size") }
                                 Controls.Label { text: appRoot.formatBytes(appRoot.detailsBytesTotal) }
 
-                                Controls.Label { text: "Downloaded" }
+                                Controls.Label { text: qsTr("Downloaded") }
                                 Controls.Label {
                                     text: appRoot.formatBytes(appRoot.detailsBytesReceived)
                                           + (appRoot.detailsBytesTotal > 0 ? " / " + appRoot.formatBytes(appRoot.detailsBytesTotal) : "")
-                                          + (appRoot.detailsBytesTotal > 0 ? " (" + (appRoot.detailsProgress * 100).toFixed(2) + "%)" : "")
+                                          + (appRoot.detailsBytesTotal > 0
+                                             ? " (" + Utils.formatPercent(appRoot.detailsProgress * 100, 2) + ")"
+                                             : "")
                                 }
 
-                                Controls.Label { text: "Segments" }
+                                Controls.Label { text: qsTr("Segments") }
                                 Controls.Label {
                                     text: {
-                                        if (!appRoot.detailsTask) return "Segments: 0"
+                                        if (!appRoot.detailsTask)
+                                            return Number(0).toLocaleString(Qt.locale(languageManager.currentLocale), "f", 0)
                                         const configured = appRoot.detailsTask.segments()
                                         const active = appRoot.detailsTask.effectiveSegments()
+                                        const configuredText = Number(configured).toLocaleString(Qt.locale(languageManager.currentLocale), "f", 0)
+                                        const activeText = Number(active).toLocaleString(Qt.locale(languageManager.currentLocale), "f", 0)
                                         return active !== configured
-                                                ? (configured + " (" + active + " active)")
-                                                : (configured)
+                                                ? qsTr("%1 (%2 active)").arg(configuredText).arg(activeText)
+                                                : configuredText
                                     }
                                     font.bold: true
                                 }
 
-                                Controls.Label { text: "Speed" }
+                                Controls.Label { text: qsTr("Speed") }
                                 Controls.Label { text: appRoot.formatSpeed(appRoot.detailsTask ? appRoot.detailsTask.speed : 0) }
 
-                                Controls.Label { text: "ETA" }
+                                Controls.Label { text: qsTr("ETA") }
                                 Controls.Label { text: appRoot.formatEta(appRoot.detailsTask ? appRoot.detailsTask.eta : -1) }
 
-                                Controls.Label { text: "Queue" }
-                                Controls.Label { text: appRoot.detailsQueue }
+                                Controls.Label { text: qsTr("Queue") }
+                                Controls.Label { text: appRoot.queueLabel(appRoot.detailsQueue) }
 
-                                Controls.Label { text: "Category" }
-                                Controls.Label { text: appRoot.detailsCategory }
+                                Controls.Label { text: qsTr("Category") }
+                                Controls.Label { text: appRoot.categoryLabel(appRoot.detailsCategory) }
                             }
                         }
 
@@ -4174,7 +4340,7 @@ ApplicationWindow {
                         // tracker panel so users always know where a file came from,
                         // how it was delivered, and whether it was verified.
                         GroupBox {
-                            title: "Source Information"
+                            title: qsTr("Source Information")
                             visible: detailsWindow.detailsIsBlockchain
                             Layout.fillWidth: true
                             Layout.preferredHeight: sourceGrid.implicitHeight + 64
@@ -4192,7 +4358,7 @@ ApplicationWindow {
                                                                && appRoot.detailsTask.contentId
                                                                && String(appRoot.detailsTask.contentId).length > 0
 
-                                Controls.Label { text: "Source Type" }
+                                Controls.Label { text: qsTr("Source Type") }
                                 Controls.Label {
                                     text: detailsWindow.detailsSrcInfo.label
                                     color: detailsWindow.toneColor(detailsWindow.detailsSrcInfo.tone)
@@ -4200,7 +4366,7 @@ ApplicationWindow {
                                     Layout.fillWidth: true
                                 }
 
-                                Controls.Label { text: "Content ID (CID)"; visible: sourceGrid.hasCid }
+                                Controls.Label { text: qsTr("Content ID (CID)"); visible: sourceGrid.hasCid }
                                 Controls.Label {
                                     text: sourceGrid.hasCid ? String(appRoot.detailsTask.contentId) : ""
                                     font.family: FontSystem.getContentFontMedium.name
@@ -4209,26 +4375,26 @@ ApplicationWindow {
                                     Layout.fillWidth: true
                                 }
 
-                                Controls.Label { text: "Gateway"; visible: sourceGrid.isIpfs }
+                                Controls.Label { text: qsTr("Gateway"); visible: sourceGrid.isIpfs }
                                 Controls.Label {
                                     text: {
                                         if (!sourceGrid.isIpfs) return ""
                                         var gw = Utils.activeGatewayHost(appRoot.detailsTask)
-                                        return gw.length > 0 ? gw : "Resolving…"
+                                        return gw.length > 0 ? gw : qsTr("Resolving…")
                                     }
                                     visible: sourceGrid.isIpfs
                                     Layout.fillWidth: true
                                 }
 
-                                Controls.Label { text: "Fallbacks"; visible: sourceGrid.isIpfs }
+                                Controls.Label { text: qsTr("Fallbacks"); visible: sourceGrid.isIpfs }
                                 Controls.Label {
                                     text: sourceGrid.isIpfs
-                                          ? Utils.gatewayFallbackCount(appRoot.detailsTask) + " gateway(s) available"
+                                          ? qsTr("%n gateway(s) available", "", Utils.gatewayFallbackCount(appRoot.detailsTask))
                                           : ""
                                     visible: sourceGrid.isIpfs
                                 }
 
-                                Controls.Label { text: "Verification"; visible: detailsWindow.detailsVerInfo.state !== "none" }
+                                Controls.Label { text: qsTr("Verification"); visible: detailsWindow.detailsVerInfo.state !== "none" }
                                 Controls.Label {
                                     text: (detailsWindow.detailsVerInfo.verified ? "✓ " : "")
                                           + detailsWindow.detailsVerInfo.label
@@ -4237,14 +4403,14 @@ ApplicationWindow {
                                     visible: detailsWindow.detailsVerInfo.state !== "none"
                                 }
 
-                                Controls.Label { text: "Integrity"; visible: detailsWindow.detailsVerInfo.state !== "none" }
+                                Controls.Label { text: qsTr("Integrity"); visible: detailsWindow.detailsVerInfo.state !== "none" }
                                 Controls.Label {
                                     text: {
                                         switch (detailsWindow.detailsVerInfo.state) {
-                                            case "verified":  return "✓ Verified Content"
-                                            case "mismatch":  return "✗ Integrity check failed"
-                                            case "verifying": return "Checking…"
-                                            case "trusted":   return "Gateway-trusted (not byte-verifiable)"
+                                            case "verified":  return qsTr("✓ Verified Content")
+                                            case "mismatch":  return qsTr("✗ Integrity check failed")
+                                            case "verifying": return qsTr("Checking…")
+                                            case "trusted":   return qsTr("Gateway-trusted (not byte-verifiable)")
                                             default:          return "—"
                                         }
                                     }
@@ -4252,13 +4418,13 @@ ApplicationWindow {
                                     visible: detailsWindow.detailsVerInfo.state !== "none"
                                 }
 
-                                Controls.Label { text: "Downloaded Via" }
+                                Controls.Label { text: qsTr("Downloaded Via") }
                                 Controls.Label { text: Utils.deliveryChannel(appRoot.detailsTask) }
                             }
                         }
 
                         GroupBox {
-                            title: "Segmented Progress Map"
+                            title: qsTr("Segmented Progress Map")
                             // Hidden for blockchain rows: content-addressed fetches
                             // are typically small single objects, and the Source
                             // Information panel takes this slot instead — keeping the
@@ -4309,31 +4475,31 @@ ApplicationWindow {
                         RowLayout {
                             Layout.fillWidth: true
                             GroupBox {
-                                title: "Progress"
+                                title: qsTr("Progress")
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 100
                                 ColumnLayout {
                                     anchors.fill: parent
                                     anchors.margins: 8
-                                    Controls.Label { text: (appRoot.detailsProgress * 100).toFixed(2) + "%"; font.bold: true }
-                                    Controls.Label { text: appRoot.formatBytes(appRoot.detailsBytesReceived) + " downloaded" }
+                                    Controls.Label { text: Utils.formatPercent(appRoot.detailsProgress * 100, 2); font.bold: true }
+                                    Controls.Label { text: qsTr("%1 downloaded").arg(appRoot.formatBytes(appRoot.detailsBytesReceived)) }
                                 }
                             }
                             GroupBox {
-                                title: "Speed"
+                                title: qsTr("Speed")
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 100
                                 ColumnLayout {
                                     anchors.fill: parent
                                     anchors.margins: 8
                                     Controls.Label { text: appRoot.formatSpeed(appRoot.detailsTask ? appRoot.detailsTask.speed : 0); font.bold: true }
-                                    Controls.Label { text: "Peak " + appRoot.formatSpeed(appRoot.detailsPeakSpeed) }
+                                    Controls.Label { text: qsTr("Peak ") + appRoot.formatSpeed(appRoot.detailsPeakSpeed) }
                                 }
                             }
                         }
 
                         GroupBox {
-                            title: "Download Speed Chart"
+                            title: qsTr("Download Speed Chart")
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             Layout.preferredHeight: 164
@@ -4370,7 +4536,7 @@ ApplicationWindow {
                                     if (!samples || samples.length === 0) {
                                         ctx.fillStyle = "#666666"
                                         ctx.font = "12px sans-serif"
-                                        ctx.fillText("Waiting for speed samples...", pad + 6, h / 2)
+                                        ctx.fillText(qsTr("Waiting for speed samples..."), pad + 6, h / 2)
                                         return
                                     }
 
@@ -4409,7 +4575,7 @@ ApplicationWindow {
                         spacing: 8
 
                         GroupBox {
-                            title: "Connection table"
+                            title: qsTr("Connection table")
                             Layout.fillWidth: true
                             Layout.fillHeight: true
 
@@ -4435,7 +4601,7 @@ ApplicationWindow {
 
                                     Controls.Label {
                                         Layout.preferredWidth: 50
-                                        text: String(index + 1)
+                                        text: Number(index + 1).toLocaleString(Qt.locale(languageManager.currentLocale), "f", 0)
                                     }
                                     Controls.Label {
                                         Layout.preferredWidth: 180
@@ -4443,7 +4609,7 @@ ApplicationWindow {
                                     }
                                     Controls.Label {
                                         Layout.fillWidth: true
-                                        text: segState
+                                        text: appRoot.statusLabel(segState)
                                     }
                                 }
 
@@ -4459,7 +4625,7 @@ ApplicationWindow {
                         spacing: 8
 
                         GroupBox {
-                            title: "Speed limits"
+                            title: qsTr("Speed limits")
                             Layout.fillWidth: true
                             Layout.preferredHeight: 140
 
@@ -4470,7 +4636,7 @@ ApplicationWindow {
                                 rowSpacing: 8
                                 columnSpacing: 12
 
-                                Controls.Label { text: "Task cap (MB/s)" }
+                                Controls.Label { text: qsTr("Task cap (MB/s)") }
                                 RowLayout {
                                     Controls.SpinBox {
                                         id: detailsSpeedCap
@@ -4479,13 +4645,13 @@ ApplicationWindow {
                                         value: appRoot.detailsRow >= 0 ? Math.round(downloadManager.taskMaxSpeed(appRoot.detailsRow) / (1024 * 1024)) : 0
                                     }
                                     Controls.Button {
-                                        text: "Apply"
+                                        text: qsTr("Apply")
                                         isDefault: false
                                         enabled: appRoot.detailsRow >= 0
                                         onClicked: if (appRoot.detailsRow >= 0) downloadManager.setTaskMaxSpeed(appRoot.detailsRow, detailsSpeedCap.value * 1024 * 1024)
                                     }
                                     Controls.Button {
-                                        text: "Unlimited"
+                                        text: qsTr("Unlimited")
                                         isDefault: false
                                         enabled: appRoot.detailsRow >= 0
                                         onClicked: {
@@ -4495,9 +4661,9 @@ ApplicationWindow {
                                     }
                                 }
 
-                                Controls.Label { text: "Global cap" }
+                                Controls.Label { text: qsTr("Global cap") }
                                 Controls.Label {
-                                    text: downloadManager.globalMaxSpeed > 0 ? appRoot.formatSpeed(downloadManager.globalMaxSpeed) : "Unlimited"
+                                    text: downloadManager.globalMaxSpeed > 0 ? appRoot.formatSpeed(downloadManager.globalMaxSpeed) : qsTr("Unlimited")
                                 }
                             }
                         }
@@ -4512,7 +4678,7 @@ ApplicationWindow {
                         spacing: 8
 
                         GroupBox {
-                            title: "After completion"
+                            title: qsTr("After completion")
                             Layout.fillWidth: true
                             Layout.preferredHeight: 230
 
@@ -4522,23 +4688,23 @@ ApplicationWindow {
                                 spacing: 8
 
                                 Controls.CheckBox {
-                                    text: "Open file when completed"
+                                    text: qsTr("Open file when completed")
                                     checked: appRoot.detailsTask ? appRoot.detailsTask.postOpenFile : false
                                     onToggled: if (appRoot.detailsTask) appRoot.detailsTask.postOpenFile = checked
                                 }
                                 Controls.CheckBox {
-                                    text: "Show in folder when completed"
+                                    text: qsTr("Show in folder when completed")
                                     checked: appRoot.detailsTask ? appRoot.detailsTask.postRevealFolder : false
                                     onToggled: if (appRoot.detailsTask) appRoot.detailsTask.postRevealFolder = checked
                                 }
                                 Controls.CheckBox {
-                                    text: "Extract when completed"
+                                    text: qsTr("Extract when completed")
                                     checked: appRoot.detailsTask ? appRoot.detailsTask.postExtract : false
                                     onToggled: if (appRoot.detailsTask) appRoot.detailsTask.postExtract = checked
                                 }
 
                                 RowLayout {
-                                    Label { text: "Post script" }
+                                    Label { text: qsTr("Post script") }
                                     TextField {
                                         Layout.fillWidth: true
                                         text: appRoot.detailsTask ? appRoot.detailsTask.postScript : ""
@@ -4560,7 +4726,7 @@ ApplicationWindow {
                 Controls.Button {
                     implicitWidth: 86
                     isDefault: false
-                    text: appRoot.detailsTask && appRoot.detailsTask.stateString === "Active" ? "Pause" : "Resume"
+                    text: appRoot.detailsTask && appRoot.detailsTask.stateString === "Active" ? qsTr("Pause") : qsTr("Resume")
                     enabled: appRoot.detailsTask && (appRoot.detailsTask.stateString === "Active" || appRoot.detailsTask.stateString === "Paused")
                     onClicked: {
                         if (!appRoot.detailsTask || appRoot.detailsRow < 0) return
@@ -4571,14 +4737,14 @@ ApplicationWindow {
                 Controls.Button {
                     implicitWidth: 86
                     isDefault: false
-                    text: "Retry"
+                    text: qsTr("Retry")
                     enabled: appRoot.detailsRow >= 0
                     onClicked: if (appRoot.detailsRow >= 0) downloadManager.retryTask(appRoot.detailsRow)
                 }
                 Controls.Button {
                     implicitWidth: 86
                     isDefault: false
-                    text: "Cancel"
+                    text: qsTr("Cancel")
                     enabled: appRoot.detailsTask && (appRoot.detailsTask.stateString === "Active" || appRoot.detailsTask.stateString === "Paused" || appRoot.detailsTask.stateString === "Queued")
                     onClicked: if (appRoot.detailsTask) appRoot.detailsTask.cancel()
                 }
@@ -4586,13 +4752,13 @@ ApplicationWindow {
                 Controls.Button {
                     implicitWidth: 86
                     isDefault: false
-                    text: "Open"
+                    text: qsTr("Open")
                     enabled: appRoot.detailsRow >= 0 && appRoot.detailsIsDone
                     onClicked: if (appRoot.detailsRow >= 0 && appRoot.detailsIsDone) downloadManager.openFile(appRoot.detailsRow)
                 }
                 Controls.Button {
                     implicitWidth: 128
-                    text: "Show in Folder"
+                    text: qsTr("Show in Folder")
                     Layout.fillWidth: true
                     isDefault: false
                     enabled: appRoot.detailsRow >= 0
@@ -4601,7 +4767,7 @@ ApplicationWindow {
                 // Button {
                 //     implicitWidth: 86
                 //     isDefault: false
-                //     text: "Verify"
+                //     text: qsTr("Verify")
                 //     enabled: appRoot.detailsRow >= 0
                 //     onClicked: if (appRoot.detailsRow >= 0) downloadManager.verifyTask(appRoot.detailsRow)
                 // }
@@ -4609,7 +4775,7 @@ ApplicationWindow {
                     implicitWidth: 86
                     // isDefault: false
                     style: "danger"
-                    text: "Remove"
+                    text: qsTr("Remove")
                     enabled: appRoot.detailsRow >= 0
                     onClicked: {
                         if (appRoot.detailsRow < 0)
@@ -4622,7 +4788,7 @@ ApplicationWindow {
                 Controls.Button {
                     implicitWidth: 86
                     isDefault: false
-                    text: "Close"
+                    text: qsTr("Close")
                     onClicked: detailsWindow.close()
                 }
             }
@@ -4636,9 +4802,9 @@ ApplicationWindow {
 
                 width: 460
 
-                title: "Remove download"
+                title: qsTr("Remove download")
                 standardButtons: Dialog.Cancel | Dialog.Yes
-                yesTextOverride: "Remove"
+                yesTextOverride: qsTr("Remove")
                 type: "danger"
 
                 onAccepted: appRoot.confirmRemovePending(detailsRemoveFromDiskCheck.checked)
@@ -4650,13 +4816,13 @@ ApplicationWindow {
                     Controls.Label {
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
-                        text: "Remove the selected download from GENYDL?"
+                        text: qsTr("Remove the selected download from GENYDL?")
                     }
 
                     Controls.CheckBox {
                         id: detailsRemoveFromDiskCheck
                         Layout.fillWidth: true
-                        text: "Also delete file and partial segments from disk"
+                        text: qsTr("Also delete file and partial segments from disk")
                     }
                 }
             }
@@ -4667,11 +4833,11 @@ ApplicationWindow {
         id: updateAvailableDialog
 
         width: 480
-        title: "Update available"
+        title: qsTr("Update available")
         type: updateClient.expectedSha256.length > 0 ? "info" : "warning"
         standardButtons: Dialog.Cancel | Dialog.Yes
-        cancelTextOverride: "Later"
-        yesTextOverride: updateClient.downloadReady ? "Install" : "Download"
+        cancelTextOverride: qsTr("Later")
+        yesTextOverride: updateClient.downloadReady ? qsTr("Install") : qsTr("Download")
 
         onAccepted: {
             if (updateClient.downloadReady) {
@@ -4688,23 +4854,23 @@ ApplicationWindow {
             Controls.Label {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
-                text: "A newer version of GENYDL is available."
+                text: qsTr("A newer version of GENYDL is available.")
             }
 
             Controls.Label {
-                text: "Current: " + updateClient.currentVersion
+                text: qsTr("Current: ") + updateClient.currentVersion
             }
 
             Controls.Label {
-                text: "Latest: " + (updateClient.latestVersion.length > 0 ? updateClient.latestVersion : "--")
+                text: qsTr("Latest: ") + (updateClient.latestVersion.length > 0 ? updateClient.latestVersion : "--")
             }
 
             Controls.Label {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 text: updateClient.expectedSha256.length > 0
-                      ? "Checksum metadata is available and will be verified after download."
-                      : "No SHA-256 checksum metadata was found for this release. Download can continue, but release metadata should be improved before broad rollout."
+                      ? qsTr("Checksum metadata is available and will be verified after download.")
+                      : qsTr("No SHA-256 checksum metadata was found for this release. Download can continue, but release metadata should be improved before broad rollout.")
             }
         }
     }
@@ -4713,7 +4879,7 @@ ApplicationWindow {
         id: resetSettingsDialog
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         width: 520
-        title: "Restore defaults"
+        title: qsTr("Restore defaults")
         standardButtons: Dialog.Cancel | Dialog.RestoreDefaults
         type: "danger"
         restoreDefaultsStyleOverride: "danger"
@@ -4727,13 +4893,13 @@ ApplicationWindow {
             Controls.Label {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
-                text: "Restore GENYDL to its default configuration?"
+                text: qsTr("Restore GENYDL to its default configuration?")
             }
 
             Controls.Label {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
-                text: "This clears saved download state, queues, rules, updater settings, and UI preferences. Existing downloaded files on disk are not deleted."
+                text: qsTr("This clears saved download state, queues, rules, updater settings, and UI preferences. Existing downloaded files on disk are not deleted.")
             }
         }
     }
@@ -4747,9 +4913,9 @@ ApplicationWindow {
 
         width: 460
 
-        title: appRoot.pendingRemoveRows.length > 1 ? "Remove downloads" : "Remove download"
+        title: appRoot.pendingRemoveRows.length > 1 ? qsTr("Remove downloads") : qsTr("Remove download")
         standardButtons: Dialog.Cancel | Dialog.Yes
-        yesTextOverride: appRoot.pendingRemoveRows.length > 1 ? "Remove All" : "Remove"
+        yesTextOverride: appRoot.pendingRemoveRows.length > 1 ? qsTr("Remove All") : qsTr("Remove")
 
         type: "danger"
 
@@ -4763,16 +4929,16 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 text: appRoot.pendingRemoveRows.length > 1
-                      ? "Remove " + appRoot.pendingRemoveRows.length + " selected downloads from GENYDL?"
-                      : "Remove the selected download from GENYDL?"
+                      ? qsTr("Remove %n selected download(s) from GENYDL?", "", appRoot.pendingRemoveRows.length)
+                      : qsTr("Remove the selected download from GENYDL?")
             }
 
             Controls.CheckBox {
                 id: removeFromDiskCheck
                 Layout.fillWidth: true
                 text: appRoot.pendingRemoveRows.length > 1
-                      ? "Also delete downloaded files and partial segments from disk"
-                      : "Also delete file and partial segments from disk"
+                      ? qsTr("Also delete downloaded files and partial segments from disk")
+                      : qsTr("Also delete file and partial segments from disk")
             }
         }
     }
@@ -4793,7 +4959,7 @@ ApplicationWindow {
             spacing: 8
 
             Rectangle {
-                Layout.preferredWidth: 142
+                Layout.preferredWidth: AppGlobals.rtl ? 180 : 142
                 Layout.preferredHeight: 42
                 Layout.alignment: Qt.AlignVCenter
                 radius: Metrics.innerRadius
@@ -4812,7 +4978,8 @@ ApplicationWindow {
                         font.pixelSize: Typography.h3
                         font.letterSpacing: 0.6
                         color: Colors.textPrimary
-                        text: "GENY<strong>DL</strong>"
+                        textFormat: Text.PlainText
+                        text: qsTr("GenyDL")
                     }
 
                     Item { Layout.preferredWidth: 2; }
@@ -4833,26 +5000,26 @@ ApplicationWindow {
                 function navSeparator() { return "|" }
 
                 Controls.AppMenuTrigger {
-                    text: "Home"
+                    text: qsTr("Home")
                     selected: appRoot.pageIndex === 0
                     onTriggered: appRoot.pageIndex = 0
                 }
-                Text { text: "|"; color: Colors.lineBorderActivated; font.pixelSize: Typography.t2 }
-                Controls.AppMenuTrigger { text: "Actions"; menu: tasksTopMenu }
-                Text { text: "|"; color: Colors.lineBorderActivated; font.pixelSize: Typography.t2 }
-                Controls.AppMenuTrigger { text: "File"; menu: fileTopMenu }
-                Text { text: "|"; color: Colors.lineBorderActivated; font.pixelSize: Typography.t2 }
-                Controls.AppMenuTrigger { text: "Downloads"; menu: downloadsTopMenu }
-                Text { text: "|"; color: Colors.lineBorderActivated; font.pixelSize: Typography.t2 }
+                Text { text: qsTr("|"); color: Colors.lineBorderActivated; font.pixelSize: Typography.t2 }
+                Controls.AppMenuTrigger { text: qsTr("File"); menu: fileTopMenu }
+                Text { text: qsTr("|"); color: Colors.lineBorderActivated; font.pixelSize: Typography.t2 }
+                Controls.AppMenuTrigger { text: qsTr("Downloads"); menu: downloadsTopMenu }
+                Text { text: qsTr("|"); color: Colors.lineBorderActivated; font.pixelSize: Typography.t2 }
+                Controls.AppMenuTrigger { text: qsTr("Actions"); menu: tasksTopMenu }
+                Text { text: qsTr("|"); color: Colors.lineBorderActivated; font.pixelSize: Typography.t2 }
                 Controls.AppMenuTrigger {
-                    text: "Release Center"
+                    text: qsTr("Release Center")
                     menu: releaseCenterTopMenu
                     selected: appRoot.pageIndex === 1
                 }
-                Text { text: "|"; color: Colors.lineBorderActivated; font.pixelSize: Typography.t2 }
-                Controls.AppMenuTrigger { text: "Configuration"; menu: configurationTopMenu }
-                Text { text: "|"; color: Colors.lineBorderActivated; font.pixelSize: Typography.t2 }
-                Controls.AppMenuTrigger { text: "Help"; menu: helpTopMenu }
+                Text { text: qsTr("|"); color: Colors.lineBorderActivated; font.pixelSize: Typography.t2 }
+                Controls.AppMenuTrigger { text: qsTr("Configuration"); menu: configurationTopMenu }
+                Text { text: qsTr("|"); color: Colors.lineBorderActivated; font.pixelSize: Typography.t2 }
+                Controls.AppMenuTrigger { text: qsTr("Help"); menu: helpTopMenu }
 
             }
 
@@ -4905,7 +5072,7 @@ ApplicationWindow {
                         Text {
                             anchors.centerIn: parent
                             visible: genyLogo.status !== Image.Ready
-                            text: "$" + appRoot.genyTokenSymbol
+                            text: qsTr("$") + appRoot.genyTokenSymbol
                             color: Colors.textPrimary
                             font.family: FontSystem.getTitleBoldFont.font.family
                             font.pixelSize: Typography.t5
@@ -4937,33 +5104,33 @@ ApplicationWindow {
 
                         Text {
                             Layout.fillWidth: true
-                            text: "GenyToken"
+                            text: qsTr("GenyToken")
                             color: Colors.textPrimary
                             font.family: FontSystem.getTitleBoldFont.font.family
                             font.pixelSize: Typography.t3
                             font.bold: true
-                            elide: Text.ElideRight
+                            elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
                         }
 
                         Text {
                             Layout.fillWidth: true
-                            text: "256M fixed-supply ERC20 powering the Genyleap ecosystem."
+                            text: qsTr("256M fixed-supply ERC20 powering the Genyleap ecosystem.")
                             color: Colors.textSecondary
                             font.family: FontSystem.getContentFontRegular.name
                             font.pixelSize: Typography.t5
-                            elide: Text.ElideRight
+                            elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
                         }
 
                         Text {
                             Layout.fillWidth: true
                             textFormat: Text.RichText
-                            text: "<a href=\"" + appRoot.genyleapWebsiteUrl + "\"><span style=\"color:#3a86ff;text-decoration:underline;\">"
+                            text: qsTr("<a href=\"") + appRoot.genyleapWebsiteUrl + "\"><span style=\"color:#3a86ff;text-decoration:underline;\">"
                                   + appRoot.genyleapWebsiteUrl + "</span></a>"
-                            onLinkActivated: appRoot.openExternalLink(link, "Opened Genyleap website")
+                            onLinkActivated: appRoot.openExternalLink(link, qsTr("Opened Genyleap website"))
                             color: Colors.textAccent
                             font.family: FontSystem.getContentFontRegular.name
                             font.pixelSize: Typography.t5
-                            elide: Text.ElideRight
+                            elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
                             wrapMode: Text.NoWrap
                         }
                     }
@@ -4975,57 +5142,57 @@ ApplicationWindow {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: appRoot.openExternalLink(appRoot.genyleapWebsiteUrl, "Opened Genyleap website")
+                    onClicked: appRoot.openExternalLink(appRoot.genyleapWebsiteUrl, qsTr("Opened Genyleap website"))
                 }
             }
         }
 
         Controls.AppMenu {
             id: tasksTopMenu
-            title: "Actions"
+            title: qsTr("Actions")
             Controls.AppMenuItem {
-                text: "Add Url"
+                text: qsTr("Add Url")
                 iconGlyph: "\uf0c1"
                 onTriggered: {
                     appRoot.pageIndex = 0
                     appRoot.openAddUrlDialog()
                 }
             }
-            Controls.AppMenuItem { text: "Resume"; iconGlyph: "\uf01e"; enabled: appRoot.canResumeAction(); onTriggered: appRoot.applyActionToCheckedOrSelected("resume") }
-            Controls.AppMenuItem { text: "Stop"; iconGlyph: "\uf28d"; enabled: appRoot.canStopAction(); onTriggered: appRoot.applyActionToCheckedOrSelected("pause") }
-            Controls.AppMenuItem { text: "Stop All"; iconGlyph: "\uf28d"; enabled: appRoot.canStopAllAction(); onTriggered: appRoot.applyActionToCheckedOrSelected("pause") }
-            Controls.AppMenuItem { text: "Retry Failed"; iconGlyph: "\uf01e"; onTriggered: downloadManager.retryFailed() }
-            Controls.AppMenuItem { text: "Cancel All"; iconGlyph: "\uf057"; onTriggered: downloadManager.cancelAll() }
+            Controls.AppMenuItem { text: qsTr("Resume"); iconGlyph: "\uf01e"; enabled: appRoot.canResumeAction(); onTriggered: appRoot.applyActionToCheckedOrSelected("resume") }
+            Controls.AppMenuItem { text: qsTr("Stop"); iconGlyph: "\uf28d"; enabled: appRoot.canStopAction(); onTriggered: appRoot.applyActionToCheckedOrSelected("pause") }
+            Controls.AppMenuItem { text: qsTr("Stop All"); iconGlyph: "\uf28d"; enabled: appRoot.canStopAllAction(); onTriggered: appRoot.applyActionToCheckedOrSelected("pause") }
+            Controls.AppMenuItem { text: qsTr("Retry Failed"); iconGlyph: "\uf01e"; onTriggered: downloadManager.retryFailed() }
+            Controls.AppMenuItem { text: qsTr("Cancel All"); iconGlyph: "\uf057"; onTriggered: downloadManager.cancelAll() }
             Controls.AppMenuSeparator {}
-            Controls.AppMenuItem { text: "Exit"; iconGlyph: "\uf08b"; onTriggered: appController.quitApplication() }
+            Controls.AppMenuItem { text: qsTr("Exit"); iconGlyph: "\uf08b"; onTriggered: appController.quitApplication() }
         }
 
         Controls.AppMenu {
             id: fileTopMenu
-            title: "File"
-            Controls.AppMenuItem { text: "Import List..."; iconGlyph: "\uf56f"; onTriggered: importDialog.open() }
-            Controls.AppMenuItem { text: "Export List..."; iconGlyph: "\uf56e"; onTriggered: exportDialog.open() }
+            title: qsTr("File")
+            Controls.AppMenuItem { text: qsTr("Import List..."); iconGlyph: "\uf56f"; onTriggered: importDialog.open() }
+            Controls.AppMenuItem { text: qsTr("Export List..."); iconGlyph: "\uf56e"; onTriggered: exportDialog.open() }
             Controls.AppMenuSeparator { }
-            Controls.AppMenuItem { text: "Clear Completed"; iconGlyph: "\uf2ed"; onTriggered: downloadManager.clearCompleted() }
+            Controls.AppMenuItem { text: qsTr("Clear Completed"); iconGlyph: "\uf2ed"; onTriggered: downloadManager.clearCompleted() }
         }
 
         Controls.AppMenu {
             id: downloadsTopMenu
-            title: "Downloads"
+            title: qsTr("Downloads")
             Controls.AppMenuItem {
-                text: "Open"
+                text: qsTr("Open")
                 iconGlyph: "\uf15c"
                 enabled: appRoot.hasSelection
                 onTriggered: if (appRoot.hasSelection) appRoot.executeRowAction(appRoot.selectedTaskIndex, appRoot.selectedTask, "open", appRoot.selectedQueue, appRoot.selectedCategory)
             }
             Controls.AppMenuItem {
-                text: "Show in Folder"
+                text: qsTr("Show in Folder")
                 iconGlyph: "\uf07c"
                 enabled: appRoot.hasSelection
                 onTriggered: if (appRoot.hasSelection) appRoot.executeRowAction(appRoot.selectedTaskIndex, appRoot.selectedTask, "reveal", appRoot.selectedQueue, appRoot.selectedCategory)
             }
             Controls.AppMenuItem {
-                text: "Properties"
+                text: qsTr("Properties")
                 iconGlyph: "\uf05a"
                 enabled: appRoot.hasSelection
                 onTriggered: if (appRoot.hasSelection) appRoot.openDetailsFor(appRoot.selectedTaskIndex, appRoot.selectedTask, appRoot.selectedQueue, appRoot.selectedCategory)
@@ -5034,14 +5201,14 @@ ApplicationWindow {
 
         Controls.AppMenu {
             id: releaseCenterTopMenu
-            title: "Release Center"
+            title: qsTr("Release Center")
             Controls.AppMenuItem {
-                text: "Open Release Center"
+                text: qsTr("Open Release Center")
                 iconGlyph: "\uf135"
                 onTriggered: appRoot.pageIndex = 1
             }
             Controls.AppMenuItem {
-                text: "Add GitHub App"
+                text: qsTr("Add GitHub App")
                 iconGlyph: "\uf0fe"
                 onTriggered: {
                     appRoot.pageIndex = 1
@@ -5049,7 +5216,7 @@ ApplicationWindow {
                 }
             }
             Controls.AppMenuItem {
-                text: "Check All"
+                text: qsTr("Check All")
                 iconGlyph: "\uf021"
                 onTriggered: {
                     appRoot.pageIndex = 1
@@ -5060,14 +5227,14 @@ ApplicationWindow {
 
         Controls.AppMenu {
             id: configurationTopMenu
-            title: "Configuration"
-            Controls.AppMenuItem { text: "General"; iconGlyph: "\uf53f"; onTriggered: appRoot.openConfigurationDialog(0) }
-            Controls.AppMenuItem { text: "Queues"; iconGlyph: "\uf0ca"; onTriggered: appRoot.openConfigurationDialog(1) }
-            Controls.AppMenuItem { text: "Network"; iconGlyph: "\uf1eb"; onTriggered: appRoot.openConfigurationDialog(2) }
-            Controls.AppMenuItem { text: "Updates"; iconGlyph: "\uf021"; onTriggered: appRoot.openConfigurationDialog(3) }
+            title: qsTr("Configuration")
+            Controls.AppMenuItem { text: qsTr("General"); iconGlyph: "\uf53f"; onTriggered: appRoot.openConfigurationDialog(0) }
+            Controls.AppMenuItem { text: qsTr("Queues"); iconGlyph: "\uf0ca"; onTriggered: appRoot.openConfigurationDialog(1) }
+            Controls.AppMenuItem { text: qsTr("Network"); iconGlyph: "\uf1eb"; onTriggered: appRoot.openConfigurationDialog(2) }
+            Controls.AppMenuItem { text: qsTr("Updates"); iconGlyph: "\uf021"; onTriggered: appRoot.openConfigurationDialog(3) }
             Controls.AppMenuSeparator { }
             Controls.AppMenuItem {
-                text: appRoot.sortAscending ? "Sort Desc" : "Sort Asc"
+                text: appRoot.sortAscending ? qsTr("Sort Desc") : qsTr("Sort Asc")
                 iconGlyph: "\uf884"
                 onTriggered: appRoot.sortAscending = !appRoot.sortAscending
             }
@@ -5075,22 +5242,22 @@ ApplicationWindow {
 
         Controls.AppMenu {
             id: helpTopMenu
-            title: "Help"
-            Controls.AppMenuItem { text: "Support & Community"; iconGlyph: "\uf500"; onTriggered: supportDialog.open() }
+            title: qsTr("Help")
+            Controls.AppMenuItem { text: qsTr("Support & Community"); iconGlyph: "\uf500"; onTriggered: supportDialog.open() }
             Controls.AppMenuItem {
-                text: "Check for Updates"
+                text: qsTr("Check for Updates")
                 iconGlyph: "\uf0e7"
                 onTriggered: {
                     updateDialog.open()
                     updateClient.checkNow()
                 }
             }
-            Controls.AppMenuItem { text: "License & OpenSource"; iconGlyph: "\uf0a3"; onTriggered: licenseDialog.open() }
+            Controls.AppMenuItem { text: qsTr("License & OpenSource"); iconGlyph: "\uf0a3"; onTriggered: licenseDialog.open() }
             Controls.AppMenuSeparator {}
-            Controls.AppMenuItem { text: "Donate"; iconGlyph: "\uf004"; onTriggered: donateDialog.open() }
-            Controls.AppMenuItem { text: "Buy Geny Token"; iconGlyph: "\uf471"; onTriggered: tokenDialog.open() }
+            Controls.AppMenuItem { text: qsTr("Donate"); iconGlyph: "\uf004"; onTriggered: donateDialog.open() }
+            Controls.AppMenuItem { text: qsTr("Buy Geny Token"); iconGlyph: "\uf471"; onTriggered: tokenDialog.open() }
             Controls.AppMenuSeparator {}
-            Controls.AppMenuItem { text: "About"; iconGlyph: "\uf0e7"; onTriggered: aboutDialog.open() }
+            Controls.AppMenuItem { text: qsTr("About"); iconGlyph: "\uf0e7"; onTriggered: aboutDialog.open() }
         }
 
         Controls.AppMenu {
@@ -5101,45 +5268,45 @@ ApplicationWindow {
             property string targetCategory: ""
 
             Controls.AppMenuItem {
-                text: "Open"
+                text: qsTr("Open")
                 iconGlyph: "\uf15c"
                 enabled: toolbarItemMenu.targetTask && toolbarItemMenu.targetTask.stateString === "Done"
                 onTriggered: appRoot.executeRowAction(toolbarItemMenu.targetRow, toolbarItemMenu.targetTask, "open", toolbarItemMenu.targetQueue, toolbarItemMenu.targetCategory)
             }
             Controls.AppMenuItem {
-                text: "Open Folder"
+                text: qsTr("Open Folder")
                 iconGlyph: "\uf07c"
                 enabled: toolbarItemMenu.targetTask
                 onTriggered: appRoot.executeRowAction(toolbarItemMenu.targetRow, toolbarItemMenu.targetTask, "reveal", toolbarItemMenu.targetQueue, toolbarItemMenu.targetCategory)
             }
             Controls.AppMenuSeparator { }
             Controls.AppMenuItem {
-                text: "Resume"
+                text: qsTr("Resume")
                 iconGlyph: "\uf01e"
                 enabled: toolbarItemMenu.targetTask && toolbarItemMenu.targetTask.stateString === "Paused"
                 onTriggered: appRoot.executeRowAction(toolbarItemMenu.targetRow, toolbarItemMenu.targetTask, "resume", toolbarItemMenu.targetQueue, toolbarItemMenu.targetCategory)
             }
             Controls.AppMenuItem {
-                text: "Stop"
+                text: qsTr("Stop")
                 iconGlyph: "\uf28d"
                 enabled: toolbarItemMenu.targetTask && toolbarItemMenu.targetTask.stateString === "Active"
                 onTriggered: appRoot.executeRowAction(toolbarItemMenu.targetRow, toolbarItemMenu.targetTask, "pause", toolbarItemMenu.targetQueue, toolbarItemMenu.targetCategory)
             }
             Controls.AppMenuItem {
-                text: "Retry"
+                text: qsTr("Retry")
                 iconGlyph: "\uf2f1"
                 enabled: toolbarItemMenu.targetTask
                 onTriggered: appRoot.executeRowAction(toolbarItemMenu.targetRow, toolbarItemMenu.targetTask, "retry", toolbarItemMenu.targetQueue, toolbarItemMenu.targetCategory)
             }
             Controls.AppMenuSeparator { }
             Controls.AppMenuItem {
-                text: "Properties"
+                text: qsTr("Properties")
                 iconGlyph: "\uf05a"
                 enabled: toolbarItemMenu.targetTask
                 onTriggered: appRoot.openDetailsFor(toolbarItemMenu.targetRow, toolbarItemMenu.targetTask, toolbarItemMenu.targetQueue, toolbarItemMenu.targetCategory)
             }
             Controls.AppMenuItem {
-                text: "Remove"
+                text: qsTr("Remove")
                 iconGlyph: "\uf2ed"
                 enabled: toolbarItemMenu.targetTask
                 onTriggered: appRoot.executeRowAction(toolbarItemMenu.targetRow, toolbarItemMenu.targetTask, "remove", toolbarItemMenu.targetQueue, toolbarItemMenu.targetCategory)
@@ -5217,7 +5384,7 @@ ApplicationWindow {
 
                                         Controls.SidebarTreeItem {
                                             Layout.fillWidth: true
-                                            text: "All Downloads"
+                                            text: qsTr("All Downloads")
                                             iconGlyph: "\uf07c"
                                             selected: appRoot.statusFilter === "All" && appRoot.categoryFilter === "All" && appRoot.queueFilter === "All Queues"
                                             expandable: true
@@ -5247,7 +5414,7 @@ ApplicationWindow {
                                                 Controls.SidebarTreeItem {
                                                     Layout.fillWidth: true
                                                     child: true
-                                                    text: "Videos"
+                                                    text: qsTr("Videos")
                                                     iconGlyph: "\uf03d"
                                                     selected: appRoot.categoryFilter === "Video" && appRoot.statusFilter === "All"
                                                     onClicked: appRoot.setCategoryScope("Video")
@@ -5255,7 +5422,7 @@ ApplicationWindow {
                                                 Controls.SidebarTreeItem {
                                                     Layout.fillWidth: true
                                                     child: true
-                                                    text: "Music"
+                                                    text: qsTr("Music")
                                                     iconGlyph: "\uf001"
                                                     selected: appRoot.categoryFilter === "Audio" && appRoot.statusFilter === "All"
                                                     onClicked: appRoot.setCategoryScope("Audio")
@@ -5263,7 +5430,7 @@ ApplicationWindow {
                                                 Controls.SidebarTreeItem {
                                                     Layout.fillWidth: true
                                                     child: true
-                                                    text: "Images"
+                                                    text: qsTr("Images")
                                                     iconGlyph: "\uf03e"
                                                     selected: appRoot.categoryFilter === "Images" && appRoot.statusFilter === "All"
                                                     onClicked: appRoot.setCategoryScope("Images")
@@ -5271,7 +5438,7 @@ ApplicationWindow {
                                                 Controls.SidebarTreeItem {
                                                     Layout.fillWidth: true
                                                     child: true
-                                                    text: "Documents"
+                                                    text: qsTr("Documents")
                                                     iconGlyph: "\uf15c"
                                                     selected: appRoot.categoryFilter === "Documents" && appRoot.statusFilter === "All"
                                                     onClicked: appRoot.setCategoryScope("Documents")
@@ -5279,7 +5446,7 @@ ApplicationWindow {
                                                 Controls.SidebarTreeItem {
                                                     Layout.fillWidth: true
                                                     child: true
-                                                    text: "Archives"
+                                                    text: qsTr("Archives")
                                                     iconGlyph: "\uf1c6"
                                                     selected: appRoot.categoryFilter === "Archives" && appRoot.statusFilter === "All"
                                                     onClicked: appRoot.setCategoryScope("Archives")
@@ -5287,7 +5454,7 @@ ApplicationWindow {
                                                 Controls.SidebarTreeItem {
                                                     Layout.fillWidth: true
                                                     child: true
-                                                    text: "Windows"
+                                                    text: qsTr("Windows")
                                                     iconGlyph: "\uf17a"
                                                     iconBrand: true
                                                     selected: appRoot.categoryFilter === "Windows" && appRoot.statusFilter === "All"
@@ -5296,7 +5463,7 @@ ApplicationWindow {
                                                 Controls.SidebarTreeItem {
                                                     Layout.fillWidth: true
                                                     child: true
-                                                    text: "macOS"
+                                                    text: qsTr("macOS")
                                                     iconGlyph: "\uf179"
                                                     iconBrand: true
                                                     selected: appRoot.categoryFilter === "macOS" && appRoot.statusFilter === "All"
@@ -5305,7 +5472,7 @@ ApplicationWindow {
                                                 Controls.SidebarTreeItem {
                                                     Layout.fillWidth: true
                                                     child: true
-                                                    text: "Linux"
+                                                    text: qsTr("Linux")
                                                     iconGlyph: "\uf17c"
                                                     iconBrand: true
                                                     selected: appRoot.categoryFilter === "Linux" && appRoot.statusFilter === "All"
@@ -5314,7 +5481,7 @@ ApplicationWindow {
                                                 Controls.SidebarTreeItem {
                                                     Layout.fillWidth: true
                                                     child: true
-                                                    text: "Android"
+                                                    text: qsTr("Android")
                                                     iconGlyph: "\uf17b"
                                                     iconBrand: true
                                                     selected: appRoot.categoryFilter === "Android" && appRoot.statusFilter === "All"
@@ -5323,7 +5490,7 @@ ApplicationWindow {
                                                 Controls.SidebarTreeItem {
                                                     Layout.fillWidth: true
                                                     child: true
-                                                    text: "Disk Images"
+                                                    text: qsTr("Disk Images")
                                                     iconGlyph: "\uf51f"
                                                     selected: appRoot.categoryFilter === "Disk Images" && appRoot.statusFilter === "All"
                                                     onClicked: appRoot.setCategoryScope("Disk Images")
@@ -5331,7 +5498,7 @@ ApplicationWindow {
                                                 Controls.SidebarTreeItem {
                                                     Layout.fillWidth: true
                                                     child: true
-                                                    text: "Games"
+                                                    text: qsTr("Games")
                                                     iconGlyph: "\uf11b"
                                                     selected: appRoot.categoryFilter === "Games" && appRoot.statusFilter === "All"
                                                     onClicked: appRoot.setCategoryScope("Games")
@@ -5339,7 +5506,7 @@ ApplicationWindow {
                                                 Controls.SidebarTreeItem {
                                                     Layout.fillWidth: true
                                                     child: true
-                                                    text: "Torrents"
+                                                    text: qsTr("Torrents")
                                                     iconGlyph: "\uf076"
                                                     selected: appRoot.categoryFilter === "Torrents" && appRoot.statusFilter === "All"
                                                     onClicked: appRoot.setCategoryScope("Torrents")
@@ -5347,7 +5514,7 @@ ApplicationWindow {
                                                 Controls.SidebarTreeItem {
                                                     Layout.fillWidth: true
                                                     child: true
-                                                    text: "NFTs"
+                                                    text: qsTr("NFTs")
                                                     iconGlyph: "\uf3a5"
                                                     selected: appRoot.categoryFilter === "NFT" && appRoot.statusFilter === "All"
                                                     onClicked: appRoot.setCategoryScope("NFT")
@@ -5365,7 +5532,7 @@ ApplicationWindow {
 
                                         Controls.SidebarTreeItem {
                                             Layout.fillWidth: true
-                                            text: "Unfinished"
+                                            text: qsTr("Unfinished")
                                             iconGlyph: "\uf07b"
                                             selected: appRoot.statusFilter === "Unfinished" || appRoot.statusFilter === "Active" || appRoot.statusFilter === "Queued" || appRoot.statusFilter === "Paused"
                                             expandable: true
@@ -5396,7 +5563,7 @@ ApplicationWindow {
                                                 Controls.SidebarTreeItem {
                                                     Layout.fillWidth: true
                                                     child: true
-                                                    text: "Active"
+                                                    text: qsTr("Active")
                                                     iconGlyph: "\uf04b"
                                                     selected: appRoot.statusFilter === "Active"
                                                     onClicked: appRoot.setStatusScope("Active")
@@ -5404,7 +5571,7 @@ ApplicationWindow {
                                                 Controls.SidebarTreeItem {
                                                     Layout.fillWidth: true
                                                     child: true
-                                                    text: "Queued"
+                                                    text: qsTr("Queued")
                                                     iconGlyph: "\uf0ae"
                                                     selected: appRoot.statusFilter === "Queued"
                                                     onClicked: appRoot.setStatusScope("Queued")
@@ -5412,7 +5579,7 @@ ApplicationWindow {
                                                 Controls.SidebarTreeItem {
                                                     Layout.fillWidth: true
                                                     child: true
-                                                    text: "Paused"
+                                                    text: qsTr("Paused")
                                                     iconGlyph: "\uf04c"
                                                     selected: appRoot.statusFilter === "Paused"
                                                     onClicked: appRoot.setStatusScope("Paused")
@@ -5420,7 +5587,7 @@ ApplicationWindow {
                                                 Controls.SidebarTreeItem {
                                                     Layout.fillWidth: true
                                                     child: true
-                                                    text: "Errors"
+                                                    text: qsTr("Errors")
                                                     iconGlyph: "\uf071"
                                                     selected: appRoot.statusFilter === "Error"
                                                     onClicked: appRoot.setStatusScope("Error")
@@ -5430,7 +5597,7 @@ ApplicationWindow {
 
                                         Controls.SidebarTreeItem {
                                             Layout.fillWidth: true
-                                            text: "Finished"
+                                            text: qsTr("Finished")
                                             iconGlyph: "\uf07b"
                                             selected: appRoot.statusFilter === "History" || appRoot.statusFilter === "Done" || appRoot.statusFilter === "Canceled"
                                             expandable: true
@@ -5461,7 +5628,7 @@ ApplicationWindow {
                                                 Controls.SidebarTreeItem {
                                                     Layout.fillWidth: true
                                                     child: true
-                                                    text: "Done"
+                                                    text: qsTr("Done")
                                                     iconGlyph: "\uf00c"
                                                     selected: appRoot.statusFilter === "Done"
                                                     onClicked: appRoot.setStatusScope("Done")
@@ -5469,7 +5636,7 @@ ApplicationWindow {
                                                 Controls.SidebarTreeItem {
                                                     Layout.fillWidth: true
                                                     child: true
-                                                    text: "Canceled"
+                                                    text: qsTr("Canceled")
                                                     iconGlyph: "\uf00d"
                                                     selected: appRoot.statusFilter === "Canceled"
                                                     onClicked: appRoot.setStatusScope("Canceled")
@@ -5477,7 +5644,7 @@ ApplicationWindow {
                                                 Controls.SidebarTreeItem {
                                                     Layout.fillWidth: true
                                                     child: true
-                                                    text: "Errors"
+                                                    text: qsTr("Errors")
                                                     iconGlyph: "\uf071"
                                                     selected: appRoot.statusFilter === "Error"
                                                     onClicked: appRoot.setStatusScope("Error")
@@ -5488,7 +5655,7 @@ ApplicationWindow {
                                         // ---- Group by source / protocol ----
                                         Controls.SidebarTreeItem {
                                             Layout.fillWidth: true
-                                            text: "By Source"
+                                            text: qsTr("By Source")
                                             iconGlyph: "\uf0e8"
                                             selected: appRoot.sourceFilter !== "All"
                                             expandable: true
@@ -5516,7 +5683,7 @@ ApplicationWindow {
                                                 Controls.SidebarTreeItem {
                                                     Layout.fillWidth: true
                                                     child: true
-                                                    text: "Direct Downloads"
+                                                    text: qsTr("Direct Downloads")
                                                     iconGlyph: "\uf0ac"
                                                     selected: appRoot.sourceFilter === "Direct"
                                                     onClicked: appRoot.setSourceScope("Direct")
@@ -5524,7 +5691,7 @@ ApplicationWindow {
                                                 Controls.SidebarTreeItem {
                                                     Layout.fillWidth: true
                                                     child: true
-                                                    text: "Torrents"
+                                                    text: qsTr("Torrents")
                                                     iconGlyph: "\uf0e8"
                                                     selected: appRoot.sourceFilter === "Torrent"
                                                     onClicked: appRoot.setSourceScope("Torrent")
@@ -5532,7 +5699,7 @@ ApplicationWindow {
                                                 Controls.SidebarTreeItem {
                                                     Layout.fillWidth: true
                                                     child: true
-                                                    text: "Blockchain Storage"
+                                                    text: qsTr("Blockchain Storage")
                                                     iconGlyph: "\uf0c2"
                                                     selected: appRoot.sourceFilter === "Blockchain"
                                                     onClicked: appRoot.setSourceScope("Blockchain")
@@ -5540,7 +5707,7 @@ ApplicationWindow {
                                                 Controls.SidebarTreeItem {
                                                     Layout.fillWidth: true
                                                     child: true
-                                                    text: "IPFS"
+                                                    text: qsTr("IPFS")
                                                     iconGlyph: "\uf1c0"
                                                     selected: appRoot.sourceFilter === "IPFS"
                                                     onClicked: appRoot.setSourceScope("IPFS")
@@ -5548,7 +5715,7 @@ ApplicationWindow {
                                                 Controls.SidebarTreeItem {
                                                     Layout.fillWidth: true
                                                     child: true
-                                                    text: "Arweave"
+                                                    text: qsTr("Arweave")
                                                     iconGlyph: "\uf187"
                                                     selected: appRoot.sourceFilter === "Arweave"
                                                     onClicked: appRoot.setSourceScope("Arweave")
@@ -5566,7 +5733,7 @@ ApplicationWindow {
 
                                         Controls.SidebarTreeItem {
                                             Layout.fillWidth: true
-                                            text: "Queues"
+                                            text: qsTr("Queues")
                                             iconGlyph: "\uf0ca"
                                             selected: appRoot.queueFilter !== "All Queues"
                                             expandable: true
@@ -5595,7 +5762,7 @@ ApplicationWindow {
                                                 Controls.SidebarTreeItem {
                                                     Layout.fillWidth: true
                                                     child: true
-                                                    text: "All Queues"
+                                                    text: qsTr("All Queues")
                                                     iconGlyph: "\uf03a"
                                                     selected: appRoot.queueFilter === "All Queues"
                                                     onClicked: appRoot.setQueueScope("All Queues")
@@ -5606,7 +5773,7 @@ ApplicationWindow {
                                                         required property string modelData
                                                         Layout.fillWidth: true
                                                         child: true
-                                                        text: modelData
+                                                        text: appRoot.queueLabel(modelData)
                                                         iconGlyph: "\uf07b"
                                                         selected: appRoot.queueFilter === modelData
                                                         onClicked: appRoot.setQueueScope(modelData)
@@ -5635,7 +5802,7 @@ ApplicationWindow {
 
                                         Controls.SidebarTreeItem {
                                             Layout.fillWidth: true
-                                            text: "Queues"
+                                            text: qsTr("Queues")
                                             iconGlyph: "\uf0ca"
                                             selected: appRoot.queueFilter !== "All Queues"
                                             expandable: true
@@ -5662,7 +5829,7 @@ ApplicationWindow {
 
                                                 Controls.SidebarTreeItem {
                                                     Layout.fillWidth: true
-                                                    text: "All Queues"
+                                                    text: qsTr("All Queues")
                                                     iconGlyph: "\uf03a"
                                                     selected: appRoot.queueFilter === "All Queues"
                                                     onClicked: appRoot.setQueueScope("All Queues")
@@ -5672,7 +5839,7 @@ ApplicationWindow {
                                                     delegate: Controls.SidebarTreeItem {
                                                         required property string modelData
                                                         Layout.fillWidth: true
-                                                        text: modelData
+                                                        text: appRoot.queueLabel(modelData)
                                                         iconGlyph: "\uf07b"
                                                         selected: appRoot.queueFilter === modelData
                                                         onClicked: appRoot.setQueueScope(modelData)
@@ -5740,13 +5907,13 @@ ApplicationWindow {
                                 RowLayout {
                                     Layout.fillWidth: true
                                     Controls.Label {
-                                        text: "Runtime"
+                                        text: qsTr("Runtime")
                                         font.bold: true
                                         font.pixelSize: Typography.t2
                                     }
                                     Item { Layout.fillWidth: true }
                                     Controls.Label {
-                                        text: downloadManager.onBattery ? "Battery" : "AC Power"
+                                        text: downloadManager.onBattery ? qsTr("Battery") : qsTr("AC Power")
                                         color: downloadManager.onBattery ? Colors.warning : Colors.success
                                     }
                                 }
@@ -5757,52 +5924,54 @@ ApplicationWindow {
                                     columnSpacing: 10
                                     rowSpacing: 8
 
-                                    Controls.Label { text: "CPU" }
+                                    Controls.Label { text: qsTr("CPU") }
                                     Controls.Label {
-                                        text: downloadManager.processCpuLoad.toFixed(1) + "%"
-                                        horizontalAlignment: Text.AlignRight
+                                        text: Utils.formatPercent(downloadManager.processCpuLoad, 1)
+                                        horizontalAlignment: Text.AlignTrailing
                                         Layout.fillWidth: true
                                     }
 
-                                    Controls.Label { text: "Memory" }
+                                    Controls.Label { text: qsTr("Memory") }
                                     Controls.Label {
                                         text: appRoot.formatBytes(downloadManager.processMemoryBytes)
-                                        horizontalAlignment: Text.AlignRight
+                                        horizontalAlignment: Text.AlignTrailing
                                         Layout.fillWidth: true
                                     }
 
-                                    Controls.Label { text: "Disk free" }
+                                    Controls.Label { text: qsTr("Disk free") }
                                     Controls.Label {
                                         text: appRoot.formatBytes(downloadManager.diskFreeBytes)
-                                        horizontalAlignment: Text.AlignRight
+                                        horizontalAlignment: Text.AlignTrailing
                                         Layout.fillWidth: true
                                     }
 
-                                    Controls.Label { text: "Throughput" }
+                                    Controls.Label { text: qsTr("Throughput") }
                                     Controls.Label {
                                         text: appRoot.formatSpeed(downloadManager.totalSpeed)
-                                        horizontalAlignment: Text.AlignRight
+                                        horizontalAlignment: Text.AlignTrailing
                                         Layout.fillWidth: true
                                     }
 
-                                    Controls.Label { text: "Active" }
+                                    Controls.Label { text: qsTr("Active") }
                                     Controls.Label {
-                                        text: String(downloadManager.activeCount)
-                                        horizontalAlignment: Text.AlignRight
+                                        text: Utils.localizeDigits(
+                                                  String(downloadManager.activeCount))
+                                        horizontalAlignment: Text.AlignTrailing
                                         Layout.fillWidth: true
                                     }
 
-                                    Controls.Label { text: "Queued" }
+                                    Controls.Label { text: qsTr("Queued") }
                                     Controls.Label {
-                                        text: String(downloadManager.queuedCount)
-                                        horizontalAlignment: Text.AlignRight
+                                        text: Utils.localizeDigits(
+                                                  String(downloadManager.queuedCount))
+                                        horizontalAlignment: Text.AlignTrailing
                                         Layout.fillWidth: true
                                     }
 
-                                    Controls.Label { text: "Network" }
+                                    Controls.Label { text: qsTr("Network") }
                                     Controls.Label {
-                                        text: downloadManager.networkReachability
-                                        horizontalAlignment: Text.AlignRight
+                                        text: appRoot.statusLabel(downloadManager.networkReachability)
+                                        horizontalAlignment: Text.AlignTrailing
                                         Layout.fillWidth: true
                                         color: downloadManager.networkReachability === "Online"
                                                ? Colors.success
@@ -5811,12 +5980,12 @@ ApplicationWindow {
                                                   : Colors.warning)
                                     }
 
-                                    Controls.Label { text: "Avg segments" }
+                                    Controls.Label { text: qsTr("Avg segments") }
                                     Controls.Label {
                                         text: downloadManager.averageActiveSegments > 0
-                                              ? downloadManager.averageActiveSegments.toFixed(1)
+                                              ? downloadManager.averageActiveSegments.toLocaleString(Qt.locale(languageManager.currentLocale), "f", 1)
                                               : "0.0"
-                                        horizontalAlignment: Text.AlignRight
+                                        horizontalAlignment: Text.AlignTrailing
                                         Layout.fillWidth: true
                                     }
                                 }
@@ -5836,9 +6005,9 @@ ApplicationWindow {
 
                                 RowLayout {
                                     Layout.fillWidth: true
-                                    Controls.Label { text: "Transfer"; font.bold: true }
+                                    Controls.Label { text: qsTr("Transfer"); font.bold: true }
                                     Item { Layout.fillWidth: true }
-                                    Controls.Label { text: Math.round(runtimeCard.transferRatio * 100) + "%" }
+                                    Controls.Label { text: Utils.formatPercent(Math.round(runtimeCard.transferRatio * 100), 0) }
                                 }
 
                                 Controls.ProgressBar {
@@ -5913,7 +6082,7 @@ ApplicationWindow {
 
                                     Controls.CommandAddUrlButton {
                                         id: addUrlButton
-                                        text: "Add Url"
+                                        text: qsTr("Add Url")
                                         onClicked: appRoot.openAddUrlDialog()
                                     }
 
@@ -5939,19 +6108,19 @@ ApplicationWindow {
                                                 anchors.fill: parent
 
                                                 Controls.CommandActionButton {
-                                                    text: "Resume"
+                                                    text: qsTr("Resume")
                                                     iconGlyph: "\uf04b"
                                                     enabled: appRoot.canResumeAction()
                                                     onClicked: appRoot.applyActionToCheckedOrSelected("resume")
                                                 }
                                                 Controls.CommandActionButton {
-                                                    text: "Stop"
+                                                    text: qsTr("Stop")
                                                     iconGlyph: "\uf28d"
                                                     enabled: appRoot.canStopAction()
                                                     onClicked: appRoot.applyActionToCheckedOrSelected("pause")
                                                 }
                                                 Controls.CommandActionButton {
-                                                    text: "Stop All"
+                                                    text: qsTr("Stop All")
                                                     iconGlyph: "\uf28d"
                                                     enabled: appRoot.canStopAllAction()
                                                     onClicked: appRoot.applyActionToCheckedOrSelected("pause")
@@ -5960,29 +6129,29 @@ ApplicationWindow {
                                                 Controls.VerticalLine {}
 
                                                 Controls.CommandActionButton {
-                                                    text: "Delete"
+                                                    text: qsTr("Delete")
                                                     iconGlyph: "\uf2ed"
                                                     enabled: appRoot.hasSelection || appRoot.checkedTaskCount() > 0
                                                     onClicked: appRoot.applyActionToCheckedOrSelected("remove")
                                                 }
                                                 Controls.CommandActionButton {
-                                                    text: "Options"
+                                                    text: qsTr("Options")
                                                     iconGlyph: "\uf013"
                                                     enabled: appRoot.hasSelection || appRoot.checkedTaskCount() > 0
                                                     onClicked: appRoot.openPropertiesForSelection()
                                                 }
                                                 Controls.CommandActionButton {
-                                                    text: "Queues"
+                                                    text: qsTr("Queues")
                                                     iconGlyph: "\uf0ca"
                                                     onClicked: appRoot.openConfigurationDialog(1)
                                                 }
                                                 Controls.CommandActionButton {
-                                                    text: "Schedule"
+                                                    text: qsTr("Schedule")
                                                     iconGlyph: "\uf073"
                                                     onClicked: appRoot.openConfigurationDialog(1)
                                                 }
                                                 Controls.CommandActionButton {
-                                                    text: "Share"
+                                                    text: qsTr("Share")
                                                     iconGlyph: "\uf1e0"
                                                     enabled: appRoot.hasSelection || appRoot.checkedTaskCount() > 0
                                                     onClicked: appRoot.shareSelectedTargets()
@@ -6037,27 +6206,37 @@ ApplicationWindow {
                             Layout.margins: Metrics.padding
                             spacing: Metrics.padding * 1.5
 
-                            readonly property real tableWidth: Math.max(0, width - 36)
+                            // Header and delegates share exactly the same content
+                            // width and gaps. This prevents progressive column drift
+                            // after RowLayout mirrors itself in RTL locales.
+                            readonly property real tableWidth: Math.max(0, width - (Metrics.padding * 2))
                             readonly property real colSpacing: 8
                             readonly property real selectCol: 28
                             readonly property real transferCol: Math.max(220, Math.min(270, tableWidth * 0.25))
                             readonly property real statusCol: Math.max(170, Math.min(200, tableWidth * 0.18))
                             readonly property real fixedCols: selectCol + transferCol + statusCol
                             readonly property int totalCols: 4
-                            readonly property real nameCol: Math.max(300, tableWidth - fixedCols - colSpacing * Math.max(0, totalCols - 4) )
+                            readonly property real nameCol: Math.max(
+                                300,
+                                tableWidth - fixedCols - colSpacing * (totalCols - 1)
+                            )
 
                             RowLayout {
                                 Layout.fillWidth: true
 
                                 Controls.Label {
-                                    text: "Downloads"
+                                    text: qsTr("Downloads")
                                     font.pixelSize: Typography.h3
                                     font.bold: true
                                 }
                                 Item { Layout.fillWidth: true }
                                 Controls.Label {
-                                    text: downloadManager.model.filteredCount(appRoot.queueFilter, appRoot.statusFilter, appRoot.categoryFilter, appRoot.searchText)
-                                          + " visible"
+                                    text: Utils.localizeDigits(
+                                              qsTr("%n visible", "",
+                                                   downloadManager.model.filteredCount(appRoot.queueFilter,
+                                                                                       appRoot.statusFilter,
+                                                                                       appRoot.categoryFilter,
+                                                                                       appRoot.searchText)))
                                 }
                             }
 
@@ -6067,18 +6246,18 @@ ApplicationWindow {
 
                                 Controls.TextField {
                                     Layout.fillWidth: true
-                                    placeholderText: "Search by file name or URL"
+                                    placeholderText: qsTr("Search by file name or URL")
                                     text: appRoot.searchText
                                     onTextChanged: appRoot.searchText = text
                                 }
                                 Controls.ComboBox {
                                     Layout.preferredWidth: 170
                                     model: appRoot.statusOptions
-                                    currentIndex: Math.max(0, appRoot.statusOptions.indexOf(appRoot.statusFilter))
+                                    currentIndex: Math.max(0, appRoot.statusOptionIds.indexOf(appRoot.statusFilter))
                                     onCurrentIndexChanged: {
-                                        if (currentIndex < 0 || currentIndex >= appRoot.statusOptions.length)
+                                        if (currentIndex < 0 || currentIndex >= appRoot.statusOptionIds.length)
                                             return
-                                        appRoot.setStatusScope(appRoot.statusOptions[currentIndex])
+                                        appRoot.setStatusScope(appRoot.statusOptionIds[currentIndex])
                                     }
                                 }
                                 Controls.ComboBox {
@@ -6090,14 +6269,16 @@ ApplicationWindow {
                                 Controls.Button {
                                     isDefault: false
                                     Layout.preferredWidth: 90
-                                    text: appRoot.sortAscending ? "Asc" : "Desc"
+                                    text: appRoot.sortAscending ? qsTr("Asc") : qsTr("Desc")
                                     onClicked: appRoot.sortAscending = !appRoot.sortAscending
                                 }
                             }
 
                             RowLayout {
                                 Layout.fillWidth: true
-                                Item { Layout.preferredWidth: 3 }
+                                Layout.leftMargin: Metrics.padding
+                                Layout.rightMargin: Metrics.padding
+                                spacing: downloadsPane.colSpacing
 
                                 Controls.CheckBox {
                                     id: selectAllCheckBox
@@ -6115,15 +6296,14 @@ ApplicationWindow {
                                     }
                                 }
 
-                                Item { Layout.preferredWidth: 1 }
-
                                 Controls.Label {
                                     Layout.preferredWidth: downloadsPane.nameCol
                                     Layout.minimumWidth: downloadsPane.nameCol
                                     Layout.maximumWidth: downloadsPane.nameCol
                                     font.pixelSize: Typography.t3
-                                    text: "Items"
+                                    text: qsTr("Items")
                                     font.bold: true
+                                    horizontalAlignment: Text.AlignLeading
                                 }
 
                                 Controls.Label {
@@ -6131,8 +6311,9 @@ ApplicationWindow {
                                     Layout.minimumWidth: downloadsPane.transferCol
                                     Layout.maximumWidth: downloadsPane.transferCol
                                     font.pixelSize: Typography.t3
-                                    text: "Activity"
+                                    text: qsTr("Activity")
                                     font.bold: true
+                                    horizontalAlignment: Text.AlignLeading
                                 }
 
                                 Controls.Label {
@@ -6140,8 +6321,9 @@ ApplicationWindow {
                                     Layout.minimumWidth: downloadsPane.statusCol
                                     Layout.maximumWidth: downloadsPane.statusCol
                                     font.pixelSize: Typography.t3
-                                    text: "Progress"
+                                    text: qsTr("Progress")
                                     font.bold: true
+                                    horizontalAlignment: Text.AlignLeading
                                 }
 
                             }
@@ -6340,7 +6522,8 @@ ApplicationWindow {
                                                     font.weight: Font.Bold
                                                     text: appRoot.baseName(downloadItem.fileName)
                                                     maximumLineCount: 1
-                                                    elide: Text.ElideRight
+                                                    elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
+                                                    horizontalAlignment: Text.AlignLeading
                                                     color: Colors.textPrimary
                                                 }
 
@@ -6364,7 +6547,7 @@ ApplicationWindow {
                                                         Controls.Text {
                                                             id: categoryChipLabel
                                                             anchors.centerIn: parent
-                                                            text: downloadItem.category
+                                                            text: appRoot.categoryLabel(downloadItem.category)
                                                             font.pixelSize: Typography.t5
                                                             color: Colors.textSecondary
                                                         }
@@ -6386,7 +6569,7 @@ ApplicationWindow {
                                                         Controls.Text {
                                                             id: queueChipLabel
                                                             anchors.centerIn: parent
-                                                            text: downloadItem.queueName
+                                                            text: appRoot.queueLabel(downloadItem.queueName)
                                                             font.pixelSize: Typography.t5
                                                             color: Colors.textSecondary
                                                         }
@@ -6408,7 +6591,7 @@ ApplicationWindow {
                                                     spacing: 6
 
                                                     Controls.Text {
-                                                        text: "\uf15c"
+                                                        text: qsTr("\uf15c")
                                                         font.family: FontSystem.getAwesomeSolid.name
                                                         font.weight: Font.Black
                                                         font.pixelSize: Typography.t5
@@ -6419,7 +6602,7 @@ ApplicationWindow {
                                                         Layout.fillWidth: true
                                                         text: appRoot.formatBytes(bytesReceived) + (bytesTotal > 0 ? " / " + appRoot.formatBytes(bytesTotal) : "")
                                                         maximumLineCount: 1
-                                                        elide: Text.ElideRight
+                                                        elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
                                                         font.pixelSize: Typography.t3
                                                         font.weight: Font.DemiBold
                                                         color: Colors.textPrimary
@@ -6434,7 +6617,7 @@ ApplicationWindow {
                                                         spacing: 4
 
                                                         Controls.Text {
-                                                            text: "\uf0e7"
+                                                            text: qsTr("\uf0e7")
                                                             font.family: FontSystem.getAwesomeSolid.name
                                                             font.weight: Font.Black
                                                             font.pixelSize: Typography.t5
@@ -6442,7 +6625,7 @@ ApplicationWindow {
                                                         }
 
                                                         Controls.Text {
-                                                            text: task ? appRoot.formatSpeed(task.speed) : "0 B/s"
+                                                        text: task ? appRoot.formatSpeed(task.speed) : appRoot.formatSpeed(0)
                                                             font.pixelSize: Typography.t4
                                                             color: Colors.textSecondary
                                                             opacity: 0.82
@@ -6491,7 +6674,7 @@ ApplicationWindow {
                                                         Controls.Text {
                                                             text: appRoot.taskStatusText(downloadItem.task, downloadItem.status)
                                                             maximumLineCount: 1
-                                                            elide: Text.ElideRight
+                                                            elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
                                                             font.pixelSize: Typography.t5
                                                             color: (downloadItem.status === "Paused" && downloadItem.bytesReceived < 1)
                                                                    ? Colors.textPrimary
@@ -6502,10 +6685,10 @@ ApplicationWindow {
 
                                                         Controls.Text {
                                                             text: downloadItem.bytesTotal > 0
-                                                                  ? (Math.round(downloadItem.ratio * 100) + "%")
-                                                                  : (downloadItem.status === "Done" ? "100%" : "--")
+                                                                  ? Utils.formatPercent(Math.round(downloadItem.ratio * 100), 0)
+                                                                  : (downloadItem.status === "Done" ? Utils.formatPercent(100, 0) : "--")
                                                             maximumLineCount: 1
-                                                            elide: Text.ElideRight
+                                                            elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
                                                             font.pixelSize: Typography.t5
                                                             color: Colors.staticPrimary
                                                         }
@@ -6523,7 +6706,7 @@ ApplicationWindow {
                                                     spacing: 10
 
                                                     Controls.Text {
-                                                        text: "\uf017"
+                                                        text: qsTr("\uf017")
                                                         font.family: FontSystem.getAwesomeSolid.name
                                                         font.weight: Font.Black
                                                         font.pixelSize: Typography.t5
@@ -6533,14 +6716,14 @@ ApplicationWindow {
                                                     Controls.Text {
                                                         text: task ? appRoot.formatEta(task.eta) : "--"
                                                         maximumLineCount: 1
-                                                        elide: Text.ElideRight
+                                                        elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
                                                         font.pixelSize: Typography.t4
                                                         color: Colors.textSecondary
                                                         opacity: 0.82
                                                     }
 
                                                     Controls.Text {
-                                                        text: "\uf0ae"
+                                                        text: qsTr("\uf0ae")
                                                         font.family: FontSystem.getAwesomeSolid.name
                                                         font.weight: Font.Black
                                                         font.pixelSize: Typography.t5
@@ -6549,12 +6732,12 @@ ApplicationWindow {
 
                                                     Controls.Text {
                                                         text: {
-                                                            if (!task) return "0/0"
-                                                            if (task.isTorrent) return task.seeders + "/" + task.leechers
-                                                            return task.effectiveSegments() + "/" + task.segments()
+                                                            if (!task) return Utils.formatRatio(0, 0)
+                                                            if (task.isTorrent) return Utils.formatRatio(task.seeders, task.leechers)
+                                                            return Utils.formatRatio(task.effectiveSegments(), task.segments())
                                                         }
                                                         maximumLineCount: 1
-                                                        elide: Text.ElideRight
+                                                        elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
                                                         font.pixelSize: Typography.t4
                                                         color: Colors.textSecondary
                                                         opacity: 0.82
@@ -6589,61 +6772,61 @@ ApplicationWindow {
                                             implicitWidth: 332
 
                                             Controls.AppMenuItem {
-                                                text: "Open"
+                                                text: qsTr("Open")
                                                 iconGlyph: "\uf15c"
                                                 enabled: status === "Done"
                                                 onTriggered: appRoot.executeRowAction(rowIndex, task, "open", queueName, category)
                                             }
                                             Controls.AppMenuItem {
-                                                text: "Open With"
+                                                text: qsTr("Open With")
                                                 iconGlyph: "\uf35d"
                                                 enabled: status === "Done"
                                                 onTriggered: appRoot.executeRowAction(rowIndex, task, "open", queueName, category)
                                             }
                                             Controls.AppMenuItem {
-                                                text: "Open Folder"
+                                                text: qsTr("Open Folder")
                                                 iconGlyph: "\uf07c"
                                                 onTriggered: appRoot.executeRowAction(rowIndex, task, "reveal", queueName, category)
                                             }
                                             //ToDo...
                                             // Controls.AppMenuSeparator {}
                                             // Controls.AppMenuItem {
-                                            //     text: "Move/Rename"
+                                            //     text: qsTr("Move/Rename")
                                             //     iconGlyph: "\uf246"
                                             //     onTriggered: appRoot.executeRowAction(rowIndex, task, "properties", queueName, category)
                                             // }
                                             Controls.AppMenuSeparator {}
                                             Controls.AppMenuItem {
-                                                text: "Redownload"
+                                                text: qsTr("Redownload")
                                                 iconGlyph: "\uf2f1"
                                                 onTriggered: appRoot.executeRowAction(rowIndex, task, "retry", queueName, category)
                                             }
                                             Controls.AppMenuSeparator {}
                                             Controls.AppMenuItem {
-                                                text: "Resume Download"
+                                                text: qsTr("Resume Download")
                                                 iconGlyph: "\uf04b"
                                                 enabled: status === "Paused"
                                                 onTriggered: appRoot.executeRowAction(rowIndex, task, "resume", queueName, category)
                                             }
                                             Controls.AppMenuItem {
-                                                text: "Stop Download"
+                                                text: qsTr("Stop Download")
                                                 iconGlyph: "\uf28d"
                                                 enabled: status === "Active"
                                                 onTriggered: appRoot.executeRowAction(rowIndex, task, "pause", queueName, category)
                                             }
                                             Controls.AppMenuItem {
-                                                text: "Refresh Download Address"
+                                                text: qsTr("Refresh Download Address")
                                                 iconGlyph: "\uf021"
                                                 onTriggered: appRoot.executeRowAction(rowIndex, task, "retry", queueName, category)
                                             }
                                             Controls.AppMenuSeparator {}
                                             Controls.AppMenu {
-                                                title: "Add to queue"
+                                                title: qsTr("Add to queue")
                                                 Repeater {
                                                     model: downloadManager.queueNames
                                                     delegate: Controls.AppMenuItem {
                                                         required property string modelData
-                                                        text: modelData
+                                                        text: appRoot.queueLabel(modelData)
                                                         iconGlyph: "\uf07b"
                                                         enabled: modelData !== queueName
                                                         onTriggered: {
@@ -6655,12 +6838,12 @@ ApplicationWindow {
                                                 }
                                             }
                                             Controls.AppMenuItem {
-                                                text: "Remove"
+                                                text: qsTr("Remove")
                                                 iconGlyph: "\uf2ed"
                                                 onTriggered: appRoot.executeRowAction(rowIndex, task, "remove", queueName, category)
                                             }
                                             Controls.AppMenuItem {
-                                                text: "Delete from Queue"
+                                                text: qsTr("Delete from Queue")
                                                 iconGlyph: "\uf2ed"
                                                 enabled: queueName !== downloadManager.defaultQueueName()
                                                 onTriggered: {
@@ -6672,7 +6855,7 @@ ApplicationWindow {
                                             }
                                             Controls.AppMenuSeparator {}
                                             Controls.AppMenuItem {
-                                                text: "Properties"
+                                                text: qsTr("Properties")
                                                 iconGlyph: "\uf05a"
                                                 onTriggered: appRoot.executeRowAction(rowIndex, task, "properties", queueName, category)
                                             }
@@ -6683,7 +6866,7 @@ ApplicationWindow {
                                         visible: downloadManager.model.filteredCount(appRoot.queueFilter, appRoot.statusFilter, appRoot.categoryFilter, appRoot.searchText) === 0
                                         width: downloadList.width
                                         horizontalAlignment: Text.AlignHCenter
-                                        text: "No downloads match current filters"
+                                        text: qsTr("No downloads match current filters")
                                         padding: 16
                                         color: Colors.textMuted
                                     }
@@ -6697,9 +6880,9 @@ ApplicationWindow {
                                     anchors.fill: parent
                                     anchors.margins: Metrics.padding
                                     visible: downloadList.count === 0
-                                    title: "No downloads yet"
-                                    subtitle: "Drag a link, magnet, or .torrent here — or click to add manually"
-                                    activeTitle: "Drop to add a download"
+                                    title: qsTr("No downloads yet")
+                                    subtitle: qsTr("Drag a link, magnet, or .torrent here — or click to add manually")
+                                    activeTitle: qsTr("Drop to add a download")
                                     onClicked: appRoot.openAddUrlDialog()
                                     onDropped: (text) => appRoot.openAddUrlWith(text)
                                 }
@@ -6744,7 +6927,7 @@ ApplicationWindow {
                                 Controls.Label {
                                     text: stat.value
                                     color: Colors.textPrimary
-                                    elide: Text.ElideRight
+                                    elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
                                     Layout.minimumWidth: stat.minValueWidth
                                     Layout.alignment: Qt.AlignVCenter
                                 }
@@ -6764,38 +6947,39 @@ ApplicationWindow {
 
                                 StatItem {
                                     glyph: String.fromCharCode(0xf06e)   // eye
-                                    hint: "Visible downloads (current filter)"
+                                    hint: qsTr("Visible downloads (current filter)")
                                     minValueWidth: 18
-                                    value: downloadManager.model.filteredCount(appRoot.queueFilter, appRoot.statusFilter, appRoot.categoryFilter, appRoot.searchText)
+                                    value: Number(downloadManager.model.filteredCount(appRoot.queueFilter, appRoot.statusFilter, appRoot.categoryFilter, appRoot.searchText))
+                                           .toLocaleString(Qt.locale(languageManager.currentLocale), "f", 0)
                                 }
                                 StatItem {
                                     glyph: String.fromCharCode(0xf625)   // gauge-high
-                                    hint: "Total download speed"
+                                    hint: qsTr("Total download speed")
                                     tint: downloadManager.totalSpeed > 0 ? Colors.textAccent : Colors.textSecondary
                                     minValueWidth: 78
                                     value: appRoot.formatSpeed(downloadManager.totalSpeed)
                                 }
                                 StatItem {
                                     glyph: String.fromCharCode(0xf0ed)   // cloud-arrow-down
-                                    hint: "Transferred (received / total)"
+                                    hint: qsTr("Transferred (received / total)")
                                     minValueWidth: 36
-                                    value: Math.round(runtimeFooter.transferRatio * 100) + "%"
+                                    value: Utils.formatPercent(Math.round(runtimeFooter.transferRatio * 100), 0)
                                 }
                                 StatItem {
                                     glyph: String.fromCharCode(0xf2db)   // microchip
-                                    hint: "App CPU usage"
+                                    hint: qsTr("App CPU usage")
                                     minValueWidth: 40
-                                    value: downloadManager.processCpuLoad.toFixed(1) + "%"
+                                    value: Utils.formatPercent(downloadManager.processCpuLoad, 1)
                                 }
                                 StatItem {
                                     glyph: String.fromCharCode(0xf538)   // memory
-                                    hint: "App memory usage"
+                                    hint: qsTr("App memory usage")
                                     minValueWidth: 56
                                     value: appRoot.formatBytes(downloadManager.processMemoryBytes)
                                 }
                                 StatItem {
                                     glyph: String.fromCharCode(0xf0a0)   // hard-drive
-                                    hint: "Free disk space"
+                                    hint: qsTr("Free disk space")
                                     minValueWidth: 60
                                     value: appRoot.formatBytes(downloadManager.diskFreeBytes)
                                 }
@@ -6808,21 +6992,21 @@ ApplicationWindow {
                                     glyph: downloadManager.networkReachability === "Offline"
                                            ? String.fromCharCode(0xf071)   // triangle-exclamation (no connection)
                                            : String.fromCharCode(0xf1eb)   // wifi
-                                    hint: "Network: " + downloadManager.networkReachability
+                                    hint: qsTr("Network: ") + appRoot.statusLabel(downloadManager.networkReachability)
                                     tint: downloadManager.networkReachability === "Online"
                                           ? Colors.success
                                           : (downloadManager.networkReachability === "Offline"
                                              ? Colors.error
                                              : Colors.warning)
-                                    value: downloadManager.networkReachability
+                                    value: appRoot.statusLabel(downloadManager.networkReachability)
                                 }
                                 StatItem {
                                     glyph: downloadManager.onBattery
                                            ? String.fromCharCode(0xf240)   // battery-full
                                            : String.fromCharCode(0xf1e6)   // plug
-                                    hint: downloadManager.onBattery ? "Running on battery" : "Plugged in (AC power)"
+                                    hint: downloadManager.onBattery ? qsTr("Running on battery") : qsTr("Plugged in (AC power)")
                                     tint: downloadManager.onBattery ? Colors.warning : Colors.success
-                                    value: downloadManager.onBattery ? "Battery" : "AC"
+                                    value: downloadManager.onBattery ? qsTr("Battery") : qsTr("AC")
                                 }
                             }
                         }
@@ -6840,11 +7024,11 @@ ApplicationWindow {
                 onViewReleases: function(app) {
                     const url = app && app.repository ? ("https://github.com/" + app.repository + "/releases") : ""
                     if (url.length > 0)
-                        appRoot.openExternalLink(url, "Opened GitHub releases")
+                        appRoot.openExternalLink(url, qsTr("Opened GitHub releases"))
                 }
                 onOpenUrl: function(url) {
                     if (url && url.length > 0)
-                        appRoot.openExternalLink(url, "Opened link")
+                        appRoot.openExternalLink(url, qsTr("Opened link"))
                 }
                 onDownloadAssets: function(app) { appRoot.openAssetPickerForApp(app) }
                 onUpdateApp: function(app) { appRoot.startAppUpdate(app) }
@@ -6863,7 +7047,7 @@ ApplicationWindow {
 
                     GroupBox {
                         id: queuesGroup
-                        title: "Queues"
+                        title: qsTr("Queues")
                         Layout.fillWidth: true
                         readonly property real _extraContentMargins: 16
                         Layout.preferredHeight: queuesGroupContent.implicitHeight
@@ -6883,22 +7067,24 @@ ApplicationWindow {
                                 ComboBox {
                                     id: queueEditorCombo
                                     Layout.preferredWidth: 240
-                                    model: downloadManager.queueNames
+                                    model: appRoot.queueOptions
+                                    textRole: "text"
+                                    valueRole: "id"
                                     currentIndex: Math.max(0, downloadManager.queueNames.indexOf(appRoot.queueEditorName))
                                     onActivated: {
-                                        appRoot.queueEditorName = currentText
+                                        appRoot.queueEditorName = currentValue
                                         appRoot.loadQueueEditor()
                                     }
                                 }
                                 Item { Layout.fillWidth: true }
-                                Button { text: "Apply Policy"; onClicked: appRoot.applyQueueEditor() }
+                                Button { text: qsTr("Apply Policy"); onClicked: appRoot.applyQueueEditor() }
                             }
 
                             RowLayout {
                                 Layout.fillWidth: true
-                                TextField { id: newQueueField; Layout.fillWidth: true; placeholderText: "New queue name" }
+                                TextField { id: newQueueField; Layout.fillWidth: true; placeholderText: qsTr("New queue name") }
                                 Button {
-                                    text: "Create"
+                                    text: qsTr("Create")
                                     enabled: newQueueField.text.trim().length > 0
                                     onClicked: {
                                         if (appRoot.createQueueFromEditor(newQueueField.text.trim()))
@@ -6909,9 +7095,9 @@ ApplicationWindow {
 
                             RowLayout {
                                 Layout.fillWidth: true
-                                TextField { id: renameQueueField; Layout.fillWidth: true; placeholderText: "Rename selected queue" }
+                                TextField { id: renameQueueField; Layout.fillWidth: true; placeholderText: qsTr("Rename selected queue") }
                                 Button {
-                                    text: "Rename"
+                                    text: qsTr("Rename")
                                     enabled: appRoot.queueEditorName.length > 0 && renameQueueField.text.trim().length > 0
                                     onClicked: {
                                         if (appRoot.renameCurrentQueueTo(renameQueueField.text.trim()))
@@ -6919,7 +7105,7 @@ ApplicationWindow {
                                     }
                                 }
                                 Button {
-                                    text: "Remove"
+                                    text: qsTr("Remove")
                                     enabled: appRoot.queueEditorName.length > 0 && appRoot.queueEditorName !== downloadManager.defaultQueueName()
                                     onClicked: {
                                         appRoot.removeCurrentQueue()
@@ -6931,14 +7117,14 @@ ApplicationWindow {
                                 Layout.fillWidth: true
                                 wrapMode: Text.WordWrap
                                 color: Colors.textSecondary
-                                text: "Queues are fully editable here. Create a new queue, rename the selected queue, or remove any non-default queue. Existing downloads assigned to a removed queue automatically fall back to the default queue."
+                                text: qsTr("Queues are fully editable here. Create a new queue, rename the selected queue, or remove any non-default queue. Existing downloads assigned to a removed queue automatically fall back to the default queue.")
                             }
                         }
                     }
 
                     GroupBox {
                         id: queuePolicyGroup
-                        title: "Queue Policy"
+                        title: qsTr("Queue Policy")
                         Layout.fillWidth: true
                         readonly property real _extraContentMargins: 16
                         Layout.preferredHeight: queuePolicyGrid.implicitHeight
@@ -6955,43 +7141,43 @@ ApplicationWindow {
                             rowSpacing: 8
                             columnSpacing: 12
 
-                            Label { text: "Max concurrent" }
+                            Label { text: qsTr("Max concurrent") }
                             SpinBox { id: queueConcurrentSpin; from: 1; to: 64; value: 2 }
 
-                            Label { text: "Max speed (MB/s)" }
+                            Label { text: qsTr("Max speed (MB/s)") }
                             SpinBox { id: queueSpeedSpin; from: 0; to: 4096; value: 0 }
 
-                            Label { text: "Run on schedule" }
+                            Label { text: qsTr("Run on schedule") }
                             Switch { id: queueScheduleSwitch }
 
-                            Label { text: "Start time" }
+                            Label { text: qsTr("Start time") }
                             TextField {
                                 id: queueStartTimeField
-                                placeholderText: "02:00 AM"
-                                text: "00:00"
+                                placeholderText: Utils.localizeDigits(qsTr("02:00 AM"))
+                                text: Utils.localizeDigits(qsTr("00:00"))
                             }
 
-                            Label { text: "End time" }
+                            Label { text: qsTr("End time") }
                             TextField {
                                 id: queueEndTimeField
-                                placeholderText: "07:00 AM"
-                                text: "00:00"
+                                placeholderText: Utils.localizeDigits(qsTr("07:00 AM"))
+                                text: Utils.localizeDigits(qsTr("00:00"))
                             }
 
-                            Label { text: "Enable quota" }
+                            Label { text: qsTr("Enable quota") }
                             Switch { id: queueQuotaSwitch }
 
-                            Label { text: "Quota (GB/day)" }
+                            Label { text: qsTr("Quota (GB/day)") }
                             SpinBox { id: queueQuotaSpin; from: 0; to: 100000; value: 0 }
 
-                            Label { text: "After queue finishes" }
+                            Label { text: qsTr("After queue finishes") }
                             ComboBox {
                                 id: queuePostActionCombo
                                 Layout.preferredWidth: 220
                                 model: appRoot.queuePostActionOptions
                             }
 
-                            Label { text: "Downloaded today" }
+                            Label { text: qsTr("Downloaded today") }
                             Label {
                                 text: appRoot.queueEditorName.length > 0
                                       ? appRoot.formatBytes(downloadManager.queueDownloadedToday(appRoot.queueEditorName))
@@ -7010,7 +7196,7 @@ ApplicationWindow {
 
                     GroupBox {
                         id: networkDefaultsGroup
-                        title: "Network Defaults"
+                        title: qsTr("Network Defaults")
                         Layout.fillWidth: true
                         readonly property real _extraContentMargins: 16
                         Layout.preferredHeight: networkDefaultsGrid.implicitHeight
@@ -7027,21 +7213,21 @@ ApplicationWindow {
                             rowSpacing: 8
                             columnSpacing: 12
 
-                            Label { text: "User-Agent" }
+                            Label { text: qsTr("User-Agent") }
                             TextField {
                                 Layout.fillWidth: true
                                 text: downloadManager.defaultUserAgent
                                 onEditingFinished: downloadManager.defaultUserAgent = text
                             }
 
-                            Label { text: "Proxy host" }
+                            Label { text: qsTr("Proxy host") }
                             TextField {
                                 Layout.fillWidth: true
                                 text: downloadManager.defaultProxyHost
                                 onEditingFinished: downloadManager.defaultProxyHost = text
                             }
 
-                            Label { text: "Proxy port" }
+                            Label { text: qsTr("Proxy port") }
                             SpinBox {
                                 from: 0
                                 to: 65535
@@ -7049,14 +7235,14 @@ ApplicationWindow {
                                 onValueModified: downloadManager.defaultProxyPort = value
                             }
 
-                            Label { text: "Proxy user" }
+                            Label { text: qsTr("Proxy user") }
                             TextField {
                                 Layout.fillWidth: true
                                 text: downloadManager.defaultProxyUser
                                 onEditingFinished: downloadManager.defaultProxyUser = text
                             }
 
-                            Label { text: "Proxy password" }
+                            Label { text: qsTr("Proxy password") }
                             TextField {
                                 Layout.fillWidth: true
                                 echoMode: TextInput.Password
@@ -7064,13 +7250,13 @@ ApplicationWindow {
                                 onEditingFinished: downloadManager.defaultProxyPassword = text
                             }
 
-                            Label { text: "Allow insecure SSL" }
+                            Label { text: qsTr("Allow insecure SSL") }
                             Switch {
                                 checked: downloadManager.defaultAllowInsecureSsl
                                 onToggled: downloadManager.defaultAllowInsecureSsl = checked
                             }
 
-                            Label { text: "Per-host concurrent" }
+                            Label { text: qsTr("Per-host concurrent") }
                             SpinBox {
                                 from: 1
                                 to: 64
@@ -7078,38 +7264,38 @@ ApplicationWindow {
                                 onValueModified: downloadManager.perHostMaxConcurrent = value
                             }
 
-                            Label { text: "Persist sensitive options" }
+                            Label { text: qsTr("Persist sensitive options") }
                             Switch {
                                 checked: downloadManager.persistSensitiveOptions
                                 onToggled: downloadManager.persistSensitiveOptions = checked
                             }
 
-                            Label { text: "Telemetry" }
+                            Label { text: qsTr("Telemetry") }
                             Switch {
                                 checked: downloadManager.telemetryEnabled
                                 onToggled: downloadManager.telemetryEnabled = checked
                             }
 
-                            Label { text: "Pause on battery" }
+                            Label { text: qsTr("Pause on battery") }
                             Switch {
                                 checked: downloadManager.pauseOnBattery
                                 onToggled: downloadManager.pauseOnBattery = checked
                             }
 
-                            Label { text: "Resume on AC" }
+                            Label { text: qsTr("Resume on AC") }
                             Switch {
                                 checked: downloadManager.resumeOnAC
                                 onToggled: downloadManager.resumeOnAC = checked
                             }
 
-                            Label { text: "Power source" }
-                            Label { text: downloadManager.onBattery ? "Battery" : "AC" }
+                            Label { text: qsTr("Power source") }
+                            Label { text: downloadManager.onBattery ? qsTr("Battery") : qsTr("AC") }
                         }
                     }
 
                     GroupBox {
                         id: urlProbeGroup
-                        title: "URL Probe"
+                        title: qsTr("URL Probe")
                         Layout.fillWidth: true
                         readonly property real _extraContentMargins: 16
                         Layout.preferredHeight: urlProbeContent.implicitHeight
@@ -7129,10 +7315,10 @@ ApplicationWindow {
                                 TextField {
                                     id: probeUrlField
                                     Layout.fillWidth: true
-                                    placeholderText: "https://example.com/file.zip"
+                                    placeholderText: qsTr("https://example.com/file.zip")
                                 }
                                 Button {
-                                    text: downloadManager.networkTestRunning ? "Testing..." : "Run Test"
+                                    text: downloadManager.networkTestRunning ? qsTr("Testing...") : qsTr("Run Test")
                                     enabled: !downloadManager.networkTestRunning && probeUrlField.text.trim().length > 0
                                     onClicked: downloadManager.testUrl(probeUrlField.text.trim())
                                 }
@@ -7155,7 +7341,7 @@ ApplicationWindow {
 
                     GroupBox {
                         id: updateClientGroup
-                        title: "Update Client"
+                        title: qsTr("Update Client")
                         Layout.fillWidth: true
                         readonly property real _extraContentMargins: 16
                         Layout.preferredHeight: updateClientGrid.implicitHeight
@@ -7172,59 +7358,59 @@ ApplicationWindow {
                             rowSpacing: 8
                             columnSpacing: 12
 
-                            Label { text: "Current version" }
+                            Label { text: qsTr("Current version") }
                             Label { text: updateClient.currentVersion }
 
-                            Label { text: "Latest version" }
+                            Label { text: qsTr("Latest version") }
                             Label { text: updateClient.latestVersion.length > 0 ? updateClient.latestVersion : "--" }
 
-                            Label { text: "Channel" }
+                            Label { text: qsTr("Channel") }
                             ComboBox {
                                 id: channelCombo
-                                model: ["stable", "beta"]
-                                currentIndex: Math.max(0, ["stable", "beta"].indexOf(updateClient.channel))
-                                onActivated: updateClient.channel = currentText
+                                model: appRoot.updateChannelOptions
+                                currentIndex: Math.max(0, appRoot.updateChannelIds.indexOf(updateClient.channel))
+                                onActivated: updateClient.channel = appRoot.updateChannelIds[currentIndex]
                             }
 
-                            Label { text: "Source" }
+                            Label { text: qsTr("Source") }
                             ComboBox {
                                 id: sourceCombo
-                                model: ["auto", "website", "github"]
-                                currentIndex: Math.max(0, ["auto", "website", "github"].indexOf(updateClient.sourcePreference))
-                                onActivated: updateClient.sourcePreference = currentText
+                                model: appRoot.updateSourceOptions
+                                currentIndex: Math.max(0, appRoot.updateSourceIds.indexOf(updateClient.sourcePreference))
+                                onActivated: updateClient.sourcePreference = appRoot.updateSourceIds[currentIndex]
                             }
 
-                            Label { text: "GitHub repo" }
+                            Label { text: qsTr("GitHub repo") }
                             TextField {
                                 Layout.fillWidth: true
                                 text: updateClient.githubRepo
                                 onEditingFinished: updateClient.githubRepo = text
                             }
 
-                            Label { text: "Manifest URL" }
+                            Label { text: qsTr("Manifest URL") }
                             TextField {
                                 Layout.fillWidth: true
                                 text: updateClient.manifestUrl
                                 onEditingFinished: updateClient.manifestUrl = text
                             }
 
-                            Label { text: "Check on startup" }
-                            Label { text: "Always" }
+                            Label { text: qsTr("Check on startup") }
+                            Label { text: qsTr("Always") }
 
-                            Label { text: "Update mode" }
+                            Label { text: qsTr("Update mode") }
                             ComboBox {
-                                model: ["custom", "automatic"]
-                                currentIndex: Math.max(0, ["custom", "automatic"].indexOf(updateClient.updateMode))
-                                onActivated: updateClient.updateMode = currentText
+                                model: appRoot.updateModeOptions
+                                currentIndex: Math.max(0, appRoot.updateModeIds.indexOf(updateClient.updateMode))
+                                onActivated: updateClient.updateMode = appRoot.updateModeIds[currentIndex]
                             }
 
-                            Label { text: "Require signature" }
+                            Label { text: qsTr("Require signature") }
                             Switch {
                                 checked: updateClient.requireSignature
                                 onToggled: updateClient.requireSignature = checked
                             }
 
-                            Label { text: "Public key" }
+                            Label { text: qsTr("Public key") }
                             TextField {
                                 Layout.fillWidth: true
                                 text: updateClient.publicKeyPath
@@ -7234,7 +7420,7 @@ ApplicationWindow {
                     }
 
                     GroupBox {
-                        title: "Update Status"
+                        title: qsTr("Update Status")
                         Layout.fillWidth: true
 
                         ColumnLayout {
@@ -7245,35 +7431,35 @@ ApplicationWindow {
                             ProgressBar {
                                 Layout.fillWidth: true
                                 value: Math.max(0.0, Math.min(1.0, updateClient.downloadProgress))
-                                indeterminate: updateClient.status.toLowerCase().indexOf("downloading") >= 0
+                                indeterminate: updateClient.downloadInProgress
                                                && updateClient.downloadProgress <= 0
                             }
 
                             Label {
-                                text: "Status: " + updateClient.status
+                                text: qsTr("Status: ") + updateClient.status
                             }
                             Label {
-                                text: updateClient.lastError.length > 0 ? ("Error: " + updateClient.lastError) : ""
+                                    text: updateClient.lastError.length > 0 ? qsTr("Error: %1").arg(updateClient.lastError) : ""
                                 visible: updateClient.lastError.length > 0
                                 wrapMode: Text.Wrap
                             }
 
                             RowLayout {
                                 Layout.fillWidth: true
-                                Button { text: "Check Now"; onClicked: updateClient.checkNow() }
+                                Button { text: qsTr("Check Now"); onClicked: updateClient.checkNow() }
                                 Button {
-                                    text: "Download"
+                                    text: qsTr("Download")
                                     enabled: updateClient.updateAvailable
                                     onClicked: updateClient.downloadUpdate()
                                 }
                                 Button {
-                                    text: "Install"
+                                    text: qsTr("Install")
                                     enabled: updateClient.downloadReady
                                     onClicked: updateClient.installUpdate()
                                 }
                                 Item { Layout.fillWidth: true }
                                 Label {
-                                    text: updateClient.signatureVerified ? "Signature verified" : ""
+                                    text: updateClient.signatureVerified ? qsTr("Signature verified") : ""
                                     visible: updateClient.signatureVerified
                                 }
                             }
@@ -7282,14 +7468,15 @@ ApplicationWindow {
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 180
                                 readOnly: true
-                                text: updateClient.releaseNotes
-                                placeholderText: "Release notes"
+                                text: appRoot.safeReleaseNotes(updateClient.releaseNotes)
+                                placeholderText: qsTr("Release notes")
+                                font.family: FontSystem.getContentFontRegular.name
                             }
                         }
                     }
 
                     GroupBox {
-                        title: "Configuration"
+                        title: qsTr("Configuration")
                         Layout.fillWidth: true
 
                         ColumnLayout {
@@ -7300,13 +7487,13 @@ ApplicationWindow {
                             Label {
                                 Layout.fillWidth: true
                                 wrapMode: Text.Wrap
-                                text: "Restore GENYDL defaults and clear persisted session/configuration state without deleting downloaded files."
+                                text: qsTr("Restore GENYDL defaults and clear persisted session/configuration state without deleting downloaded files.")
                             }
 
                             RowLayout {
                                 Layout.fillWidth: true
                                 Button {
-                                    text: "Reset All"
+                                    text: qsTr("Reset All")
                                     onClicked: resetSettingsDialog.open()
                                 }
                                 Item { Layout.fillWidth: true }
@@ -7337,30 +7524,30 @@ ApplicationWindow {
 
                 Controls.Label {
                     Layout.preferredWidth: 78
-                    elide: Text.ElideRight
-                    text: "Visible: " + downloadManager.model.filteredCount(appRoot.queueFilter, appRoot.statusFilter, appRoot.categoryFilter, appRoot.searchText)
+                    elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
+                    text: qsTr("Visible: ") + downloadManager.model.filteredCount(appRoot.queueFilter, appRoot.statusFilter, appRoot.categoryFilter, appRoot.searchText)
                 }
                 Controls.Label {
                     Layout.preferredWidth: 140
-                    elide: Text.ElideRight
-                    text: "Speed: " + appRoot.formatSpeed(downloadManager.totalSpeed)
+                    elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
+                    text: qsTr("Speed: ") + appRoot.formatSpeed(downloadManager.totalSpeed)
                 }
                 Controls.Label {
                     Layout.preferredWidth: 112
-                    elide: Text.ElideRight
-                    text: "Overall: "
+                    elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
+                    text: qsTr("Overall: ")
                           + (downloadManager.totalSize > 0
-                             ? Math.min(100, Math.max(0, (downloadManager.totalReceived / downloadManager.totalSize) * 100)).toFixed(1) + "%"
+                             ? Utils.formatPercent(Math.min(100, Math.max(0, (downloadManager.totalReceived / downloadManager.totalSize) * 100)), 1)
                              : "--")
                 }
                 Item { Layout.fillWidth: true }
                 Controls.Label {
                     Layout.fillWidth: true
-                    elide: Text.ElideRight
-                    horizontalAlignment: Text.AlignRight
+                    elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
+                    horizontalAlignment: Text.AlignTrailing
                     text: appRoot.selectedTask
-                          ? ("Selected: " + appRoot.baseName(appRoot.taskFileNameValue(appRoot.selectedTask)))
-                          : "Selected: None"
+                          ? qsTr("Selected: %1").arg(appRoot.baseName(appRoot.taskFileNameValue(appRoot.selectedTask)))
+                          : qsTr("Selected: None")
                 }
             }
         }

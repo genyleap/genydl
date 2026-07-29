@@ -49,7 +49,8 @@ T.GroupBox {
         visible: control.title && control.title.length > 0
         text: control.title
 
-        x: Metrics.padding * 2.5
+        x: AppGlobals.rtl ? control.width - width - Metrics.padding * 2.5
+                          : Metrics.padding * 2.5
         y: -Metrics.padding / 2.0
 
         height: control._titleH
@@ -58,7 +59,8 @@ T.GroupBox {
         font.pixelSize: 16
         font.weight: Font.DemiBold
         color: Colors.textPrimary
-        elide: Text.ElideRight
+        horizontalAlignment: Text.AlignLeading
+        elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
 
         // keep it inside the group width
         width: Math.max(0, control.width - Metrics.padding * 2)

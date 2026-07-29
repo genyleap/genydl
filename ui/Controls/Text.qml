@@ -13,14 +13,10 @@ import GenyDL
 
 T.Text {
     font.family: FontSystem.getContentFont.name
-    horizontalAlignment: Text.AlignLeft
+    horizontalAlignment: Text.AlignLeading
     wrapMode: Text.WordWrap
     font.pixelSize: Typography.t2
     textFormat: Text.AutoText
     color: Colors.textSecondary
-    elide: if(AppGlobals.rtl == true) {
-               Text.ElideLeft
-           } else {
-               Text.ElideRight
-           }
+    elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
 }

@@ -18,13 +18,13 @@ Item {
     property alias getAwesomeThin: fontAwesomeRegular
     property alias getAwesomeSolid: fontAwesomeSolid
 
-    property alias getContentFont: contentFontRegular
-    property alias getTitleBoldFont: contentFontBold
-    property alias getContentFontRegular: contentFontRegular
-    property alias getContentFontMedium: contentFontMedium
-    property alias getContentFontSemiBold: contentFontSemiBold
-    property alias getContentFontBold: contentFontBold
-    property alias getContentFontThin: contentFontThin
+    readonly property var getContentFont: AppGlobals.rtl ? vazirmatnRegular : contentFontRegular
+    readonly property var getTitleBoldFont: AppGlobals.rtl ? vazirmatnBold : contentFontBold
+    readonly property var getContentFontRegular: AppGlobals.rtl ? vazirmatnRegular : contentFontRegular
+    readonly property var getContentFontMedium: AppGlobals.rtl ? vazirmatnMedium : contentFontMedium
+    readonly property var getContentFontSemiBold: AppGlobals.rtl ? vazirmatnSemiBold : contentFontSemiBold
+    readonly property var getContentFontBold: AppGlobals.rtl ? vazirmatnBold : contentFontBold
+    readonly property var getContentFontThin: AppGlobals.rtl ? vazirmatnRegular : contentFontThin
 
     property alias getFontSize: fontSize
 
@@ -79,5 +79,25 @@ Item {
     FontLoader {
         id: contentFontBold
         source: "qrc:/resources/fonts/Inter-Bold.ttf"
+    }
+
+    FontLoader {
+        id: vazirmatnRegular
+        source: "qrc:/resources/fonts/Vazirmatn-Regular.ttf"
+    }
+
+    FontLoader {
+        id: vazirmatnMedium
+        source: "qrc:/resources/fonts/Vazirmatn-Medium.ttf"
+    }
+
+    FontLoader {
+        id: vazirmatnSemiBold
+        source: "qrc:/resources/fonts/Vazirmatn-SemiBold.ttf"
+    }
+
+    FontLoader {
+        id: vazirmatnBold
+        source: "qrc:/resources/fonts/Vazirmatn-Bold.ttf"
     }
 }

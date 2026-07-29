@@ -31,6 +31,7 @@ T.SpinBox {
     hoverEnabled: true
     focusPolicy: Qt.StrongFocus
     editable: true
+    locale: Qt.locale(languageManager.currentLocale)
 
     // Text padding (optical centering)
     leftPadding: sideButtons ? (buttonWidth + Metrics.padding * 2) : (Metrics.padding * 2)
@@ -44,26 +45,31 @@ T.SpinBox {
     validator: IntValidator {
         bottom: Math.min(control.from, control.to)
         top: Math.max(control.from, control.to)
+        locale: Qt.locale(languageManager.currentLocale).name
     }
 
     textFromValue: function(value, locale) {
-        return Number(value).toLocaleString(locale, "f", 0)
+        // Read LanguageManager directly so changing the UI language invalidates
+        // this formatter immediately; QLocale's process default alone does not
+        // create a reactive QML dependency.
+        return Number(value).toLocaleString(Qt.locale(languageManager.currentLocale), "f", 0)
     }
 
     valueFromText: function(text, locale) {
-        return Number.fromLocaleString(locale, text)
+        return Number.fromLocaleString(Qt.locale(languageManager.currentLocale), text)
     }
 
     contentItem: TextInput {
         id: valueInput
         z: 2
         text: control.textFromValue(control.value, control.locale)
+        font.family: FontSystem.getContentFont.name
         font.pixelSize: 15
         font.weight: Font.DemiBold
         color: control.enabled ? Colors.textPrimary : Colors.textMuted
         selectionColor: Colors.secondryBack
         selectedTextColor: Colors.textPrimary
-        horizontalAlignment: Qt.AlignLeft
+        horizontalAlignment: Qt.AlignLeading
         verticalAlignment: TextInput.AlignVCenter
         readOnly: !control.editable
         validator: control.validator
@@ -73,6 +79,13 @@ T.SpinBox {
         Connections {
             target: control
             function onValueChanged() {
+                valueInput.text = control.textFromValue(control.value, control.locale)
+            }
+        }
+
+        Connections {
+            target: languageManager
+            function onCurrentLanguageChanged() {
                 valueInput.text = control.textFromValue(control.value, control.locale)
             }
         }

@@ -19,13 +19,13 @@ import "." as Controls
 
 Controls.GroupBox {
     id: root
-    title: "Release Center"
+    title: qsTr("Release Center")
     Layout.fillWidth: true
     implicitHeight: settingsCol.implicitHeight + topPadding + bottomPadding
 
     // Check-frequency presets. Index 0 ("Manual only") disables automatic checks.
-    readonly property var intervalPresetLabels: ["Manual only", "Every 6 hours",
-                                                 "Every 12 hours", "Daily", "Weekly"]
+    readonly property var intervalPresetLabels: [qsTr("Manual only"), qsTr("Every 6 hours"),
+                                                 qsTr("Every 12 hours"), qsTr("Daily"), qsTr("Weekly")]
     readonly property var intervalPresetHours: [0, 6, 12, 24, 168]
     function currentIntervalPresetIndex() {
         if (!releaseCenterService.automaticChecksEnabled) return 0
@@ -41,15 +41,15 @@ Controls.GroupBox {
                                              && releaseCenterService.checkIntervalHours <= 6
 
     readonly property var downloadPolicyModes: ["notify", "ask", "auto"]
-    readonly property var downloadPolicyLabels: ["Notify only",
-                                                 "Ask before downloading",
-                                                 "Download automatically"]
+    readonly property var downloadPolicyLabels: [qsTr("Notify only"),
+                                                 qsTr("Ask before downloading"),
+                                                 qsTr("Download automatically")]
 
     readonly property var dateFormatModes: ["relative", "datetime", "day", "month"]
-    readonly property var dateFormatLabels: ["Relative (2 hours ago)",
-                                             "Full (2026-06-05 18:23)",
-                                             "Date (May 28, 2026)",
-                                             "Month (Jun 2025)"]
+    readonly property var dateFormatLabels: [qsTr("Relative (2 hours ago)"),
+                                             qsTr("Full (2026-06-05 18:23)"),
+                                             qsTr("Date (May 28, 2026)"),
+                                             qsTr("Month (Jun 2025)")]
 
     ColumnLayout {
         id: settingsCol
@@ -64,7 +64,7 @@ Controls.GroupBox {
             rowSpacing: 10
 
             Controls.Label {
-                text: "Check for updates"
+                text: qsTr("Check for updates")
                 Layout.alignment: Qt.AlignVCenter
             }
             Controls.ComboBox {
@@ -75,7 +75,7 @@ Controls.GroupBox {
             }
 
             Controls.Label {
-                text: "When found"
+                text: qsTr("When found")
                 Layout.alignment: Qt.AlignVCenter
             }
             Controls.ComboBox {
@@ -86,7 +86,7 @@ Controls.GroupBox {
             }
 
             Controls.Label {
-                text: "Date format"
+                text: qsTr("Date format")
                 Layout.alignment: Qt.AlignVCenter
             }
             Controls.ComboBox {
@@ -112,28 +112,28 @@ Controls.GroupBox {
             rowSpacing: 12
 
             Controls.Switch {
-                text: "Notifications"
+                text: qsTr("Notifications")
                 checked: releaseCenterService.showNotifications
                 onToggled: releaseCenterService.showNotifications = checked
             }
             Controls.Switch {
-                text: "Default prereleases"
+                text: qsTr("Default prereleases")
                 checked: releaseCenterService.defaultIncludePrereleases
                 onToggled: releaseCenterService.defaultIncludePrereleases = checked
             }
             Controls.Switch {
-                text: "Only when window is open"
+                text: qsTr("Only when window is open")
                 checked: releaseCenterService.onlyWhenOpen
                 onToggled: releaseCenterService.onlyWhenOpen = checked
             }
             Controls.Switch {
-                text: "Check in background (tray)"
+                text: qsTr("Check in background (tray)")
                 enabled: !releaseCenterService.onlyWhenOpen
                 checked: releaseCenterService.backgroundChecks
                 onToggled: releaseCenterService.backgroundChecks = checked
             }
             Controls.Switch {
-                text: "Wi-Fi / non-metered only"
+                text: qsTr("Wi-Fi / non-metered only")
                 checked: releaseCenterService.wifiOnly
                 onToggled: releaseCenterService.wifiOnly = checked
             }
@@ -153,8 +153,7 @@ Controls.GroupBox {
             }
             Controls.Label {
                 Layout.fillWidth: true
-                text: "Frequent checks contact GitHub often and can hit API rate limits. "
-                      + "Consider adding a GitHub token below, or a longer interval."
+                text: qsTr("Frequent checks contact GitHub often and can hit API rate limits. Consider adding a GitHub token below, or a longer interval.")
                 color: Colors.warning
                 wrapMode: Text.WordWrap
                 font.pixelSize: Typography.t3
@@ -175,9 +174,7 @@ Controls.GroupBox {
             }
             Controls.Label {
                 Layout.fillWidth: true
-                text: "Automatic update checks periodically use network traffic to contact GitHub "
-                      + "and check saved repositories for new releases. Frequent intervals increase "
-                      + "traffic and may hit GitHub API limits."
+                text: qsTr("Automatic update checks periodically use network traffic to contact GitHub and check saved repositories for new releases. Frequent intervals increase traffic and may hit GitHub API limits.")
                 color: Colors.textSecondary
                 wrapMode: Text.WordWrap
                 font.pixelSize: Typography.t3
@@ -199,7 +196,7 @@ Controls.GroupBox {
             rowSpacing: 10
 
             Controls.Label {
-                text: "User-Agent"
+                text: qsTr("User-Agent")
                 Layout.alignment: Qt.AlignVCenter
                 Layout.preferredWidth: 96
             }
@@ -211,13 +208,13 @@ Controls.GroupBox {
             }
 
             Controls.Label {
-                text: "GitHub token"
+                text: qsTr("GitHub token")
                 Layout.alignment: Qt.AlignVCenter
                 Layout.preferredWidth: 96
             }
             Controls.TextField {
                 Layout.fillWidth: true
-                placeholderText: "Optional — increases GitHub API rate limit"
+                placeholderText: qsTr("Optional — increases GitHub API rate limit")
                 text: releaseCenterService.githubToken
                 echoMode: TextInput.Password
                 onEditingFinished: releaseCenterService.githubToken = text

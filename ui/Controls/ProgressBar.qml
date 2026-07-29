@@ -73,7 +73,7 @@ T.ProgressBar {
 
         Rectangle {
             id: fill
-            x: 0
+            x: AppGlobals.rtl ? parent.width - width : 0
             y: 0
             height: parent.height
             width: control.visualFillWidth

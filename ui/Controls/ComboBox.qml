@@ -163,15 +163,16 @@ T.ComboBox {
     }
 
     contentItem: Text {
-        leftPadding: 8
-        rightPadding: 22
+        leftPadding: AppGlobals.rtl ? 22 : 8
+        rightPadding: AppGlobals.rtl ? 8 : 22
         text: (control.currentIndex >= 0)
               ? control.modelTextAt(control.currentIndex)
               : ""
         color: control.enabled ? Colors.textPrimary : Colors.textMuted
         font.pixelSize: Typography.t2
         verticalAlignment: Text.AlignVCenter
-        elide: Text.ElideRight
+        horizontalAlignment: Text.AlignLeading
+        elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
     }
 
     indicator: Item {
@@ -255,6 +256,8 @@ T.ComboBox {
         contentItem: Column {
             width: popup.width - popup.padding * 2
             spacing: 8
+            LayoutMirroring.enabled: AppGlobals.rtl
+            LayoutMirroring.childrenInherit: true
 
             TextField {
                 id: searchField
@@ -262,7 +265,7 @@ T.ComboBox {
                 enabled: control.searchable
                 height: 36
                 width: parent.width
-                placeholderText: "Search..."
+                placeholderText: qsTr("Search...")
                 text: control.searchText
                 onTextChanged: control.searchText = text
 
@@ -310,8 +313,9 @@ T.ComboBox {
                         text: del.labelText
                         color: control.enabled ? Colors.textPrimary : Colors.textMuted
                         font.pixelSize: Typography.t2
-                        elide: Text.ElideRight
+                        elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
                         verticalAlignment: Text.AlignVCenter
+                        horizontalAlignment: Text.AlignLeading
                     }
 
                     background: Item {
@@ -361,11 +365,17 @@ T.ComboBox {
                     }
 
                     onClicked: {
-                        if (sourceIndex >= 0) {
-                            control.currentIndex = sourceIndex
-                            control.activated(sourceIndex)
-                            popup.close()
-                        }
+                        const selectedIndex = sourceIndex
+                        if (selectedIndex < 0)
+                            return
+
+                        // Close the popup before emitting activated(). Its handler
+                        // may rebuild the model or destroy this ComboBox (language
+                        // changes do both), so nothing may dereference control
+                        // after the signal is emitted.
+                        control.currentIndex = selectedIndex
+                        popup.close()
+                        control.activated(selectedIndex)
                     }
                 }
             }

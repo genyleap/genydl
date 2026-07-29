@@ -22,6 +22,8 @@ T.TextField {
     hoverEnabled: true
     focusPolicy: Qt.StrongFocus
     selectByMouse: true
+    horizontalAlignment: TextInput.AlignLeading
+    font.family: FontSystem.getContentFont.name
 
     // --- Padding tuned for optical vertical centering
     leftPadding: Metrics.padding * 2

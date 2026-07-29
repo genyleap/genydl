@@ -62,7 +62,7 @@ Item {
 
     function baseName(path) {
         if (!path || path.length === 0) {
-            return "Unknown file"
+            return qsTr("Unknown file")
         }
         const slash = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"))
         if (slash >= 0 && slash + 1 < path.length) {
@@ -72,39 +72,15 @@ Item {
     }
 
     function formatBytes(value) {
-        var v = Number(value)
-        if (!isFinite(v) || v < 0) {
-            v = 0
-        }
-        const units = ["B", "KB", "MB", "GB", "TB"]
-        var i = 0
-        while (v >= 1024 && i < units.length - 1) {
-            v /= 1024
-            i += 1
-        }
-        const digits = v >= 100 ? 0 : (v >= 10 ? 1 : 2)
-        return v.toFixed(digits) + " " + units[i]
+        return Utils.formatBytes(value)
     }
 
     function formatSpeed(value) {
-        return formatBytes(value) + "/s"
+        return Utils.formatSpeed(value)
     }
 
     function formatEta(seconds) {
-        var s = Number(seconds)
-        if (!isFinite(s) || s < 0) {
-            return "--"
-        }
-        if (s < 60) {
-            return Math.floor(s) + "s"
-        }
-        const m = Math.floor(s / 60)
-        const sec = Math.floor(s % 60)
-        if (m < 60) {
-            return m + "m " + sec + "s"
-        }
-        const h = Math.floor(m / 60)
-        return h + "h " + (m % 60) + "m"
+        return Utils.formatEta(seconds)
     }
 
     function visualState() {
@@ -133,6 +109,11 @@ Item {
 
     readonly property real ratio: bytesTotal > 0 ? Math.min(1.0, bytesReceived / bytesTotal) : 0.0
     readonly property string resolvedState: visualState()
+    readonly property string resolvedStateLabel: resolvedState === "Verifying"
+                                                   ? qsTr("Verifying")
+                                                   : (resolvedState === "Finalizing"
+                                                      ? qsTr("Finalizing")
+                                                      : languageManager.statusLabel(resolvedState))
     readonly property string urlText: task ? task.url() : ""
 
     // ---- Source-type & verification badges --------------------------------
@@ -160,10 +141,10 @@ Item {
         if (!task) return ""
         var lines = [srcInfo.label]
         if (task.contentId && task.contentId.length > 0)
-            lines.push("CID: " + task.contentId)
+            lines.push(qsTr("CID: %1").arg(task.contentId))
         if (srcInfo.id === "ipfs") {
             var gw = Utils.activeGatewayHost(task)
-            if (gw.length > 0) lines.push("Gateway: " + gw)
+            if (gw.length > 0) lines.push(qsTr("Gateway: %1").arg(gw))
         }
         return lines.join("\n")
     }
@@ -172,11 +153,11 @@ Item {
         if (!task) return ""
         switch (verInfo.state) {
             case "verified":  return (task.contentId && task.contentId.length > 0)
-                                     ? "Content address verified — downloaded bytes match the CID"
-                                     : "Integrity verified against the expected checksum"
-            case "mismatch":  return "Verification FAILED — downloaded bytes do not match"
-            case "verifying": return "Verifying content integrity…"
-            case "trusted":   return "Content-addressed but not byte-verifiable (UnixFS DAG); delivery is gateway-trusted"
+                                     ? qsTr("Content address verified — downloaded bytes match the CID")
+                                     : qsTr("Integrity verified against the expected checksum")
+            case "mismatch":  return qsTr("Verification FAILED — downloaded bytes do not match")
+            case "verifying": return qsTr("Verifying content integrity…")
+            case "trusted":   return qsTr("Content-addressed but not byte-verifiable (UnixFS DAG); delivery is gateway-trusted")
             default:          return ""
         }
     }
@@ -240,7 +221,7 @@ Item {
                             Layout.fillWidth: true
                             text: root.baseName(root.fileName)
                             role: "caption"
-                            elide: Text.ElideRight
+                            elide: Core.AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
                         }
 
                         // Protocol badge — always present, identifies the source.
@@ -307,10 +288,10 @@ Item {
                     Layout.preferredWidth: root.queueWidth
                     Layout.maximumWidth: root.queueWidth
                     Layout.minimumWidth: root.queueWidth
-                    text: root.queueName
+                    text: languageManager.queueLabel(root.queueName)
                     role: "caption"
                     tone: "secondary"
-                    elide: Text.ElideRight
+                    elide: Core.AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
                 }
 
                 Label {
@@ -321,7 +302,7 @@ Item {
                           + (root.bytesTotal > 0 ? " / " + root.formatBytes(root.bytesTotal) : "")
                     role: "mono"
                     tone: "secondary"
-                    elide: Text.ElideRight
+                    elide: Core.AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
                 }
 
                 Rectangle {
@@ -342,7 +323,7 @@ Item {
 
                     Label {
                         anchors.centerIn: parent
-                        text: root.resolvedState
+                        text: root.resolvedStateLabel
                         role: "micro"
                         tone: root.statusTone(root.resolvedState)
                     }
@@ -361,7 +342,7 @@ Item {
                     Layout.preferredWidth: root.speedWidth
                     Layout.maximumWidth: root.speedWidth
                     Layout.minimumWidth: root.speedWidth
-                    text: task ? root.formatSpeed(task.speed) : "0 B/s"
+                    text: task ? root.formatSpeed(task.speed) : root.formatSpeed(0)
                     role: "mono"
                     tone: task && task.speed > 0 ? "accent" : "secondary"
                 }
@@ -371,9 +352,9 @@ Item {
                     Layout.maximumWidth: root.segmentsWidth
                     Layout.minimumWidth: root.segmentsWidth
                     text: {
-                        if (!task) return "0/0"
-                        if (task.isTorrent) return task.seeders + "/" + task.leechers
-                        return task.effectiveSegments() + "/" + task.segments()
+                        if (!task) return Utils.formatRatio(0, 0)
+                        if (task.isTorrent) return Utils.formatRatio(task.seeders, task.leechers)
+                        return Utils.formatRatio(task.effectiveSegments(), task.segments())
                     }
                     role: "mono"
                     tone: "secondary"
@@ -383,10 +364,10 @@ Item {
                     Layout.preferredWidth: root.categoryWidth
                     Layout.maximumWidth: root.categoryWidth
                     Layout.minimumWidth: root.categoryWidth
-                    text: root.category
+                    text: languageManager.categoryLabel(root.category)
                     role: "caption"
                     tone: "secondary"
-                    elide: Text.ElideRight
+                    elide: Core.AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
                 }
 
                 RowLayout {
@@ -397,7 +378,7 @@ Item {
 
                     Button {
                         Layout.fillWidth: true
-                        text: root.status === "Active" ? "Pause" : "Resume"
+                        text: root.status === "Active" ? qsTr("Pause") : qsTr("Resume")
                         variant: "secondary"
                         compact: true
                         enabled: root.status === "Active" || root.status === "Paused"
@@ -406,7 +387,7 @@ Item {
 
                     Button {
                         Layout.fillWidth: true
-                        text: "Cancel"
+                        text: qsTr("Cancel")
                         variant: "danger"
                         compact: true
                         enabled: root.status === "Active" || root.status === "Paused" || root.status === "Queued"
@@ -415,7 +396,7 @@ Item {
 
                     Button {
                         Layout.fillWidth: true
-                        text: "Open"
+                        text: qsTr("Open")
                         variant: "ghost"
                         compact: true
                         enabled: root.status === "Done"
@@ -436,19 +417,19 @@ Item {
             id: rowMenu
 
             QQC2.MenuItem {
-                text: root.status === "Active" ? "Stop" : "Resume"
+                text: root.status === "Active" ? qsTr("Stop") : qsTr("Resume")
                 enabled: root.status === "Active" || root.status === "Paused"
                 onTriggered: root.contextActionRequested(root.row, root.task, root.status === "Active" ? "pause" : "resume")
             }
 
             QQC2.MenuItem {
-                text: "Retry"
+                text: qsTr("Retry")
                 enabled: root.task && (root.status === "Error" || root.status === "Canceled" || root.status === "Done")
                 onTriggered: root.contextActionRequested(root.row, root.task, "retry")
             }
 
             QQC2.MenuItem {
-                text: "Cancel"
+                text: qsTr("Cancel")
                 enabled: root.status === "Active" || root.status === "Paused" || root.status === "Queued"
                 onTriggered: root.contextActionRequested(root.row, root.task, "cancel")
             }
@@ -456,38 +437,38 @@ Item {
             QQC2.MenuSeparator { }
 
             QQC2.MenuItem {
-                text: "Open"
+                text: qsTr("Open")
                 enabled: root.status === "Done"
                 onTriggered: root.contextActionRequested(root.row, root.task, "open")
             }
 
             QQC2.MenuItem {
-                text: "Show in Folder"
+                text: qsTr("Show in Folder")
                 onTriggered: root.contextActionRequested(root.row, root.task, "reveal")
             }
 
             QQC2.MenuSeparator { }
 
             QQC2.MenuItem {
-                text: "Copy URL"
+                text: qsTr("Copy URL")
                 enabled: root.task
                 onTriggered: root.contextActionRequested(root.row, root.task, "copy_url")
             }
 
             QQC2.MenuItem {
-                text: "Copy Path"
+                text: qsTr("Copy Path")
                 enabled: root.task
                 onTriggered: root.contextActionRequested(root.row, root.task, "copy_path")
             }
 
             QQC2.MenuItem {
-                text: "Verify"
+                text: qsTr("Verify")
                 enabled: root.task
                 onTriggered: root.contextActionRequested(root.row, root.task, "verify")
             }
 
             QQC2.MenuItem {
-                text: "Properties"
+                text: qsTr("Properties")
                 enabled: root.task
                 onTriggered: root.detailsRequested(root.row, root.task, root.queueName, root.category)
             }
@@ -495,7 +476,7 @@ Item {
             QQC2.MenuSeparator { }
 
             QQC2.MenuItem {
-                text: "Remove"
+                text: qsTr("Remove")
                 enabled: root.task
                 onTriggered: root.contextActionRequested(root.row, root.task, "remove")
             }

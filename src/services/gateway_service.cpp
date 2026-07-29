@@ -122,11 +122,11 @@ QVariantMap GatewayService::makeMap(const Gateway& g) const
     QString status;
     QString kind; // maps to UI status colors (success/warning/danger/muted)
     switch (g.health) {
-        case Health::Healthy:  status = QStringLiteral("Healthy");  kind = QStringLiteral("success"); break;
-        case Health::Degraded: status = QStringLiteral("Slow");     kind = QStringLiteral("warning"); break;
-        case Health::Down:     status = QStringLiteral("Down");     kind = QStringLiteral("danger");  break;
+        case Health::Healthy:  status = tr("Healthy"); kind = QStringLiteral("success"); break;
+        case Health::Degraded: status = tr("Slow");    kind = QStringLiteral("warning"); break;
+        case Health::Down:     status = tr("Down");    kind = QStringLiteral("danger");  break;
         case Health::Unknown:
-        default:               status = QStringLiteral("Unknown");  kind = QStringLiteral("muted");   break;
+        default:               status = tr("Unknown"); kind = QStringLiteral("muted");   break;
     }
     m.insert(QStringLiteral("status"), status);
     m.insert(QStringLiteral("statusKind"), kind);

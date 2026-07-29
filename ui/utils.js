@@ -11,27 +11,83 @@
 function formatBytes(value) {
     var v = Number(value)
     if (!isFinite(v) || v < 0) v = 0
-    const units = ["B", "KB", "MB", "GB", "TB"]
+    const units = [qsTr("B"), qsTr("KB"), qsTr("MB"), qsTr("GB"), qsTr("TB")]
     var i = 0
     while (v >= 1024 && i < units.length - 1) {
         v /= 1024
         i += 1
     }
     const digits = v >= 100 ? 0 : (v >= 10 ? 1 : 2)
-    return v.toFixed(digits) + " " + units[i]
+    return v.toLocaleString(Qt.locale(languageManager.currentLocale), "f", digits) + " " + units[i]
 }
 
 function formatSpeed(value) {
-    return formatBytes(value) + "/s"
+    return qsTr("%1/s").arg(formatBytes(value))
+}
+
+function formatPercent(value, digits) {
+    var n = Number(value)
+    if (!isFinite(n)) n = 0
+    return n.toLocaleString(Qt.locale(languageManager.currentLocale), "f", Math.max(0, Number(digits || 0))) + qsTr("%")
+}
+
+function formatRatio(first, second) {
+    var a = Number(first)
+    var b = Number(second)
+    if (!isFinite(a)) a = 0
+    if (!isFinite(b)) b = 0
+    return a.toLocaleString(Qt.locale(languageManager.currentLocale), "f", 0)
+            + "/"
+            + b.toLocaleString(Qt.locale(languageManager.currentLocale), "f", 0)
+}
+
+// QLocale formats numeric values correctly, but values embedded by Qt's
+// numerus replacement (%n) can still arrive with ASCII digits. Keep this
+// helper scoped to UI counters so technical identifiers and URLs stay intact.
+function localizeDigits(value) {
+    const text = String(value)
+    const localeName = Qt.locale(languageManager.currentLocale).name.toLowerCase()
+    if (localeName.indexOf("fa") === 0)
+        return text.replace(/[0-9]/g, d => "۰۱۲۳۴۵۶۷۸۹"[Number(d)])
+    if (localeName.indexOf("ar") === 0)
+        return text.replace(/[0-9]/g, d => "٠١٢٣٤٥٦٧٨٩"[Number(d)])
+    return text
+}
+
+// Convert localized Persian/Arabic decimal digits back to ASCII for parsers
+// and backend-facing values. Display text stays localized; only the internal
+// representation is normalized.
+function asciiDigits(value) {
+    return String(value)
+            .replace(/[۰-۹]/g, d => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)))
+            .replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)))
+}
+
+// Release tags conventionally start with an ASCII "v". Keep that convention
+// for technical data, but expose the version number separately so localized UI
+// labels can say "Version 1.2.3" (or its translation) without a mixed-script v.
+function versionNumber(value) {
+    return String(value || "").trim()
+            .replace(/^[vV]\s*(?=[0-9\u06F0-\u06F9\u0660-\u0669])/, "")
+}
+
+// Determine paragraph direction from the first strong script character rather
+// than from the application language. This keeps English repository metadata
+// left-to-right inside a Persian/Arabic interface while Persian text remains RTL.
+function isRtlText(value) {
+    const text = String(value || "")
+    const rtlIndex = text.search(/[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/)
+    const ltrIndex = text.search(/[A-Za-z\u00C0-\u02AF\u0370-\u058F]/)
+    return rtlIndex >= 0 && (ltrIndex < 0 || rtlIndex < ltrIndex)
 }
 
 // Compact integer formatting (1234 -> "1.2K", 39000 -> "39K").
 function compactCount(value) {
     var n = Number(value || 0)
     if (!isFinite(n)) n = 0
-    if (n >= 1000000) return (n / 1000000).toFixed(n >= 10000000 ? 0 : 1) + "M"
-    if (n >= 1000) return (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "K"
-    return String(n)
+    if (n >= 1000000) return (n / 1000000).toLocaleString(Qt.locale(languageManager.currentLocale), "f", n >= 10000000 ? 0 : 1) + "M"
+    if (n >= 1000) return (n / 1000).toLocaleString(Qt.locale(languageManager.currentLocale), "f", n >= 10000 ? 0 : 1) + "K"
+    return n.toLocaleString(Qt.locale(languageManager.currentLocale), "f", 0)
 }
 
 // Format a release date according to `mode`. Accepts a Date, an ISO string, or a
@@ -45,11 +101,11 @@ function formatReleaseDate(value, mode) {
         return String(value)
 
     if (mode === "datetime")
-        return Qt.formatDateTime(d, "yyyy-MM-dd hh:mm")
+        return localizeDigits(d.toLocaleString(Qt.locale(languageManager.currentLocale), Locale.ShortFormat))
     if (mode === "day")
-        return Qt.formatDate(d, "MMM d, yyyy")        // May 28, 2026
+        return localizeDigits(d.toLocaleDateString(Qt.locale(languageManager.currentLocale), Locale.ShortFormat))
     if (mode === "month")
-        return Qt.formatDate(d, "MMM yyyy")           // Jun 2025
+        return localizeDigits(Qt.locale(languageManager.currentLocale).toString(d, "MMM yyyy"))
 
     // "relative" (default)
     var now = new Date()
@@ -58,32 +114,62 @@ function formatReleaseDate(value, mode) {
     var mins = Math.floor(secs / 60)
     var hours = Math.floor(mins / 60)
     var days = Math.floor(hours / 24)
-    if (secs < 45) return "just now"
-    if (mins < 60) return mins + (mins === 1 ? " minute ago" : " minutes ago")
-    if (hours < 24) return hours + (hours === 1 ? " hour ago" : " hours ago")
-    if (days === 1) return "Yesterday"
-    if (days < 7) return days + " days ago"
+    if (secs < 45) return qsTr("just now")
+    if (mins < 60) return relativeTimeText("minute", Math.max(1, mins))
+    if (hours < 24) return relativeTimeText("hour", Math.max(1, hours))
+    if (days === 1) return qsTr("Yesterday")
+    if (days < 7) return relativeTimeText("day", days)
     if (days < 30) {
         var weeks = Math.floor(days / 7)
-        return weeks + (weeks === 1 ? " week ago" : " weeks ago")
+        return relativeTimeText("week", weeks)
     }
-    return Qt.formatDate(d, "MMM d, yyyy")
+    return localizeDigits(d.toLocaleDateString(Qt.locale(languageManager.currentLocale), Locale.ShortFormat))
+}
+
+// English has no runtime translator catalog because it is the source language.
+// Handle its singular/plural forms explicitly; translated locales continue to
+// use Qt numerus rules (including Arabic's six and Russian's three forms).
+function relativeTimeText(unit, count) {
+    const n = Math.max(0, Math.floor(Number(count) || 0))
+    const localeName = Qt.locale(languageManager.currentLocale).name.toLowerCase()
+    if (localeName.indexOf("en") === 0) {
+        const word = unit + (n === 1 ? "" : "s")
+        return n.toLocaleString(Qt.locale(languageManager.currentLocale), "f", 0) + " " + word + " ago"
+    }
+
+    var translated = ""
+    if (unit === "minute")
+        translated = qsTr("%n minute(s) ago", "", n)
+    else if (unit === "hour")
+        translated = qsTr("%n hour(s) ago", "", n)
+    else if (unit === "day")
+        translated = qsTr("%n day(s) ago", "", n)
+    else if (unit === "week")
+        translated = qsTr("%n week(s) ago", "", n)
+    return localizeDigits(translated)
 }
 
 function formatEta(seconds) {
     var s = Number(seconds)
     if (!isFinite(s) || s < 0) return "--"
-    if (s < 60) return Math.floor(s) + " sec"
+    if (s < 60) return localizeDigits(qsTr("%n second(s)", "", Math.floor(s)))
     const m = Math.floor(s / 60)
     const sec = Math.floor(s % 60)
-    if (m < 60) return m + " min " + sec + " sec"
+    if (m < 60)
+        return localizeDigits(
+                    qsTr("%1 min %2 sec")
+                    .arg(m.toLocaleString(Qt.locale(languageManager.currentLocale)))
+                    .arg(sec.toLocaleString(Qt.locale(languageManager.currentLocale))))
     const h = Math.floor(m / 60)
-    return h + " h " + (m % 60) + " min"
+    return localizeDigits(
+                qsTr("%1 h %2 min")
+                .arg(h.toLocaleString(Qt.locale(languageManager.currentLocale)))
+                .arg((m % 60).toLocaleString(Qt.locale(languageManager.currentLocale))))
 }
 
 function baseName(path) {
     if (!path || path.length === 0) {
-        return "Unknown file"
+        return qsTr("Unknown file")
     }
     const slash = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"))
     if (slash >= 0 && slash + 1 < path.length) {
@@ -422,7 +508,7 @@ function shareSelectedTargets() {
     downloadManager.copyText(urls.join("\n"))
     var body = encodeURIComponent(urls.join("\n"))
     Qt.openUrlExternally("mailto:?subject=GENYDL%20Downloads&body=" + body)
-    downloadManager.showToast("Share links copied", "info")
+    downloadManager.showToast(qsTr("Share links copied"), "info")
 }
 
 function resolveTaskRow(row, taskObj) {
@@ -716,11 +802,11 @@ function rebuildDownloadTableRows() {
                       bytesTotal: total,
                       rawStatus: s,
                       sizeText: formatBytes(received) + (total > 0 ? " / " + formatBytes(total) : ""),
-                      statusText: taskStatusText(taskObj, s),
+                      statusText: languageManager.statusLabel(s),
                       etaText: formatEta(taskObj.eta),
                       speedText: formatSpeed(taskObj.speed),
                       segText: segText,
-                      categoryText: c,
+                      categoryText: languageManager.categoryLabel(c),
                       progress: ratio
                   })
     }
@@ -908,28 +994,28 @@ function pushDetailsSpeedSample(v) {
 //   glyph : Font Awesome code point (solid) for the protocol icon
 function sourceTypeInfo(task) {
     if (!task) {
-        return { id: "http", label: "Direct Download (HTTP/HTTPS)", short: "HTTP",
+        return { id: "http", label: qsTr("Direct Download (HTTP/HTTPS)"), short: "HTTP",
                  tone: "secondary", glyph: "" } // globe
     }
     if (task.isTorrent) {
-        return { id: "torrent", label: "Torrent (BitTorrent)", short: "Torrent",
+        return { id: "torrent", label: qsTr("Torrent (BitTorrent)"), short: "Torrent",
                  tone: "accent", glyph: "" } // sitemap / swarm
     }
     var net = task.storageNetwork ? String(task.storageNetwork) : ""
     if (net.length > 0) {
         var up = net.toUpperCase()
         if (up === "IPFS") {
-            return { id: "ipfs", label: "Blockchain Storage (IPFS)", short: "IPFS",
+            return { id: "ipfs", label: qsTr("Blockchain Storage (IPFS)"), short: "IPFS",
                      tone: "info", glyph: "" } // cloud / distributed
         }
         if (up === "ARWEAVE") {
-            return { id: "arweave", label: "Permanent Storage (Arweave)", short: "Arweave",
+            return { id: "arweave", label: qsTr("Permanent Storage (Arweave)"), short: "Arweave",
                      tone: "info", glyph: "" } // archive
         }
-        return { id: "storage", label: "Blockchain Storage (" + net + ")", short: net,
+        return { id: "storage", label: qsTr("Blockchain Storage (%1)").arg(net), short: net,
                  tone: "info", glyph: "" }
     }
-    return { id: "http", label: "Direct Download (HTTP/HTTPS)", short: "HTTP",
+    return { id: "http", label: qsTr("Direct Download (HTTP/HTTPS)"), short: "HTTP",
              tone: "secondary", glyph: "" }
 }
 
@@ -952,10 +1038,10 @@ function sourceMatchesFilter(task, filter) {
 // "Downloaded Via" phrasing for a task's transport.
 function deliveryChannel(task) {
     var info = sourceTypeInfo(task)
-    if (info.id === "ipfs") return "IPFS Gateway Network"
-    if (info.id === "arweave") return "Arweave Gateway"
-    if (info.id === "torrent") return "BitTorrent Swarm"
-    return "Direct HTTP Transfer"
+    if (info.id === "ipfs") return qsTr("IPFS Gateway Network")
+    if (info.id === "arweave") return qsTr("Arweave Gateway")
+    if (info.id === "torrent") return qsTr("BitTorrent Swarm")
+    return qsTr("Direct HTTP Transfer")
 }
 
 // Verification descriptor for a task.
@@ -967,19 +1053,19 @@ function verificationInfo(task) {
     var contentAddressed = (task.contentId && String(task.contentId).length > 0)
     if (cs === "OK") {
         return { state: "verified",
-                 label: contentAddressed ? "CID Match" : "Verified",
+                 label: contentAddressed ? qsTr("CID Match") : qsTr("Verified"),
                  tone: "success", verified: true }
     }
     if (cs === "Mismatch" || cs === "Failed") {
-        return { state: "mismatch", label: "Verification Failed", tone: "danger", verified: false }
+        return { state: "mismatch", label: qsTr("Verification Failed"), tone: "danger", verified: false }
     }
     if (cs === "Verifying") {
-        return { state: "verifying", label: "Verifying…", tone: "accent", verified: false }
+        return { state: "verifying", label: qsTr("Verifying…"), tone: "accent", verified: false }
     }
     if (contentAddressed) {
         // Content-addressed but not byte-verifiable (e.g. UnixFS DAG): we do not
         // fake a green check; delivery is trusted to the gateway.
-        return { state: "trusted", label: "Gateway-trusted", tone: "warning", verified: false }
+        return { state: "trusted", label: qsTr("Gateway-trusted"), tone: "warning", verified: false }
     }
     return { state: "none", label: "", tone: "muted", verified: false }
 }
@@ -1001,7 +1087,7 @@ function activeGatewayHost(task) {
     var idx = task.mirrorIndex || 0
     if (idx < 0 || idx >= urls.length) idx = 0
     var host = gatewayHostFromUrl(urls[idx])
-    return host === "127.0.0.1:8080" ? "Local node (127.0.0.1)" : host
+    return host === "127.0.0.1:8080" ? qsTr("Local node (%1)").arg("127.0.0.1") : host
 }
 
 // Number of fallback gateways still available behind the active one.

@@ -67,13 +67,13 @@ T.AbstractButton {
             font.pixelSize: control.child ? Typography.t2 : Typography.t1
             // font.weight: control.child ? Font.Light : Font.Medium
             color: control.selected ? Colors.textPrimary : Colors.textSecondary
-            elide: Text.ElideRight
+            elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
             verticalAlignment: Text.AlignVCenter
         }
 
         Text {
             visible: control.expandable
-            text: "\uf078"
+            text: qsTr("\uf078")
             font.family: FontSystem.getAwesomeSolid.name
             font.weight: Font.Black
             font.pixelSize: Typography.t2

@@ -18,9 +18,13 @@ import QtQuick.Window
 
 import GenyDL // Colors, FontSystem, Typography, Metrics
 import "." as Controls
+import "../utils.js" as Utils
 
 Window {
     id: root
+
+    LayoutMirroring.enabled: Qt.application.layoutDirection === Qt.RightToLeft
+    LayoutMirroring.childrenInherit: true
 
     property int row: -1
     property var task: null
@@ -44,8 +48,8 @@ Window {
     readonly property string statusText: task ? task.stateString : ""
 
     title: task
-           ? (Math.round(progressRatio * 100) + "% " + root.baseName(task.fileName()))
-           : "Torrent Details"
+           ? (Utils.formatPercent(Math.round(progressRatio * 100), 0) + " " + root.baseName(task.fileName()))
+           : qsTr("Torrent Details")
 
     // ---- Live progress mirror (TorrentTask emits progress(received,total)) ----
     property real liveReceived: 0
@@ -95,33 +99,20 @@ Window {
     }
 
     function baseName(path) {
-        if (!path || path.length === 0) return "Unknown"
+        if (!path || path.length === 0) return qsTr("Unknown")
         const idx = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"))
         if (idx >= 0 && idx + 1 < path.length) return path.substring(idx + 1)
         return path
     }
 
     function formatBytes(value) {
-        var v = Number(value)
-        if (!isFinite(v) || v < 0) v = 0
-        const units = ["B", "KB", "MB", "GB", "TB"]
-        var i = 0
-        while (v >= 1024 && i < units.length - 1) { v /= 1024; i += 1 }
-        const digits = v >= 100 ? 0 : (v >= 10 ? 1 : 2)
-        return v.toFixed(digits) + " " + units[i]
+        return Utils.formatBytes(value)
     }
 
-    function formatSpeed(value) { return formatBytes(value) + "/s" }
+    function formatSpeed(value) { return Utils.formatSpeed(value) }
 
     function formatEta(seconds) {
-        var s = Number(seconds)
-        if (!isFinite(s) || s < 0) return "—"
-        if (s < 60) return Math.floor(s) + " sec"
-        const m = Math.floor(s / 60)
-        const sec = Math.floor(s % 60)
-        if (m < 60) return m + " min " + sec + " sec"
-        const h = Math.floor(m / 60)
-        return h + " h " + (m % 60) + " min"
+        return Utils.formatEta(seconds)
     }
 
     // Status string → custom-Label role for colour (0 secondary, 4 success, 6 error)
@@ -141,14 +132,14 @@ Window {
             Layout.fillWidth: true
             Text {
                 Layout.fillWidth: true
-                text: root.task ? root.baseName(root.task.fileName()) : "No selection"
+                text: root.task ? root.baseName(root.task.fileName()) : qsTr("No selection")
                 font.pixelSize: 22
                 font.bold: true
                 color: Colors.textPrimary
-                elide: Text.ElideRight
+                elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
             }
             Controls.Label {
-                text: root.statusText
+                text: languageManager.statusLabel(root.statusText)
                 role: root.statusRole(root.statusText)
                 font.bold: true
             }
@@ -167,9 +158,9 @@ Window {
             currentIndex: root.tabIndex
             onCurrentIndexChanged: root.tabIndex = currentIndex
 
-            TabButton { text: "General" }
-            TabButton { text: "Swarm" }
-            TabButton { text: "Files" }
+            TabButton { text: qsTr("General") }
+            TabButton { text: qsTr("Swarm") }
+            TabButton { text: qsTr("Files") }
         }
 
         StackLayout {
@@ -185,7 +176,7 @@ Window {
                     spacing: 8
 
                     Controls.GroupBox {
-                        title: "Status"
+                        title: qsTr("Status")
                         Layout.fillWidth: true
                         Layout.preferredHeight: statusGrid.implicitHeight + 64
 
@@ -197,7 +188,7 @@ Window {
                             columnSpacing: 16
                             rowSpacing: 6
 
-                            Controls.Label { text: "Source" }
+                            Controls.Label { text: qsTr("Source") }
                             RowLayout {
                                 Layout.fillWidth: true
                                 spacing: 8
@@ -207,62 +198,66 @@ Window {
                                     elide: Text.ElideMiddle
                                 }
                                 Controls.Button {
-                                    text: "Copy"
+                                    text: qsTr("Copy")
                                     sizeType: "small"
                                     enabled: !!root.task
                                     onClicked: if (root.task) root.copyRequested(root.task.url())
                                 }
                             }
 
-                            Controls.Label { text: "State" }
-                            Controls.Label { text: root.statusText; role: root.statusRole(root.statusText) }
+                            Controls.Label { text: qsTr("State") }
+                            Controls.Label { text: languageManager.statusLabel(root.statusText); role: root.statusRole(root.statusText) }
 
-                            Controls.Label { text: "File size" }
+                            Controls.Label { text: qsTr("File size") }
                             Controls.Label { text: root.formatBytes(root.liveTotal) }
 
-                            Controls.Label { text: "Downloaded" }
+                            Controls.Label { text: qsTr("Downloaded") }
                             Controls.Label {
                                 text: root.formatBytes(root.liveReceived)
                                       + (root.liveTotal > 0
                                          ? " / " + root.formatBytes(root.liveTotal)
-                                           + " (" + (root.progressRatio * 100).toFixed(2) + "%)"
+                                           + " (" + (root.progressRatio * 100).toLocaleString(Qt.locale(languageManager.currentLocale), "f", 2) + "%)"
                                          : "")
                             }
 
-                            Controls.Label { text: "Uploaded" }
-                            Controls.Label { text: root.task ? root.formatBytes(root.task.uploadedBytes) : "0 B" }
+                            Controls.Label { text: qsTr("Uploaded") }
+                            Controls.Label { text: root.formatBytes(root.task ? root.task.uploadedBytes : 0) }
 
-                            Controls.Label { text: "Peers" }
+                            Controls.Label { text: qsTr("Peers") }
                             Controls.Label {
-                                text: root.task ? (root.task.seeders + " seeds / " + root.task.leechers + " peers") : "0 / 0"
+                                text: root.task
+                                      ? qsTr("%1 seeds / %2 peers")
+                                            .arg(Number(root.task.seeders).toLocaleString(Qt.locale(languageManager.currentLocale), "f", 0))
+                                            .arg(Number(root.task.leechers).toLocaleString(Qt.locale(languageManager.currentLocale), "f", 0))
+                                      : Utils.formatRatio(0, 0)
                                 font.bold: true
                             }
 
-                            Controls.Label { text: "Speed" }
+                            Controls.Label { text: qsTr("Speed") }
                             Controls.Label {
-                                text: "↓ " + root.formatSpeed(root.task ? root.task.speed : 0)
+                                text: qsTr("↓ ") + root.formatSpeed(root.task ? root.task.speed : 0)
                                       + "   ↑ " + root.formatSpeed(root.task ? root.task.uploadSpeed : 0)
                             }
 
-                            Controls.Label { text: "Share ratio" }
+                            Controls.Label { text: qsTr("Share ratio") }
                             Controls.Label {
-                                text: root.task ? root.task.shareRatio.toFixed(2) : "0.00"
+                                text: root.task ? root.task.shareRatio.toLocaleString(Qt.locale(languageManager.currentLocale), "f", 2) : "0.00"
                                 role: (root.task && root.task.shareRatio >= 1.0) ? 4 : 0
                             }
 
-                            Controls.Label { text: "ETA" }
+                            Controls.Label { text: qsTr("ETA") }
                             Controls.Label { text: root.formatEta(root.task ? root.task.eta : -1) }
 
-                            Controls.Label { text: "Queue" }
-                            Controls.Label { text: root.queueName }
+                            Controls.Label { text: qsTr("Queue") }
+                            Controls.Label { text: languageManager.queueLabel(root.queueName) }
 
-                            Controls.Label { text: "Category" }
-                            Controls.Label { text: root.categoryName }
+                            Controls.Label { text: qsTr("Category") }
+                            Controls.Label { text: languageManager.categoryLabel(root.categoryName) }
                         }
                     }
 
                     Controls.GroupBox {
-                        title: "Piece Map"
+                        title: qsTr("Piece Map")
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         Layout.minimumHeight: 90
@@ -303,7 +298,7 @@ Window {
                             Controls.Label {
                                 anchors.centerIn: parent
                                 visible: root.pieceCells.length === 0
-                                text: "Piece map appears once metadata is available…"
+                                text: qsTr("Piece map appears once metadata is available…")
                             }
                         }
                     }
@@ -321,26 +316,35 @@ Window {
                         spacing: 8
 
                         Controls.GroupBox {
-                            title: "Seeders"
+                            title: qsTr("Seeders")
                             Layout.fillWidth: true
                             Layout.preferredHeight: 100
                             ColumnLayout {
                                 anchors.fill: parent
                                 anchors.margins: 8
-                                Controls.Label { text: root.task ? String(root.task.seeders) : "0"; role: 4; font.bold: true; font.pixelSize: Typography.t1 }
-                                Controls.Label { text: "connected + in swarm" }
+                                Controls.Label {
+                                    text: Number(root.task ? root.task.seeders : 0).toLocaleString(Qt.locale(languageManager.currentLocale), "f", 0)
+                                    role: 4
+                                    font.bold: true
+                                    font.pixelSize: Typography.t1
+                                }
+                                Controls.Label { text: qsTr("connected + in swarm") }
                             }
                         }
 
                         Controls.GroupBox {
-                            title: "Leechers"
+                            title: qsTr("Leechers")
                             Layout.fillWidth: true
                             Layout.preferredHeight: 100
                             ColumnLayout {
                                 anchors.fill: parent
                                 anchors.margins: 8
-                                Controls.Label { text: root.task ? String(root.task.leechers) : "0"; font.bold: true; font.pixelSize: Typography.t1 }
-                                Controls.Label { text: "downloading peers" }
+                                Controls.Label {
+                                    text: Number(root.task ? root.task.leechers : 0).toLocaleString(Qt.locale(languageManager.currentLocale), "f", 0)
+                                    font.bold: true
+                                    font.pixelSize: Typography.t1
+                                }
+                                Controls.Label { text: qsTr("downloading peers") }
                             }
                         }
                     }
@@ -350,26 +354,30 @@ Window {
                         spacing: 8
 
                         Controls.GroupBox {
-                            title: "Download"
+                            title: qsTr("Download")
                             Layout.fillWidth: true
                             Layout.preferredHeight: 100
                             ColumnLayout {
                                 anchors.fill: parent
                                 anchors.margins: 8
                                 Controls.Label { text: root.formatSpeed(root.task ? root.task.speed : 0); font.bold: true }
-                                Controls.Label { text: root.formatBytes(root.liveReceived) + " received" }
+                                Controls.Label { text: qsTr("%1 received").arg(root.formatBytes(root.liveReceived)) }
                             }
                         }
 
                         Controls.GroupBox {
-                            title: "Upload"
+                            title: qsTr("Upload")
                             Layout.fillWidth: true
                             Layout.preferredHeight: 100
                             ColumnLayout {
                                 anchors.fill: parent
                                 anchors.margins: 8
                                 Controls.Label { text: root.formatSpeed(root.task ? root.task.uploadSpeed : 0); font.bold: true }
-                                Controls.Label { text: (root.task ? root.formatBytes(root.task.uploadedBytes) : "0 B") + " sent · ratio " + (root.task ? root.task.shareRatio.toFixed(2) : "0.00") }
+                                Controls.Label {
+                                    text: qsTr("%1 sent · ratio %2")
+                                          .arg(root.task ? root.formatBytes(root.task.uploadedBytes) : qsTr("0 B"))
+                                          .arg(root.task ? root.task.shareRatio.toLocaleString(Qt.locale(languageManager.currentLocale), "f", 2) : "0.00")
+                                }
                             }
                         }
                     }
@@ -385,7 +393,7 @@ Window {
                     spacing: 8
 
                     Controls.GroupBox {
-                        title: "Files"
+                        title: qsTr("Files")
                         Layout.fillWidth: true
                         Layout.fillHeight: true
 
@@ -398,8 +406,8 @@ Window {
                                 Layout.fillWidth: true
                                 text: {
                                     const n = root.task && root.task.fileList ? root.task.fileList.length : 0
-                                    return n > 0 ? (n + " file(s) — uncheck to skip downloading")
-                                                 : "Waiting for torrent metadata…"
+                                    return n > 0 ? qsTr("%n file(s) — uncheck to skip downloading", "", n)
+                                                 : qsTr("Waiting for torrent metadata…")
                                 }
                             }
 
@@ -450,7 +458,7 @@ Window {
             spacing: 8
 
             Controls.Button {
-                text: (root.statusText === "Paused") ? "Resume" : "Pause"
+                text: (root.statusText === "Paused") ? qsTr("Resume") : qsTr("Pause")
                 enabled: root.row >= 0
                 onClicked: root.pauseResumeRequested(root.row)
             }
@@ -458,23 +466,23 @@ Window {
             Item { Layout.fillWidth: true }
 
             Controls.Button {
-                text: "Open"
+                text: qsTr("Open")
                 enabled: root.row >= 0 && (root.statusText === "Done" || root.statusText === "Seeding")
                 onClicked: root.openRequested(root.row)
             }
             Controls.Button {
-                text: "Show in Folder"
+                text: qsTr("Show in Folder")
                 enabled: root.row >= 0
                 onClicked: root.revealRequested(root.row)
             }
             Controls.Button {
-                text: "Remove"
+                text: qsTr("Remove")
                 style: "danger"
                 enabled: root.row >= 0
                 onClicked: root.removeRequested(root.row)
             }
             Controls.Button {
-                text: "Close"
+                text: qsTr("Close")
                 onClicked: root.close()
             }
         }

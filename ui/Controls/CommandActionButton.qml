@@ -70,7 +70,7 @@ T.Button {
                 font.pixelSize: 12
                 font.weight: Font.Medium
                 horizontalAlignment: Text.AlignHCenter
-                elide: Text.ElideRight
+                elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
             }
         }
     }

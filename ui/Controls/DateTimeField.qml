@@ -16,13 +16,14 @@ import QtQuick.Layouts
 
 import GenyDL
 import "." as Controls
+import "../utils.js" as Utils
 
 Item {
     id: root
 
     // ISO-8601 datetime (local), e.g. "2026-06-07T18:30:00". Empty == unset.
     property string isoValue: ""
-    property string placeholder: "Not set"
+    property string placeholder: qsTr("Not set")
     signal edited(string iso)
 
     // Internal working value + the month currently shown in the popup.
@@ -40,11 +41,20 @@ Item {
         root.edited(root.isoValue)
     }
     function _displayText() {
-        return isoValue.length > 0 ? Qt.formatDateTime(root._value, "yyyy-MM-dd  hh:mm")
+        return isoValue.length > 0
+                ? Utils.localizeDigits(
+                      root._value.toLocaleString(Qt.locale(languageManager.currentLocale), Locale.ShortFormat))
                                    : placeholder
     }
-    readonly property var _monthNames: ["January","February","March","April","May","June",
-                                        "July","August","September","October","November","December"]
+    readonly property var _monthNames: [
+        qsTr("January"), qsTr("February"), qsTr("March"), qsTr("April"),
+        qsTr("May"), qsTr("June"), qsTr("July"), qsTr("August"),
+        qsTr("September"), qsTr("October"), qsTr("November"), qsTr("December")
+    ]
+    readonly property var _weekDayNames: [
+        qsTr("Sun"), qsTr("Mon"), qsTr("Tue"), qsTr("Wed"),
+        qsTr("Thu"), qsTr("Fri"), qsTr("Sat")
+    ]
 
     RowLayout {
         anchors.fill: parent
@@ -108,6 +118,8 @@ Item {
             id: contentColumn
             anchors.fill: parent
             spacing: 10
+            LayoutMirroring.enabled: AppGlobals.rtl
+            LayoutMirroring.childrenInherit: true
 
             // Month navigation.
             RowLayout {
@@ -115,7 +127,7 @@ Item {
                 Controls.Button {
                     sizeType: "small"
                     implicitWidth: 36
-                    text: "‹"   // ‹
+                    text: qsTr("‹")   // ‹
                     isBold: true
                     onClicked: {
                         if (root._viewMonth === 0) { root._viewMonth = 11; root._viewYear-- }
@@ -125,13 +137,17 @@ Item {
                 Controls.Label {
                     Layout.fillWidth: true
                     horizontalAlignment: Text.AlignHCenter
-                    text: root._monthNames[root._viewMonth] + " " + root._viewYear
+                    text: qsTr("%1 %2")
+                          .arg(root._monthNames[root._viewMonth])
+                          // A calendar year is an identifier, not a quantity:
+                          // never insert the locale's thousands separator.
+                          .arg(Utils.localizeDigits(String(root._viewYear)))
                     font.bold: true
                 }
                 Controls.Button {
                     sizeType: "small"
                     implicitWidth: 36
-                    text: "›"   // ›
+                    text: qsTr("›")   // ›
                     isBold: true
                     onClicked: {
                         if (root._viewMonth === 11) { root._viewMonth = 0; root._viewYear++ }
@@ -147,7 +163,7 @@ Item {
                 columnSpacing: 2
                 rowSpacing: 2
                 Repeater {
-                    model: ["S","M","T","W","T","F","S"]
+                    model: root._weekDayNames
                     delegate: Controls.Label {
                         required property var modelData
                         Layout.fillWidth: true
@@ -191,7 +207,9 @@ Item {
                         Controls.Label {
                             anchors.centerIn: parent
                             visible: parent.inMonth
-                            text: parent.inMonth ? String(parent.dayNum) : ""
+                            text: parent.inMonth
+                                  ? Utils.localizeDigits(String(parent.dayNum))
+                                  : ""
                             color: parent.isSelected ? Colors.staticPrimary : Colors.textPrimary
                             font.pixelSize: Typography.t3
                         }
@@ -212,27 +230,43 @@ Item {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 8
-                Controls.Label { text: "Time" }
+                Controls.Label { text: qsTr("Time") }
                 Item { Layout.fillWidth: true }
                 Controls.SpinBox {
                     id: hourSpin
                     Layout.preferredWidth: 130
                     from: 0; to: 23
                     value: root._value.getHours()
-                    textFromValue: function(v, locale) { return ("0" + v).slice(-2) }
-                    valueFromText: function(text, locale) { return parseInt(text, 10) || 0 }
+                    textFromValue: function(v, locale) {
+                        const localized = Utils.localizeDigits(
+                                    Number(v).toLocaleString(Qt.locale(languageManager.currentLocale), "f", 0))
+                        return v < 10
+                               ? Utils.localizeDigits("0") + localized
+                               : localized
+                    }
+                    valueFromText: function(text, locale) {
+                        return Number(Utils.asciiDigits(text)) || 0
+                    }
                     onValueModified: {
                         var d = new Date(root._value); d.setHours(value); root._emit(d)
                     }
                 }
-                Controls.Label { text: ":"; font.bold: true }
+                Controls.Label { text: qsTr(":"); font.bold: true }
                 Controls.SpinBox {
                     id: minuteSpin
                     Layout.preferredWidth: 130
                     from: 0; to: 59
                     value: root._value.getMinutes()
-                    textFromValue: function(v, locale) { return ("0" + v).slice(-2) }
-                    valueFromText: function(text, locale) { return parseInt(text, 10) || 0 }
+                    textFromValue: function(v, locale) {
+                        const localized = Utils.localizeDigits(
+                                    Number(v).toLocaleString(Qt.locale(languageManager.currentLocale), "f", 0))
+                        return v < 10
+                               ? Utils.localizeDigits("0") + localized
+                               : localized
+                    }
+                    valueFromText: function(text, locale) {
+                        return Number(Utils.asciiDigits(text)) || 0
+                    }
                     onValueModified: {
                         var d = new Date(root._value); d.setMinutes(value); root._emit(d)
                     }
@@ -245,18 +279,18 @@ Item {
                 spacing: 6
                 Controls.Button {
                     sizeType: "small"
-                    text: "Now"
+                    text: qsTr("Now")
                     onClicked: { root._emit(new Date()); root._viewYear = root._value.getFullYear(); root._viewMonth = root._value.getMonth() }
                 }
                 Controls.Button {
                     sizeType: "small"
-                    text: "Clear"
+                    text: qsTr("Clear")
                     onClicked: { root.isoValue = ""; root.edited(""); calendarPopup.close() }
                 }
                 Item { Layout.fillWidth: true }
                 Controls.Button {
                     sizeType: "small"
-                    text: "Done"
+                    text: qsTr("Done")
                     isDefault: true
                     onClicked: calendarPopup.close()
                 }

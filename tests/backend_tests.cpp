@@ -7,6 +7,7 @@ import genydl.services.github_release_service;
 import genydl.services.release_center_service;
 import genydl.services.torrent_session;
 import genydl.utils.ipfs_resolver;
+import genydl.core.language_manager;
 
 namespace utils = genydl::utils;
 namespace github = genydl::github;
@@ -47,6 +48,7 @@ private slots:
     void detectIpfsInputs();
     void parseIpfsReferenceWithSubPath();
     void buildIpfsGatewayUrl();
+    void languageCatalogContract();
 };
 
 void BackendTests::compareVersions_data()
@@ -513,6 +515,41 @@ void BackendTests::buildIpfsGatewayUrl()
     QCOMPARE(ipfs::buildGatewayUrl(QStringLiteral("https://ipfs.io"), kRawCid, QStringLiteral("a/b")),
              QStringLiteral("https://ipfs.io/ipfs/") + kRawCid + QStringLiteral("/a/b"));
     QVERIFY(!ipfs::defaultGateways().isEmpty());
+}
+
+void BackendTests::languageCatalogContract()
+{
+    LanguageManager manager;
+    const QVariantList languages = manager.availableLanguages();
+    QSet<QString> codes;
+    QHash<QString, QString> locales;
+    QHash<QString, QString> names;
+    for (const QVariant& value : languages) {
+        const QVariantMap entry = value.toMap();
+        const QString code = entry.value(QStringLiteral("code")).toString();
+        codes.insert(code);
+        locales.insert(code, entry.value(QStringLiteral("locale")).toString());
+        names.insert(code, entry.value(QStringLiteral("name")).toString());
+        QVERIFY(!names.value(code).isEmpty());
+    }
+
+    const QSet<QString> expected{
+        QStringLiteral("system"), QStringLiteral("en"), QStringLiteral("fa"),
+        QStringLiteral("ar"), QStringLiteral("tr"), QStringLiteral("de"),
+        QStringLiteral("fr"), QStringLiteral("es"), QStringLiteral("ru"),
+        QStringLiteral("zh_CN")
+    };
+    QCOMPARE(codes, expected);
+    QCOMPARE(QLocale(locales.value(QStringLiteral("fa"))).textDirection(), Qt::RightToLeft);
+    QCOMPARE(QLocale(locales.value(QStringLiteral("ar"))).textDirection(), Qt::RightToLeft);
+    QCOMPARE(QLocale(locales.value(QStringLiteral("en"))).textDirection(), Qt::LeftToRight);
+    QCOMPARE(names.value(QStringLiteral("fa")), QString::fromUtf8("فارسی"));
+    QCOMPARE(names.value(QStringLiteral("ar")), QString::fromUtf8("العربية"));
+    QCOMPARE(names.value(QStringLiteral("tr")), QString::fromUtf8("Türkçe"));
+    QCOMPARE(names.value(QStringLiteral("fr")), QString::fromUtf8("Français"));
+    QCOMPARE(names.value(QStringLiteral("es")), QString::fromUtf8("Español"));
+    QCOMPARE(names.value(QStringLiteral("ru")), QString::fromUtf8("Русский"));
+    QCOMPARE(names.value(QStringLiteral("zh_CN")), QString::fromUtf8("简体中文"));
 }
 
 QTEST_MAIN(BackendTests)

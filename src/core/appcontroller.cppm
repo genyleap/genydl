@@ -105,6 +105,9 @@ public:
      */
     Q_INVOKABLE bool showNotification(const QString& title, const QString& message);
 
+    //!< @brief Refresh tray and native UI strings after a runtime language change.
+    Q_INVOKABLE void retranslateUi();
+
 signals:
     //!< @brief Emitted when the background close policy changes.
     void keepRunningInBackgroundChanged();

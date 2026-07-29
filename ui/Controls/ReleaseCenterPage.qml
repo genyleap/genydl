@@ -36,15 +36,15 @@ Pane {
 
     // Labels + modes for the date-format selector.
     readonly property var dateFormatModes: ["relative", "datetime", "day", "month"]
-    readonly property var dateFormatLabels: ["Relative (2 hours ago)",
-                                             "Full (2026-06-05 18:23)",
-                                             "Date (May 28, 2026)",
-                                             "Month (Jun 2025)"]
+    readonly property var dateFormatLabels: [qsTr("Relative (2 hours ago)"),
+                                             qsTr("Full (2026-06-05 18:23)"),
+                                             qsTr("Date (May 28, 2026)"),
+                                             qsTr("Month (Jun 2025)")]
 
     // Check-frequency presets. Index 0 ("Manual only") disables automatic checks;
     // the rest map to an interval in hours.
-    readonly property var intervalPresetLabels: ["Manual only", "Every 6 hours",
-                                                 "Every 12 hours", "Daily", "Weekly"]
+    readonly property var intervalPresetLabels: [qsTr("Manual only"), qsTr("Every 6 hours"),
+                                                 qsTr("Every 12 hours"), qsTr("Daily"), qsTr("Weekly")]
     readonly property var intervalPresetHours: [0, 6, 12, 24, 168]
     function currentIntervalPresetIndex() {
         if (!releaseCenterService.automaticChecksEnabled) return 0
@@ -62,9 +62,9 @@ Pane {
 
     // What to do when an update is found.
     readonly property var downloadPolicyModes: ["notify", "ask", "auto"]
-    readonly property var downloadPolicyLabels: ["Notify only",
-                                                 "Ask before downloading",
-                                                 "Download automatically"]
+    readonly property var downloadPolicyLabels: [qsTr("Notify only"),
+                                                 qsTr("Ask before downloading"),
+                                                 qsTr("Download automatically")]
 
     // The page always renders in the dense layout; users switch how the cards
     // are arranged instead (a vertical list or a wrapping grid).
@@ -104,7 +104,7 @@ Pane {
     // Re-scan install/download state whenever the page is shown, so a download
     // that completed elsewhere in the app is reflected without a manual check.
     onVisibleChanged: if (visible) releaseCenterService.refreshInstallStates()
-    Component.onCompleted: releaseCenterService.refreshInstallStates()
+    Component.onCompleted: if (visible) releaseCenterService.refreshInstallStates()
 
     function statusColor(status) {
         if (status === "update_available") return Colors.secondry   // actionable -> blue
@@ -148,10 +148,10 @@ Pane {
     function formatCount(value) {
         var n = Number(value || 0)
         if (n >= 1000000)
-            return (n / 1000000).toFixed(n >= 10000000 ? 0 : 1) + "M"
+            return (n / 1000000).toLocaleString(Qt.locale(languageManager.currentLocale), "f", n >= 10000000 ? 0 : 1) + "M"
         if (n >= 1000)
-            return (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "K"
-        return String(n)
+            return (n / 1000).toLocaleString(Qt.locale(languageManager.currentLocale), "f", n >= 10000 ? 0 : 1) + "K"
+        return n.toLocaleString(Qt.locale(languageManager.currentLocale), "f", 0)
     }
 
     function ownerInitial(owner) {
@@ -163,7 +163,7 @@ Pane {
 
     // Small rotating glyph used as an inline loading indicator.
     component Spinner: Text {
-        text: ""                       // circle-notch
+        text: qsTr("")                       // circle-notch
         font.family: FontSystem.getAwesomeSolid.name
         font.weight: Font.Black
         font.pixelSize: 14
@@ -187,7 +187,7 @@ Pane {
         height: parent ? parent.height : 30
 
         Accessible.role: Accessible.RadioButton
-        Accessible.name: mode === "grid" ? "Grid view" : "List view"
+        Accessible.name: mode === "grid" ? qsTr("Grid view") : qsTr("List view")
         Accessible.checked: active
         Accessible.onPressAction: page.viewMode = mode
 
@@ -230,7 +230,7 @@ Pane {
             width: toggle.cellW - 6
             height: toggle.height - 6
             y: 3
-            x: 3 + (page.viewMode === "grid" ? toggle.cellW : 0)
+            x: 3 + ((page.viewMode === "grid") !== AppGlobals.rtl ? toggle.cellW : 0)
             radius: toggle.radius - 3
             color: Colors.backgroundFocused
             border.width: 1
@@ -369,18 +369,28 @@ Pane {
     component InfoField: RowLayout {
         property string label: ""
         property string value: ""
+        property bool localizeValueDigits: false
         spacing: 6
         Controls.Label {
+            Layout.alignment: Qt.AlignVCenter
+            LayoutMirroring.enabled: false
             text: label
             color: Colors.textMuted
             font.pixelSize: Typography.t3
+            horizontalAlignment: AppGlobals.rtl ? Text.AlignRight : Text.AlignLeft
         }
         Controls.Label {
-            text: value && value.length > 0 ? value : "--"
+            Layout.fillWidth: true
+            Layout.alignment: Qt.AlignVCenter
+            LayoutMirroring.enabled: false
+            text: value && value.length > 0
+                  ? (localizeValueDigits ? Utils.localizeDigits(value) : value)
+                  : "--"
             color: Colors.textPrimary
+            font.family: FontSystem.getContentFontRegular.name
             font.pixelSize: Typography.t3
-            elide: Text.ElideRight
-            Layout.maximumWidth: 180
+            elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
+            horizontalAlignment: AppGlobals.rtl ? Text.AlignRight : Text.AlignLeft
         }
     }
 
@@ -416,7 +426,7 @@ Pane {
                 Layout.fillWidth: true
                 text: label
                 color: fg
-                elide: Text.ElideRight
+                elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
                 font.pixelSize: page.compact ? Typography.t3 : Typography.t2
             }
         }
@@ -521,15 +531,19 @@ Pane {
                 Layout.fillWidth: true
                 spacing: 2
                 Controls.Label {
-                    text: "Release Center"
+                    LayoutMirroring.enabled: false
+                    text: qsTr("Release Center")
                     font.pixelSize: Typography.h3
                     font.bold: true
+                    horizontalAlignment: AppGlobals.rtl ? Text.AlignRight : Text.AlignLeft
                 }
                 Controls.Label {
                     Layout.fillWidth: true
-                    text: "Track public GitHub Releases and get notified when newer tags are published."
+                    LayoutMirroring.enabled: false
+                    text: qsTr("Track public GitHub Releases and get notified when newer tags are published.")
                     color: Colors.textSecondary
-                    elide: Text.ElideRight
+                    elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
+                    horizontalAlignment: AppGlobals.rtl ? Text.AlignRight : Text.AlignLeft
                 }
             }
 
@@ -541,7 +555,7 @@ Pane {
                 Behavior on opacity { NumberAnimation { duration: Animations.fast } }
                 Spinner {}
                 Controls.Label {
-                    text: "Checking for updates..."
+                    text: qsTr("Checking for updates...")
                     color: Colors.textSecondary
                 }
             }
@@ -567,20 +581,20 @@ Pane {
                     color: Colors.textSecondary
                 }
                 Accessible.role: Accessible.Button
-                Accessible.name: "Release Center settings"
+                Accessible.name: qsTr("Release Center settings")
                 HoverHandler { id: gearHover; cursorShape: Qt.PointingHandCursor }
                 TapHandler { onTapped: page.openSettings() }
-                Controls.ToolTip { text: "Release Center settings"; active: gearHover.hovered }
+                Controls.ToolTip { text: qsTr("Release Center settings"); active: gearHover.hovered }
             }
 
             Controls.Button {
-                text: releaseCenterService.loading ? "Checking..." : "Check All"
+                text: releaseCenterService.loading ? qsTr("Checking...") : qsTr("Check All")
                 enabled: !releaseCenterService.loading && releaseCenterService.apps.length > 0
                 onClicked: releaseCenterService.checkAll()
             }
 
             Controls.Button {
-                text: "Add GitHub App"
+                text: qsTr("Add GitHub App")
                 isDefault: true
                 onClicked: page.addGitHubApp()
                 Layout.preferredWidth: 150
@@ -594,7 +608,7 @@ Pane {
             glyph: String.fromCharCode(0xf127)   // link-slash
             tint: Colors.error
             back: Colors.errorBack
-            message: "You're offline. Release checks will resume when the connection is back."
+            message: qsTr("You're offline. Release checks will resume when the connection is back.")
         }
 
         // GitHub API rate-limit notice, with a quick retry.
@@ -604,7 +618,7 @@ Pane {
             tint: Colors.warning
             back: Colors.warningBack
             message: releaseCenterService.rateLimitWarning
-            actionText: "Retry"
+            actionText: qsTr("Retry")
             actionEnabled: !releaseCenterService.loading
             onAction: releaseCenterService.checkAll()
         }
@@ -616,7 +630,7 @@ Pane {
             tint: Colors.error
             back: Colors.errorBack
             message: releaseCenterService.errorMessage
-            actionText: "Retry"
+            actionText: qsTr("Retry")
             actionEnabled: !releaseCenterService.loading
             onAction: releaseCenterService.checkAll()
         }
@@ -649,7 +663,7 @@ Pane {
 
                     Controls.Label {
                         anchors.centerIn: parent
-                        text: "No apps tracked yet. Add a GitHub releases page to start watching updates."
+                        text: qsTr("No apps tracked yet. Add a GitHub releases page to start watching updates.")
                         color: Colors.textMuted
                     }
                 }
@@ -676,9 +690,10 @@ Pane {
                         // Screen-reader metadata: announce the app and its update state.
                         Accessible.role: Accessible.Button
                         Accessible.name: (modelData.displayName || modelData.repo)
-                                         + ", " + (modelData.statusText || "")
-                        Accessible.description: "Latest " + (modelData.latestTag || "unknown")
-                                                + ". Press Enter for details."
+                                         + ", " + languageManager.releaseStatusLabel(modelData.status)
+                        Accessible.description: qsTr("Latest %1. Press Enter for details.")
+                                                .arg(appRoot.formatVersionNumber(modelData.latestTag)
+                                                     || qsTr("unknown"))
                         Accessible.focusable: true
                         Accessible.onPressAction: page.showDetails(modelData)
 
@@ -729,10 +744,12 @@ Pane {
 
                                         Controls.Label {
                                             Layout.fillWidth: true
+                                            LayoutMirroring.enabled: false
                                             text: card.modelData.displayName || card.modelData.repo
                                             font.bold: true
                                             font.pixelSize: page.compact ? Typography.t1 : Typography.h4
-                                            elide: Text.ElideRight
+                                            elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
+                                            horizontalAlignment: AppGlobals.rtl ? Text.AlignRight : Text.AlignLeft
                                         }
 
                                         Rectangle {
@@ -756,7 +773,7 @@ Pane {
                                                     color: page.statusColor(card.modelData.status)
                                                 }
                                                 Controls.Label {
-                                                    text: card.modelData.statusText
+                                                    text: languageManager.releaseStatusLabel(card.modelData.status)
                                                     color: page.statusColor(card.modelData.status)
                                                     font.bold: card.modelData.status === "update_available"
                                                     font.pixelSize: page.compact ? Typography.t3 : Typography.t2
@@ -767,20 +784,24 @@ Pane {
 
                                     Controls.Label {
                                         Layout.fillWidth: true
+                                        LayoutMirroring.enabled: false
                                         text: card.modelData.owner + " / " + card.modelData.repo
                                         color: Colors.textSecondary
-                                        elide: Text.ElideRight
+                                        elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
+                                        horizontalAlignment: AppGlobals.rtl ? Text.AlignRight : Text.AlignLeft
                                     }
                                     Controls.Label {
                                         Layout.fillWidth: true
+                                        LayoutMirroring.enabled: false
                                         visible: !page.compact
                                         text: card.modelData.description && card.modelData.description.length > 0
                                               ? card.modelData.description
-                                              : "No repository description is available."
+                                              : qsTr("No repository description is available.")
                                         color: Colors.textSecondary
                                         wrapMode: Text.WordWrap
                                         maximumLineCount: 2
-                                        elide: Text.ElideRight
+                                        elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
+                                        horizontalAlignment: AppGlobals.rtl ? Text.AlignRight : Text.AlignLeft
                                     }
                                 }
                             }
@@ -823,39 +844,54 @@ Pane {
                                 LinkChip {
                                     visible: card.modelData.homepageUrl && card.modelData.homepageUrl.length > 0
                                     glyph: String.fromCharCode(0xf0ac)   // globe
-                                    label: "Official"
+                                    label: qsTr("Official")
                                     onActivated: page.openUrl(String(card.modelData.homepageUrl))
                                 }
                                 // GitHub Releases page (always available).
                                 LinkChip {
                                     glyph: String.fromCharCode(0xf02d)   // tag/releases
-                                    label: "Releases"
+                                    label: qsTr("Releases")
                                     onActivated: page.openUrl(page.releasesUrlFor(card.modelData))
                                 }
                             }
 
-                            Flow {
+                            GridLayout {
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: implicitHeight
-                                spacing: page.compact ? 16 : 24
+                                columns: page.viewMode === "grid" ? 2 : 4
+                                columnSpacing: page.compact ? 16 : 24
+                                rowSpacing: 6
+                                uniformCellWidths: true
 
                                 InfoField {
-                                    label: card.modelData.installSource === "os" ? "Installed" : "Local"
+                                    Layout.fillWidth: true
+                                    localizeValueDigits: true
+                                    label: card.modelData.installSource === "os" ? qsTr("Installed") : qsTr("Local")
                                     value: {
                                         if (card.modelData.installedVersion && card.modelData.installedVersion.length > 0)
                                             return card.modelData.installedVersion
                                                    + (card.modelData.installSource === "download" ? " (downloaded)" : "")
                                         if (card.modelData.status === "downloaded")
-                                            return "Downloaded — ready to install"
-                                        return "Not installed"
+                                            return qsTr("Downloaded — ready to install")
+                                        return qsTr("Not installed")
                                     }
                                 }
-                                InfoField { label: "Latest"; value: card.modelData.latestTag || "" }
                                 InfoField {
-                                    label: "Released"
+                                    Layout.fillWidth: true
+                                    localizeValueDigits: true
+                                    label: qsTr("Latest")
+                                    value: appRoot.formatVersionNumber(card.modelData.latestTag)
+                                }
+                                InfoField {
+                                    Layout.fillWidth: true
+                                    label: qsTr("Released on")
                                     value: Utils.formatReleaseDate(card.modelData.latestPublishedAt, page.dateFormat)
                                 }
-                                InfoField { label: "Checked"; value: card.modelData.lastCheckedText || "" }
+                                InfoField {
+                                    Layout.fillWidth: true
+                                    label: qsTr("Checked on")
+                                    value: card.modelData.lastCheckedText || ""
+                                }
                             }
 
                             // Actions wrap so they reflow inside narrow grid cards.
@@ -869,7 +905,7 @@ Pane {
                                 Controls.Button {
                                     sizeType: "small"
                                     visible: card.modelData.status === "update_available"
-                                    text: "Update"
+                                    text: qsTr("Update")
                                     style: "success"
                                     isDefault: true
                                     enabled: card.modelData.latestAssets
@@ -878,38 +914,37 @@ Pane {
                                 }
                                 Controls.Button {
                                     sizeType: "small"
-                                    text: "Check now"
+                                    text: qsTr("Check now")
                                     enabled: !releaseCenterService.loading
                                     onClicked: releaseCenterService.checkApp(card.modelData.rowIndex)
                                 }
                                 Controls.Button {
                                     sizeType: "small"
-                                    text: "Details"
+                                    text: qsTr("Details")
                                     onClicked: page.showDetails(card.modelData)
                                 }
                                 Controls.Button {
                                     sizeType: "small"
-                                    text: "View releases"
+                                    text: qsTr("View releases")
                                     onClicked: page.viewReleases(card.modelData)
                                 }
                                 Controls.Button {
                                     id: downloadAssetsBtn
                                     sizeType: "small"
-                                    text: "Download assets"
+                                    text: qsTr("Download assets")
                                     enabled: card.modelData.latestAssets && card.modelData.latestAssets.length > 0
                                     onClicked: page.downloadAssets(card.modelData)
 
                                     Controls.ToolTip {
                                         above: true
                                         active: downloadAssetsBtn.hovered && !downloadAssetsBtn.enabled
-                                        text: "The latest release has no downloadable assets. " +
-                                              "This project may publish binaries on its official site instead."
+                                        text: qsTr("The latest release has no downloadable assets. This project may publish binaries on its official site instead.")
                                     }
                                 }
                                 Controls.Button {
                                     id: markInstalledBtn
                                     sizeType: "small"
-                                    text: "Mark installed"
+                                    text: qsTr("Mark installed")
                                     // Let users record that they already have the latest version,
                                     // whether they downloaded it elsewhere or just added the repo.
                                     enabled: card.modelData.status === "update_available"
@@ -920,12 +955,12 @@ Pane {
                                     Controls.ToolTip {
                                         above: true
                                         active: markInstalledBtn.hovered && markInstalledBtn.enabled
-                                        text: "Mark the latest release as the version you have installed."
+                                        text: qsTr("Mark the latest release as the version you have installed.")
                                     }
                                 }
                                 Controls.Button {
                                     sizeType: "small"
-                                    text: "Remove"
+                                    text: qsTr("Remove")
                                     style: "danger"
                                     onClicked: releaseCenterService.removeApp(card.modelData.rowIndex)
                                 }
@@ -933,12 +968,12 @@ Pane {
                                 Item { width: 8; height: 1 }
 
                                 Controls.Switch {
-                                    text: "Prereleases"
+                                    text: qsTr("Prereleases")
                                     checked: card.modelData.includePrereleases === true
                                     onToggled: releaseCenterService.setAppIncludePrereleases(card.modelData.rowIndex, checked)
                                 }
                                 Controls.Switch {
-                                    text: "Auto"
+                                    text: qsTr("Auto")
                                     checked: card.modelData.autoCheckEnabled === true
                                     onToggled: releaseCenterService.setAppAutoCheckEnabled(card.modelData.rowIndex, checked)
                                 }
@@ -949,7 +984,7 @@ Pane {
                                 visible: card.modelData.errorMessage && card.modelData.errorMessage.length > 0
                                 text: card.modelData.errorMessage || ""
                                 color: Colors.error
-                                elide: Text.ElideRight
+                                elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
                             }
                         }
 

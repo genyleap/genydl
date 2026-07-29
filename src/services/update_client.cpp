@@ -131,9 +131,9 @@ static bool startUpdaterHelperDetached(const QString& helperPath, const QString&
                       SW_SHOWNORMAL)));
     if (rc <= 32) {
         if (errorOut) {
-            *errorOut = (rc == 1223)
-                ? QStringLiteral("Administrator permission was denied.")
-                : QStringLiteral("Failed to launch updater helper (code %1).").arg(rc);
+            *errorOut = QCoreApplication::translate("UpdateClient", "Failed to launch updater helper");
+            if (rc != 1223)
+                errorOut->append(QStringLiteral(" [%1]").arg(rc));
         }
         return false;
     }
@@ -141,7 +141,7 @@ static bool startUpdaterHelperDetached(const QString& helperPath, const QString&
 #else
     const bool launched = QProcess::startDetached(helperPath, {QStringLiteral("--job"), jobPath});
     if (!launched && errorOut) {
-        *errorOut = QStringLiteral("Failed to launch updater helper.");
+        *errorOut = QCoreApplication::translate("UpdateClient", "Failed to launch updater helper");
     }
     return launched;
 #endif
@@ -260,8 +260,8 @@ void UpdateClient::setPublicKeyPath(const QString& path)
 void UpdateClient::checkNow()
 {
     if (m_downloadReply) {
-        setStatus(QStringLiteral("Updater busy"));
-        setError(QStringLiteral("A download is already in progress"));
+        setStatus(tr("Updater busy"));
+        setError(tr("A download is already in progress"));
         return;
     }
     if (m_activeReply) {
@@ -272,7 +272,7 @@ void UpdateClient::checkNow()
     }
     resetUpdateInfo();
     setError(QString());
-    setStatus(QStringLiteral("Checking for updates..."));
+    setStatus(tr("Checking for updates..."));
 
     const QString pref = m_sourcePreference.toLower();
     if (pref == QStringLiteral("github")) {
@@ -280,8 +280,8 @@ void UpdateClient::checkNow()
             checkGitHubReleases();
             return;
         }
-        setStatus(QStringLiteral("Configure update sources"));
-        setError(QStringLiteral("GitHub repo not configured"));
+        setStatus(tr("Configure update sources"));
+        setError(tr("GitHub repo not configured"));
         return;
     }
     if (pref == QStringLiteral("website")) {
@@ -289,8 +289,8 @@ void UpdateClient::checkNow()
             checkWebsiteManifest();
             return;
         }
-        setStatus(QStringLiteral("Configure update sources"));
-        setError(QStringLiteral("Manifest URL not configured"));
+        setStatus(tr("Configure update sources"));
+        setError(tr("Manifest URL not configured"));
         return;
     }
 
@@ -303,14 +303,14 @@ void UpdateClient::checkNow()
         return;
     }
 
-    setStatus(QStringLiteral("Configure update sources"));
-    setError(QStringLiteral("No update source configured"));
+    setStatus(tr("Configure update sources"));
+    setError(tr("No update source configured"));
 }
 
 void UpdateClient::downloadUpdate()
 {
     if (m_downloadUrl.isEmpty()) {
-        setError(QStringLiteral("No download URL"));
+        setError(tr("No download URL"));
         return;
     }
     if (m_downloadReply) {
@@ -329,7 +329,7 @@ void UpdateClient::downloadUpdate()
         m_signatureVerified = false;
         emit signatureVerificationChanged();
     }
-    setStatus(QStringLiteral("Downloading update..."));
+    setStatus(tr("Downloading update..."));
 
     const QString fileName = pickFileNameFromUrl(m_downloadUrl);
     QString baseDir = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
@@ -343,8 +343,8 @@ void UpdateClient::downloadUpdate()
     }
     m_downloadFile = new QFile(targetPath, this);
     if (!m_downloadFile->open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        setStatus(QStringLiteral("Download failed"));
-        setError(QStringLiteral("Failed to open file for download"));
+        setStatus(tr("Download failed"));
+        setError(tr("Failed to open file for download"));
         m_downloadFile->deleteLater();
         m_downloadFile = nullptr;
         return;
@@ -395,7 +395,7 @@ void UpdateClient::downloadUpdate()
         }
         if (!ok) {
             QFile::remove(targetPath);
-            setStatus(QStringLiteral("Download failed"));
+            setStatus(tr("Download failed"));
             setError(err);
             return;
         }
@@ -406,18 +406,18 @@ void UpdateClient::downloadUpdate()
         QString verifyError;
         if (!verifyDownloadedPayload(targetPath, &verifyError)) {
             QFile::remove(targetPath);
-            setStatus(QStringLiteral("Verification failed"));
-            setError(verifyError.isEmpty() ? QStringLiteral("Downloaded payload verification failed") : verifyError);
+            setStatus(tr("Verification failed"));
+            setError(verifyError.isEmpty() ? tr("Downloaded payload verification failed") : verifyError);
             return;
         }
         m_downloadedPath = targetPath;
         emit downloadReadyChanged();
         if (m_expectedSha256.trimmed().isEmpty()) {
-            setStatus(QStringLiteral("Update downloaded, but release checksum is missing"));
+            setStatus(tr("Update downloaded, but release checksum is missing"));
         } else if (m_requireSignature && m_signatureVerified) {
-            setStatus(QStringLiteral("Update downloaded and verified"));
+            setStatus(tr("Update downloaded and verified"));
         } else {
-            setStatus(QStringLiteral("Update downloaded"));
+            setStatus(tr("Update downloaded"));
         }
     });
 }
@@ -426,60 +426,60 @@ void UpdateClient::installUpdate()
 {
     const QString path = m_downloadedPath.trimmed();
     if (path.isEmpty() || !QFileInfo::exists(path)) {
-        setError(QStringLiteral("Downloaded update file was not found"));
-        setStatus(QStringLiteral("Install failed"));
+        setError(tr("Downloaded update file was not found"));
+        setStatus(tr("Install failed"));
         return;
     }
     if (m_requireSignature && !m_signatureVerified) {
-        setError(QStringLiteral("Signature verification is required before install"));
-        setStatus(QStringLiteral("Verification required"));
+        setError(tr("Signature verification is required before install"));
+        setStatus(tr("Verification required"));
         return;
     }
 
     const QString currentExe = QCoreApplication::applicationFilePath();
     if (!isSelfInstallSupportedAsset(currentExe, path)) {
         setError(QString());
-        setStatus(QStringLiteral("Opening installer..."));
+        setStatus(tr("Opening installer..."));
         if (!QDesktopServices::openUrl(QUrl::fromLocalFile(path))) {
-            setError(QStringLiteral("Failed to open installer"));
-            setStatus(QStringLiteral("Install failed"));
+            setError(tr("Failed to open installer"));
+            setStatus(tr("Install failed"));
         }
         return;
     }
 
     const QString expectedSha256 = utils::normalizeChecksum(m_expectedSha256);
     if (utils::detectChecksumAlgo(expectedSha256) != QStringLiteral("SHA256")) {
-        setError(QStringLiteral("Release does not provide trusted SHA-256 metadata for this asset"));
-        setStatus(QStringLiteral("Install blocked"));
+        setError(tr("Release does not provide trusted SHA-256 metadata for this asset"));
+        setStatus(tr("Install blocked"));
         return;
     }
 
     const QString downloadedHash = utils::normalizeChecksum(sha256ForFile(path));
     if (downloadedHash.isEmpty() || downloadedHash != expectedSha256) {
-        setError(QStringLiteral("Downloaded update hash verification failed"));
-        setStatus(QStringLiteral("Install failed"));
+        setError(tr("Downloaded update hash verification failed"));
+        setStatus(tr("Install failed"));
         return;
     }
 
     const QString helperPath = appUpdaterHelperPath();
     if (!QFileInfo::exists(helperPath)) {
-        setError(QStringLiteral("Updater helper executable not found"));
-        setStatus(QStringLiteral("Install failed"));
+        setError(tr("Updater helper executable not found"));
+        setStatus(tr("Install failed"));
         return;
     }
 
     const QString updatesDir = updatesDirPath();
     if (updatesDir.trimmed().isEmpty()) {
-        setError(QStringLiteral("Could not resolve update workspace"));
-        setStatus(QStringLiteral("Install failed"));
+        setError(tr("Could not resolve update workspace"));
+        setStatus(tr("Install failed"));
         return;
     }
     QDir().mkpath(updatesDir);
 
     const QString stagedPath = QDir(updatesDir).filePath(QStringLiteral("staged-%1").arg(QFileInfo(path).fileName()));
     if (!copyWithOverwrite(path, stagedPath)) {
-        setError(QStringLiteral("Failed to stage update file"));
-        setStatus(QStringLiteral("Install failed"));
+        setError(tr("Failed to stage update file"));
+        setStatus(tr("Install failed"));
         return;
     }
 
@@ -501,8 +501,8 @@ void UpdateClient::installUpdate()
     QFile jobFile(jobPath);
     if (!jobFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         QFile::remove(stagedPath);
-        setError(QStringLiteral("Failed to write update job file"));
-        setStatus(QStringLiteral("Install failed"));
+        setError(tr("Failed to write update job file"));
+        setStatus(tr("Install failed"));
         return;
     }
     jobFile.write(QJsonDocument(job).toJson(QJsonDocument::Indented));
@@ -512,13 +512,13 @@ void UpdateClient::installUpdate()
     if (!startUpdaterHelperDetached(helperPath, jobPath, &launchError)) {
         QFile::remove(jobPath);
         QFile::remove(stagedPath);
-        setError(launchError.isEmpty() ? QStringLiteral("Failed to launch updater helper") : launchError);
-        setStatus(QStringLiteral("Install failed"));
+        setError(launchError.isEmpty() ? tr("Failed to launch updater helper") : launchError);
+        setStatus(tr("Install failed"));
         return;
     }
 
     setError(QString());
-    setStatus(QStringLiteral("Installing update and restarting..."));
+    setStatus(tr("Installing update and restarting..."));
     QTimer::singleShot(250, []() { QCoreApplication::quit(); });
 }
 
@@ -569,7 +569,7 @@ void UpdateClient::resetSettingsToDefaults()
 
     resetUpdateInfo();
     setError(QString());
-    setStatus(QStringLiteral("Update settings restored to defaults"));
+    setStatus(tr("Update settings restored to defaults"));
 
     emit channelChanged();
     emit autoCheckChanged();
@@ -653,14 +653,17 @@ void UpdateClient::consumePendingUpdateStatus()
     const QJsonObject root = doc.object();
     const bool ok = root.value(QStringLiteral("ok")).toBool(false);
     const QString message = root.value(QStringLiteral("message")).toString().trimmed();
+    const QString localizedMessage = message == QLatin1String("Update applied successfully.")
+        ? tr("Update applied successfully")
+        : message;
     if (ok) {
         setError(QString());
-        setStatus(message.isEmpty()
-                      ? QStringLiteral("Update applied successfully")
-                      : QStringLiteral("Update: %1").arg(message));
+        setStatus(localizedMessage.isEmpty()
+                      ? tr("Update applied successfully")
+                      : tr("Update: %1").arg(localizedMessage));
     } else {
-        setError(message.isEmpty() ? QStringLiteral("Updater helper failed") : message);
-        setStatus(QStringLiteral("Install failed"));
+        setError(message.isEmpty() ? tr("Updater helper failed") : message);
+        setStatus(tr("Install failed"));
     }
 
     for (const QFileInfo& fileInfo : statusFiles) {
@@ -709,7 +712,7 @@ void UpdateClient::maybeAutoCheck()
 
 void UpdateClient::checkWebsiteManifest()
 {
-    setStatus(QStringLiteral("Checking website manifest..."));
+    setStatus(tr("Checking website manifest..."));
     QNetworkRequest req{QUrl(m_manifestUrl)};
     req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
     req.setTransferTimeout(12000);
@@ -730,8 +733,8 @@ void UpdateClient::checkWebsiteManifest()
                 checkGitHubReleases();
                 return;
             }
-            setStatus(QStringLiteral("Failed to fetch manifest"));
-            setError(QStringLiteral("Manifest request failed"));
+            setStatus(tr("Failed to fetch manifest"));
+            setError(tr("Manifest request failed"));
             return;
         }
         QJsonParseError err;
@@ -741,8 +744,8 @@ void UpdateClient::checkWebsiteManifest()
                 checkGitHubReleases();
                 return;
             }
-            setStatus(QStringLiteral("Invalid manifest"));
-            setError(QStringLiteral("Manifest parse error"));
+            setStatus(tr("Invalid manifest"));
+            setError(tr("Manifest parse error"));
             return;
         }
         handleManifestJson(doc);
@@ -751,7 +754,7 @@ void UpdateClient::checkWebsiteManifest()
 
 void UpdateClient::checkGitHubReleases()
 {
-    setStatus(QStringLiteral("Checking GitHub releases..."));
+    setStatus(tr("Checking GitHub releases..."));
     const bool allowPrerelease = (m_channel.toLower() == QStringLiteral("beta"));
     QString url;
     if (allowPrerelease) {
@@ -776,15 +779,15 @@ void UpdateClient::checkGitHubReleases()
         reply->deleteLater();
         m_activeReply = nullptr;
         if (!ok) {
-            setStatus(QStringLiteral("Failed to fetch GitHub releases"));
-            setError(QStringLiteral("GitHub request failed"));
+            setStatus(tr("Failed to fetch GitHub releases"));
+            setError(tr("GitHub request failed"));
             return;
         }
         QJsonParseError err;
         QJsonDocument doc = QJsonDocument::fromJson(data, &err);
         if (err.error != QJsonParseError::NoError) {
-            setStatus(QStringLiteral("Invalid GitHub response"));
-            setError(QStringLiteral("GitHub parse error"));
+            setStatus(tr("Invalid GitHub response"));
+            setError(tr("GitHub parse error"));
             return;
         }
         handleGitHubJson(doc, allowPrerelease);
@@ -842,7 +845,7 @@ void UpdateClient::handleManifestJson(const QJsonDocument& doc)
         emit updateInfoChanged();
 
         if (version.isEmpty() || assetUrl.isEmpty()) {
-            setStatus(QStringLiteral("No update available"));
+            setStatus(tr("No update available"));
             return;
         }
 
@@ -850,17 +853,17 @@ void UpdateClient::handleManifestJson(const QJsonDocument& doc)
         m_updateAvailable = (cmp < 0);
         emit updateAvailableChanged();
         if (m_updateAvailable && m_expectedSha256.trimmed().isEmpty()) {
-            setStatus(QStringLiteral("Update available, but checksum metadata is missing"));
+            setStatus(tr("Update available, but checksum metadata is missing"));
         } else {
-            setStatus(m_updateAvailable ? QStringLiteral("Update available") : QStringLiteral("Up to date"));
+            setStatus(m_updateAvailable ? tr("Update available") : tr("Up to date"));
         }
         if (m_updateAvailable && m_updateMode == QStringLiteral("automatic")) {
             downloadUpdate();
         }
         return;
     }
-    setStatus(QStringLiteral("Invalid manifest format"));
-    setError(QStringLiteral("Manifest format error"));
+    setStatus(tr("Invalid manifest format"));
+    setError(tr("Manifest format error"));
 }
 
 void UpdateClient::handleGitHubJson(const QJsonDocument& doc, bool allowPrerelease)
@@ -883,7 +886,7 @@ void UpdateClient::handleGitHubJson(const QJsonDocument& doc, bool allowPrerelea
     }
 
     if (rel.isEmpty()) {
-        setStatus(QStringLiteral("No releases found"));
+        setStatus(tr("No releases found"));
         return;
     }
 
@@ -912,7 +915,7 @@ void UpdateClient::handleGitHubJson(const QJsonDocument& doc, bool allowPrerelea
     emit updateInfoChanged();
 
     if (version.isEmpty() || assetUrl.isEmpty()) {
-        setStatus(QStringLiteral("No compatible assets"));
+        setStatus(tr("No compatible assets"));
         return;
     }
 
@@ -920,9 +923,9 @@ void UpdateClient::handleGitHubJson(const QJsonDocument& doc, bool allowPrerelea
     m_updateAvailable = (cmp < 0);
     emit updateAvailableChanged();
     if (m_updateAvailable && m_expectedSha256.trimmed().isEmpty()) {
-        setStatus(QStringLiteral("Update available, but checksum metadata is missing"));
+        setStatus(tr("Update available, but checksum metadata is missing"));
     } else {
-        setStatus(m_updateAvailable ? QStringLiteral("Update available") : QStringLiteral("Up to date"));
+        setStatus(m_updateAvailable ? tr("Update available") : tr("Up to date"));
     }
     if (m_updateAvailable && m_updateMode == QStringLiteral("automatic")) {
         downloadUpdate();
@@ -1113,7 +1116,7 @@ QByteArray UpdateClient::fetchRemoteBytes(const QString& url, QString* errorOut)
 {
     const QString trimmedUrl = url.trimmed();
     if (trimmedUrl.isEmpty()) {
-        if (errorOut) *errorOut = QStringLiteral("Remote URL is empty");
+        if (errorOut) *errorOut = tr("Remote URL is empty");
         return {};
     }
 
@@ -1133,13 +1136,13 @@ QByteArray UpdateClient::fetchRemoteBytes(const QString& url, QString* errorOut)
 
     if (!timeout.isActive() && reply && !reply->isFinished()) {
         reply->abort();
-        if (errorOut) *errorOut = QStringLiteral("Remote request timed out");
+        if (errorOut) *errorOut = tr("Remote request timed out");
         reply->deleteLater();
         return {};
     }
 
     if (!reply) {
-        if (errorOut) *errorOut = QStringLiteral("Remote request failed");
+        if (errorOut) *errorOut = tr("Remote request failed");
         return {};
     }
 
@@ -1148,7 +1151,7 @@ QByteArray UpdateClient::fetchRemoteBytes(const QString& url, QString* errorOut)
     const QByteArray data = reply->readAll();
     reply->deleteLater();
     if (!ok) {
-        if (errorOut) *errorOut = err.isEmpty() ? QStringLiteral("Remote request failed") : err;
+        if (errorOut) *errorOut = err.isEmpty() ? tr("Remote request failed") : err;
         return {};
     }
     return data;
@@ -1232,19 +1235,19 @@ bool UpdateClient::verifySignatureWithOpenSsl(const QString& payloadPath,
                    << signaturePath
                    << payloadPath);
     if (!proc.waitForFinished(20000)) {
-        if (errorOut) *errorOut = QStringLiteral("OpenSSL verify timed out");
+        if (errorOut) *errorOut = tr("OpenSSL verify timed out");
         proc.kill();
         return false;
     }
     const QString stdOut = QString::fromUtf8(proc.readAllStandardOutput());
     const QString stdErr = QString::fromUtf8(proc.readAllStandardError());
     if (proc.exitCode() != 0) {
-        if (errorOut) *errorOut = stdErr.isEmpty() ? QStringLiteral("OpenSSL verification failed") : stdErr.trimmed();
+        if (errorOut) *errorOut = stdErr.isEmpty() ? tr("OpenSSL verification failed") : stdErr.trimmed();
         return false;
     }
     if (!stdOut.contains(QStringLiteral("Verified OK"), Qt::CaseInsensitive) &&
         !stdErr.contains(QStringLiteral("Verified OK"), Qt::CaseInsensitive)) {
-        if (errorOut) *errorOut = QStringLiteral("Signature verification did not return success");
+        if (errorOut) *errorOut = tr("Signature verification did not return success");
         return false;
     }
     return true;
@@ -1256,12 +1259,12 @@ bool UpdateClient::verifyDownloadedPayload(const QString& payloadPath, QString* 
     if (!expected.isEmpty()) {
         const QString actual = utils::normalizeChecksum(sha256ForFile(payloadPath));
         if (actual.isEmpty()) {
-            if (errorOut) *errorOut = QStringLiteral("Failed to compute SHA-256");
+            if (errorOut) *errorOut = tr("Failed to compute SHA-256");
             return false;
         }
         if (actual != expected) {
             if (errorOut) {
-                *errorOut = QStringLiteral("SHA-256 mismatch (expected %1, got %2)")
+                *errorOut = tr("SHA-256 mismatch (expected %1, got %2)")
                                 .arg(expected, actual);
             }
             return false;
@@ -1271,15 +1274,15 @@ bool UpdateClient::verifyDownloadedPayload(const QString& payloadPath, QString* 
     bool nextSignatureVerified = false;
     if (m_requireSignature) {
         if (m_publicKeyPath.trimmed().isEmpty()) {
-            if (errorOut) *errorOut = QStringLiteral("Public key path is required for signature verification");
+            if (errorOut) *errorOut = tr("Public key path is required for signature verification");
             return false;
         }
         if (m_signatureUrl.trimmed().isEmpty()) {
-            if (errorOut) *errorOut = QStringLiteral("Detached signature URL is required");
+            if (errorOut) *errorOut = tr("Detached signature URL is required");
             return false;
         }
         if (!QFile::exists(m_publicKeyPath)) {
-            if (errorOut) *errorOut = QStringLiteral("Public key file not found");
+            if (errorOut) *errorOut = tr("Public key file not found");
             return false;
         }
 
@@ -1288,7 +1291,7 @@ bool UpdateClient::verifyDownloadedPayload(const QString& payloadPath, QString* 
         if (sigData.isEmpty()) {
             if (errorOut) {
                 *errorOut = fetchError.isEmpty()
-                    ? QStringLiteral("Signature file is empty")
+                    ? tr("Signature file is empty")
                     : fetchError;
             }
             return false;
@@ -1297,7 +1300,7 @@ bool UpdateClient::verifyDownloadedPayload(const QString& payloadPath, QString* 
         QTemporaryFile sigTmp(QDir::tempPath() + QStringLiteral("/genydl-signature-XXXXXX.sig"));
         sigTmp.setAutoRemove(true);
         if (!sigTmp.open()) {
-            if (errorOut) *errorOut = QStringLiteral("Cannot create temporary signature file");
+            if (errorOut) *errorOut = tr("Cannot create temporary signature file");
             return false;
         }
         sigTmp.write(sigData);

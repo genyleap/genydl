@@ -25,8 +25,8 @@ set(PROJECT_REAL_NAME "GenyDL")
 set(APP_NAME "${PROJECT_REAL_NAME}")
 
 set(PROJECT_VERSION_MAJOR 1)
-set(PROJECT_VERSION_MINOR 0)
-set(PROJECT_VERSION_PATCH 0)
+set(PROJECT_VERSION_MINOR 2)
+set(PROJECT_VERSION_PATCH 200)
 set(PROJECT_VERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH}")
 
 # -------------------------
@@ -451,6 +451,7 @@ find_package(Qt6 6.9 REQUIRED COMPONENTS
     Core
     Quick
     QuickControls2
+    LinguistTools
     Network
     Concurrent
     Gui
@@ -536,6 +537,7 @@ endfunction()
 # -------------------------
 set(GENYDL_MODULE_IFS
     src/ui/tray_icon_provider.cppm
+    src/core/language_manager.cppm
     src/core/appcontroller.cppm
     src/core/downloadertask.cppm
     src/core/torrenttask.cppm
@@ -555,6 +557,7 @@ set(GENYDL_MODULE_IFS
 
 set(GENYDL_IMPL_SOURCES
     src/ui/tray_icon_provider.cpp
+    src/core/language_manager.cpp
     src/core/appcontroller.cpp
     src/core/downloadertask.cpp
     src/core/torrenttask.cpp
@@ -766,6 +769,11 @@ set(qml_resource_files
     resources/fonts/Inter-Bold.ttf
     resources/fonts/Inter-ExtraBold.ttf
     resources/fonts/Inter-Black.ttf
+    resources/fonts/Vazirmatn-Regular.ttf
+    resources/fonts/Vazirmatn-Medium.ttf
+    resources/fonts/Vazirmatn-SemiBold.ttf
+    resources/fonts/Vazirmatn-Bold.ttf
+    resources/fonts/Vazirmatn-OFL.txt
 
     "resources/fonts/Font Awesome 7 Brands-Regular-400.otf"
     "resources/fonts/Font Awesome 7 Free-Regular-400.otf"
@@ -801,6 +809,37 @@ qt_add_qml_module(${APP_NAME}
         ${qml_module_resources_existing}
     SOURCES
         ${GENYDL_IMPL_SOURCES}
+)
+
+# -------------------------
+# Internationalization
+# -------------------------
+# English is the source language. Compiled catalogs are embedded in the
+# application under :/i18n so every platform uses the same deployment path.
+set(GENYDL_TRANSLATION_FILES
+    translations/genydl_fa.ts
+    translations/genydl_ar.ts
+    translations/genydl_tr.ts
+    translations/genydl_de.ts
+    translations/genydl_fr.ts
+    translations/genydl_es.ts
+    translations/genydl_ru.ts
+    translations/genydl_zh_CN.ts
+)
+
+# Binary assets and license files do not contain user-interface source text.
+# Keeping them out of lupdate avoids parser noise and makes catalog updates
+# deterministic as new resources are added.
+set_property(TARGET ${APP_NAME} PROPERTY
+    QT_EXCLUDE_SOURCES_FROM_TRANSLATION "resources"
+)
+
+qt_add_translations(${APP_NAME}
+    TS_FILES ${GENYDL_TRANSLATION_FILES}
+    RESOURCE_PREFIX "/i18n"
+    LUPDATE_OPTIONS
+        -locations relative
+        -no-obsolete
 )
 
 target_sources(${APP_NAME}
@@ -879,7 +918,7 @@ target_include_directories(${APP_NAME}
 if(GENYDL_BUILD_TESTS)
     enable_testing()
 
-    find_package(Qt6 6.9 REQUIRED COMPONENTS Core Test Gui Network Concurrent Widgets)
+    find_package(Qt6 6.9 REQUIRED COMPONENTS Core Test Qml Gui Network Concurrent Widgets)
 
     qt_add_executable(genydl_backend_tests
         tests/backend_tests.cpp
@@ -901,6 +940,7 @@ if(GENYDL_BUILD_TESTS)
         PRIVATE
             Qt6::Core
             Qt6::Test
+            Qt6::Qml
             Qt6::Network
             Qt6::Concurrent
             Qt6::Gui

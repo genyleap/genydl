@@ -120,15 +120,15 @@ QVariant DownloadModel::headerData(int section, Qt::Orientation orientation, int
 
     switch (section) {
     case SelectColumn: return QString();
-    case NameColumn: return QStringLiteral("Name");
-    case QueueColumn: return QStringLiteral("Queue");
-    case SizeColumn: return QStringLiteral("Size");
-    case StatusColumn: return QStringLiteral("Status");
-    case EtaColumn: return QStringLiteral("Time Left");
-    case SpeedColumn: return QStringLiteral("Speed");
-    case SegmentsColumn: return QStringLiteral("Seg");
-    case CategoryColumn: return QStringLiteral("Category");
-    case ActionsColumn: return QStringLiteral("Actions");
+    case NameColumn: return tr("Name");
+    case QueueColumn: return tr("Queue");
+    case SizeColumn: return tr("Size");
+    case StatusColumn: return tr("Status");
+    case EtaColumn: return tr("Time Left");
+    case SpeedColumn: return tr("Speed");
+    case SegmentsColumn: return tr("Seg");
+    case CategoryColumn: return tr("Category");
+    case ActionsColumn: return tr("Actions");
     default: return {};
     }
 }

@@ -18,7 +18,8 @@ import GenyDL
 T.CheckBox {
     id: control
 
-    implicitWidth: Math.max(22 + (contentItem.visible ? contentItem.implicitWidth + spacing : 0), 22)
+    implicitWidth: Math.max(22 + (control.text.length > 0
+                                 ? checkLabelMetrics.width + spacing : 0), 22)
     implicitHeight: Math.max(22, contentItem.implicitHeight)
 
     spacing: 10
@@ -26,6 +27,12 @@ T.CheckBox {
     hoverEnabled: true
     focusPolicy: Qt.StrongFocus
     font.pixelSize: Typography.t2
+
+    TextMetrics {
+        id: checkLabelMetrics
+        font: control.font
+        text: control.text
+    }
 
     indicator: Rectangle {
         id: backgroundCheck
@@ -61,7 +68,7 @@ T.CheckBox {
 
         QQ.Text {
             anchors.centerIn: parent
-            text: "\u2713"
+            text: qsTr("\u2713")
             font.pixelSize: Typography.t2
             font.weight: Font.DemiBold
             color: Colors.secondry
@@ -95,10 +102,11 @@ T.CheckBox {
         text: control.text
         font: control.font
         visible: text.length > 0
-        leftPadding: control.indicator.width + control.spacing
-        rightPadding: 0
+        leftPadding: AppGlobals.rtl ? 0 : control.indicator.width + control.spacing
+        rightPadding: AppGlobals.rtl ? control.indicator.width + control.spacing : 0
+        horizontalAlignment: QQ.Text.AlignLeading
         verticalAlignment: QQ.Text.AlignVCenter
-        elide: QQ.Text.ElideRight
+        elide: AppGlobals.rtl ? QQ.Text.ElideLeft : QQ.Text.ElideRight
         color: control.enabled ? Colors.primary : Colors.textMuted
     }
 

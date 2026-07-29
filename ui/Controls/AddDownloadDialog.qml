@@ -53,14 +53,14 @@ Card {
             TextField {
                 id: urlField
                 Layout.fillWidth: true
-                placeholderText: "URL, magnet:, .torrent, or ipfs:// / CID"
+                placeholderText: qsTr("URL, magnet:, .torrent, or ipfs:// / CID")
             }
 
             TextField {
                 id: pathField
                 Layout.preferredWidth: 360
                 text: root.defaultPath
-                placeholderText: "Destination folder"
+                placeholderText: qsTr("Destination folder")
             }
         }
 
@@ -78,6 +78,8 @@ Card {
                 id: categoryBox
                 Layout.preferredWidth: 146
                 model: root.categoryModel
+                textRole: "text"
+                valueRole: "id"
             }
 
             ComboBox {
@@ -89,19 +91,19 @@ Card {
 
             Switch {
                 id: adaptiveSwitch
-                text: "Adaptive segments"
+                text: qsTr("Adaptive segments")
                 checked: true
             }
 
             Switch {
                 id: pausedSwitch
-                text: "Start paused"
+                text: qsTr("Start paused")
             }
 
             Item { Layout.fillWidth: true }
 
             Button {
-                text: "Add download"
+                text: qsTr("Add download")
                 variant: "primary"
                 emphasize: true
                 enabled: urlField.text.trim().length > 0
@@ -110,7 +112,7 @@ Card {
                     if (!q || q.length === 0) {
                         q = "General"
                     }
-                    var c = categoryBox.currentText
+                    var c = categoryBox.currentValue
                     if (!c || c.length === 0) {
                         c = "Auto"
                     }
@@ -130,8 +132,8 @@ Card {
             Layout.fillWidth: true
             role: "micro"
             tone: "muted"
-            text: "Segment guidance: 4-8 normal, 8-16 fast links, 16-32 high-throughput CDN/SSD."
-            elide: Text.ElideRight
+            text: qsTr("Segment guidance: 4-8 normal, 8-16 fast links, 16-32 high-throughput CDN/SSD.")
+            elide: Core.AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
         }
 
         Label {
@@ -139,7 +141,7 @@ Card {
             role: "micro"
             tone: "muted"
             wrapMode: Text.Wrap
-            text: "Adaptive note: ON = segment count can change dynamically during download. OFF = segment count remains fixed to the value you set."
+            text: qsTr("Adaptive note: ON = segment count can change dynamically during download. OFF = segment count remains fixed to the value you set.")
         }
     }
 }

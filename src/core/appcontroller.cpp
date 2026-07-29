@@ -101,10 +101,10 @@ bool AppController::requestWindowClose(bool hasActiveDownloads)
         if (trayAvailable()) {
             QMetaObject::invokeMethod(this, [this, hasActiveDownloads]() {
                 hideMainWindow();
-                postTrayMessage(QStringLiteral("GenyDL is still running"),
+                postTrayMessage(tr("GenyDL is still running"),
                                 hasActiveDownloads
-                                    ? QStringLiteral("Downloads continue in the background.")
-                                    : QStringLiteral("Use the tray icon to restore or exit."),
+                                    ? tr("Downloads continue in the background.")
+                                    : tr("Use the tray icon to restore or exit."),
                                 3000);
             }, Qt::QueuedConnection);
         } else {
@@ -195,26 +195,38 @@ void AppController::postTrayMessage(const QString& title, const QString& message
 void AppController::setupTray()
 {
     m_trayMenu = new QMenu();
-    m_showHideAction = m_trayMenu->addAction(QStringLiteral("Show GenyDL"));
+    m_showHideAction = m_trayMenu->addAction(tr("Show GenyDL"));
+#ifdef Q_OS_MACOS
+    m_showHideAction->setIconVisibleInMenu(false);
+#endif
     connect(m_showHideAction, &QAction::triggered, this, &AppController::toggleMainWindow);
 
     m_trayMenu->addSeparator();
-    m_startAllAction = m_trayMenu->addAction(QStringLiteral("Start All"));
+    m_startAllAction = m_trayMenu->addAction(tr("Start All"));
+#ifdef Q_OS_MACOS
+    m_startAllAction->setIconVisibleInMenu(false);
+#endif
     connect(m_startAllAction, &QAction::triggered, this, [this]() {
         invokeDownloadManager("resumeAll");
     });
 
-    m_pauseAllAction = m_trayMenu->addAction(QStringLiteral("Pause All"));
+    m_pauseAllAction = m_trayMenu->addAction(tr("Pause All"));
+#ifdef Q_OS_MACOS
+    m_pauseAllAction->setIconVisibleInMenu(false);
+#endif
     connect(m_pauseAllAction, &QAction::triggered, this, [this]() {
         invokeDownloadManager("pauseAll");
     });
 
     m_trayMenu->addSeparator();
-    m_exitAction = m_trayMenu->addAction(QStringLiteral("Exit"));
+    m_exitAction = m_trayMenu->addAction(tr("Exit"));
+#ifdef Q_OS_MACOS
+    m_exitAction->setIconVisibleInMenu(false);
+#endif
     connect(m_exitAction, &QAction::triggered, this, &AppController::quitApplication);
 
     m_trayIcon = new QSystemTrayIcon(genydl::ui::createTrayIcon(), this);
-    m_trayIcon->setToolTip(QStringLiteral("GenyDL Download Manager"));
+    m_trayIcon->setToolTip(tr("GenyDL Download Manager"));
     m_trayIcon->setContextMenu(m_trayMenu);
     connect(m_trayIcon, &QSystemTrayIcon::activated, this, [this](QSystemTrayIcon::ActivationReason reason) {
         if (reason == QSystemTrayIcon::Trigger || reason == QSystemTrayIcon::DoubleClick) {
@@ -236,8 +248,17 @@ void AppController::updateTrayActions()
 {
     if (!m_showHideAction) return;
     m_showHideAction->setText(mainWindowVisible()
-                                  ? QStringLiteral("Hide GenyDL")
-                                  : QStringLiteral("Show GenyDL"));
+                                  ? tr("Hide GenyDL")
+                                  : tr("Show GenyDL"));
+}
+
+void AppController::retranslateUi()
+{
+    updateTrayActions();
+    if (m_startAllAction) m_startAllAction->setText(tr("Start All"));
+    if (m_pauseAllAction) m_pauseAllAction->setText(tr("Pause All"));
+    if (m_exitAction) m_exitAction->setText(tr("Exit"));
+    if (m_trayIcon) m_trayIcon->setToolTip(tr("GenyDL Download Manager"));
 }
 
 void AppController::invokeDownloadManager(const char* method)

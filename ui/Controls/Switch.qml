@@ -66,7 +66,9 @@ T.Switch {
 
         Rectangle {
             id: rectTwo
-            x: control.checked ? parent.width / 1.7 : 5
+            x: AppGlobals.rtl
+               ? (control.checked ? 5 : parent.width - width - 5)
+               : (control.checked ? parent.width - width - 5 : 5)
             width: 13
             height: 13
             radius: width
@@ -94,8 +96,9 @@ T.Switch {
         text: control.text
         font: control.font
         fontSizeMode: Text.Fit
-        leftPadding: control.indicator.width + control.spacing
-        rightPadding: appRootObjects.isLeftToRight ? 0 : 48
+        leftPadding: AppGlobals.rtl ? 0 : control.indicator.width + control.spacing
+        rightPadding: AppGlobals.rtl ? control.indicator.width + control.spacing : 0
+        horizontalAlignment: Text.AlignLeading
         opacity: enabled ? 1.0 : 0.3
         color: Colors.primary
         wrapMode: Text.WordWrap

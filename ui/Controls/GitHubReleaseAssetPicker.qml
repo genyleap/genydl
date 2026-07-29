@@ -16,6 +16,7 @@ import QtQuick.Effects
 
 import GenyDL
 import "." as Controls
+import "../utils.js" as Utils
 
 Controls.Dialog {
     id: picker
@@ -30,6 +31,12 @@ Controls.Dialog {
     property string errorText: ""
     property var selectedByUrl: ({})
 
+    readonly property real assetCheckboxWidth: 28
+    readonly property real assetSizeWidth: 116
+    readonly property real assetTypeWidth: 210
+    readonly property real assetDownloadsWidth: 96
+    readonly property real assetColumnSpacing: 12
+
     signal addSelected(var assets)
     signal openUrl(string url)
 
@@ -43,9 +50,9 @@ Controls.Dialog {
 
     function formatCount(value) {
         var n = Number(value || 0)
-        if (n >= 1000000) return (n / 1000000).toFixed(n >= 10000000 ? 0 : 1) + "M"
-        if (n >= 1000) return (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "K"
-        return String(n)
+        if (n >= 1000000) return (n / 1000000).toLocaleString(Qt.locale(languageManager.currentLocale), "f", n >= 10000000 ? 0 : 1) + "M"
+        if (n >= 1000) return (n / 1000).toLocaleString(Qt.locale(languageManager.currentLocale), "f", n >= 10000 ? 0 : 1) + "K"
+        return n.toLocaleString(Qt.locale(languageManager.currentLocale), "f", 0)
     }
 
     // Icon + value chip reused in the header (stars / forks / language / license).
@@ -75,7 +82,7 @@ Controls.Dialog {
         }
     }
 
-    title: "GitHub Release Assets"
+    title: qsTr("GitHub Release Assets")
     type: errorText.length > 0 ? "warning" : "info"
     standardButtons: Dialog.NoButton
     width: Math.min(appRoot.width - 40, 980)
@@ -232,7 +239,7 @@ Controls.Dialog {
                                   : picker.releaseValue("repository")
                             font.bold: true
                             font.pixelSize: Typography.h4
-                            elide: Text.ElideRight
+                            elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
                         }
                         Rectangle {
                             Layout.preferredWidth: tagRow.implicitWidth + 20
@@ -253,7 +260,7 @@ Controls.Dialog {
                                     color: Colors.secondry
                                 }
                                 Controls.Label {
-                                    text: picker.releaseValue("tagName")
+                                    text: appRoot.formatReleaseTag(picker.releaseValue("tagName"))
                                     color: Colors.textPrimary
                                     font.pixelSize: Typography.t3
                                     font.bold: true
@@ -262,14 +269,28 @@ Controls.Dialog {
                         }
                     }
 
-                    Controls.Label {
+                    RowLayout {
                         Layout.fillWidth: true
-                        text: picker.releaseValue("repository")
-                              + (picker.releaseValue("publishedText").length > 0
-                                 ? "  •  Released " + picker.releaseValue("publishedText") : "")
-                        color: Colors.textSecondary
-                        font.pixelSize: Typography.t3
-                        elide: Text.ElideRight
+                        spacing: 6
+                        LayoutMirroring.enabled: AppGlobals.rtl
+                        LayoutMirroring.childrenInherit: true
+
+                        Controls.Label {
+                            text: picker.releaseValue("repository")
+                            color: Colors.textSecondary
+                            font.pixelSize: Typography.t3
+                            LayoutMirroring.enabled: false
+                            horizontalAlignment: Text.AlignLeft
+                            elide: Text.ElideRight
+                        }
+                        Controls.Label {
+                            visible: picker.releaseValue("publishedText").length > 0
+                            text: qsTr(" • Released %1").arg(
+                                      Utils.localizeDigits(picker.releaseValue("publishedText")))
+                            color: Colors.textSecondary
+                            font.pixelSize: Typography.t3
+                        }
+                        Item { Layout.fillWidth: true }
                     }
 
                     Controls.Label {
@@ -279,7 +300,9 @@ Controls.Dialog {
                         color: Colors.textSecondary
                         wrapMode: Text.WordWrap
                         maximumLineCount: 2
-                        elide: Text.ElideRight
+                        LayoutMirroring.enabled: false
+                        horizontalAlignment: Utils.isRtlText(text) ? Text.AlignRight : Text.AlignLeft
+                        elide: Utils.isRtlText(text) ? Text.ElideLeft : Text.ElideRight
                     }
 
                     Flow {
@@ -316,7 +339,7 @@ Controls.Dialog {
 
                 Controls.Label {
                     Layout.fillWidth: true
-                    text: "Fetching release assets from GitHub..."
+                    text: qsTr("Fetching release assets from GitHub...")
                     color: Colors.textSecondary
                 }
             }
@@ -338,18 +361,18 @@ Controls.Dialog {
             spacing: 8
 
             Controls.Button {
-                text: "Select All"
+                text: qsTr("Select All")
                 onClicked: picker.setAllAssets(true)
             }
 
             Controls.Button {
-                text: "Clear"
+                text: qsTr("Clear")
                 onClicked: picker.setAllAssets(false)
             }
 
             Controls.CheckBox {
                 visible: picker.sourceAssets && picker.sourceAssets.length > 0
-                text: "Include source code (.zip / .tar.gz)"
+                text: qsTr("Include source code (.zip / .tar.gz)")
                 checked: picker.includeSources
                 onToggled: picker.includeSources = checked
             }
@@ -357,7 +380,8 @@ Controls.Dialog {
             Item { Layout.fillWidth: true }
 
             Controls.Label {
-                text: picker.selectedCount() + " selected"
+                text: Utils.localizeDigits(
+                          qsTr("%n selected", "", picker.selectedCount()))
                 color: Colors.textSecondary
             }
         }
@@ -373,7 +397,7 @@ Controls.Dialog {
 
             Controls.Label {
                 anchors.centerIn: parent
-                text: "This release does not publish downloadable assets."
+                text: qsTr("This release does not publish downloadable assets.")
                 color: Colors.textMuted
             }
         }
@@ -403,16 +427,57 @@ Controls.Dialog {
 
                 RowLayout {
                     anchors.fill: parent
-                    anchors.leftMargin: 52
+                    anchors.leftMargin: 10
                     anchors.rightMargin: 24
-                    spacing: 12
+                    spacing: picker.assetColumnSpacing
+                    // Dialog mirrors its children globally in RTL. Opt this
+                    // table row out and apply one explicit direction here;
+                    // otherwise RowLayout is mirrored twice and the selection
+                    // column incorrectly returns to the left edge.
+                    LayoutMirroring.enabled: false
+                    LayoutMirroring.childrenInherit: false
+                    layoutDirection: AppGlobals.rtl ? Qt.RightToLeft : Qt.LeftToRight
 
-                    Controls.Label { Layout.fillWidth: true; text: "Filename"; color: Colors.textMuted }
-                    Controls.Label { Layout.preferredWidth: 110; text: "Size"; color: Colors.textMuted }
-                    Controls.Label { Layout.preferredWidth: 180; text: "Content type"; color: Colors.textMuted }
+                    Item {
+                        Layout.minimumWidth: picker.assetCheckboxWidth
+                        Layout.preferredWidth: picker.assetCheckboxWidth
+                        Layout.maximumWidth: picker.assetCheckboxWidth
+                    }
                     Controls.Label {
-                        Layout.preferredWidth: 90
-                        text: "Downloads"
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 0
+                        text: qsTr("Filename")
+                        color: Colors.textMuted
+                        LayoutMirroring.enabled: false
+                        horizontalAlignment: AppGlobals.rtl ? Text.AlignRight : Text.AlignLeft
+                    }
+                    Controls.Label {
+                        Layout.minimumWidth: picker.assetSizeWidth
+                        Layout.preferredWidth: picker.assetSizeWidth
+                        Layout.maximumWidth: picker.assetSizeWidth
+                        text: qsTr("Size")
+                        color: Colors.textMuted
+                        LayoutMirroring.enabled: false
+                        horizontalAlignment: Text.AlignRight
+                    }
+                    Controls.Label {
+                        Layout.minimumWidth: picker.assetTypeWidth
+                        Layout.preferredWidth: picker.assetTypeWidth
+                        Layout.maximumWidth: picker.assetTypeWidth
+                        text: qsTr("Content type")
+                        color: Colors.textMuted
+                        LayoutMirroring.enabled: false
+                        // MIME values are technical LTR text. Keep the heading
+                        // on the same physical edge as its values in both UI
+                        // directions instead of mirroring only the heading.
+                        horizontalAlignment: Text.AlignLeft
+                    }
+                    Controls.Label {
+                        Layout.minimumWidth: picker.assetDownloadsWidth
+                        Layout.preferredWidth: picker.assetDownloadsWidth
+                        Layout.maximumWidth: picker.assetDownloadsWidth
+                        text: qsTr("Downloads")
+                        LayoutMirroring.enabled: false
                         horizontalAlignment: Text.AlignRight
                         color: Colors.textMuted
                     }
@@ -459,57 +524,83 @@ Controls.Dialog {
                         anchors.fill: parent
                         anchors.leftMargin: 10
                         anchors.rightMargin: 24
-                        spacing: 10
+                        spacing: picker.assetColumnSpacing
                         opacity: assetRow.isDownloaded ? 0.55 : 1.0
+                        LayoutMirroring.enabled: false
+                        LayoutMirroring.childrenInherit: false
+                        layoutDirection: AppGlobals.rtl ? Qt.RightToLeft : Qt.LeftToRight
 
-                        Controls.CheckBox {
-                            Layout.preferredWidth: 24
-                            enabled: !assetRow.isDownloaded
-                            checked: !assetRow.isDownloaded && picker.assetSelected(modelData)
-                            onToggled: picker.setAssetSelected(modelData, checked)
+                        Item {
+                            Layout.minimumWidth: picker.assetCheckboxWidth
+                            Layout.preferredWidth: picker.assetCheckboxWidth
+                            Layout.maximumWidth: picker.assetCheckboxWidth
+                            Layout.fillHeight: true
+                            Controls.CheckBox {
+                                anchors.centerIn: parent
+                                enabled: !assetRow.isDownloaded
+                                checked: !assetRow.isDownloaded && picker.assetSelected(modelData)
+                                onToggled: picker.setAssetSelected(modelData, checked)
+                            }
                         }
 
                         Text {
                             Layout.fillWidth: true
+                            Layout.minimumWidth: 0
                             text: modelData.name || ""
                             color: Colors.textPrimary
                             font.family: FontSystem.getContentFontRegular.name
                             font.pixelSize: Typography.t2
                             elide: Text.ElideMiddle
+                            LayoutMirroring.enabled: false
+                            horizontalAlignment: AppGlobals.rtl ? Text.AlignRight : Text.AlignLeft
                             verticalAlignment: Text.AlignVCenter
                         }
 
-                        // "Downloaded" badge replaces the size column when the
-                        // asset is already present locally.
-                        Rectangle {
-                            Layout.preferredWidth: 110
-                            Layout.preferredHeight: 24
-                            visible: assetRow.isDownloaded
-                            radius: Metrics.innerRadius
-                            color: Colors.successBack
-                            border.width: 1
-                            border.color: Colors.success
-                            Controls.Label {
-                                anchors.centerIn: parent
-                                text: "Downloaded"
-                                color: Colors.success
-                                font.pixelSize: Typography.t3
+                        Item {
+                            Layout.minimumWidth: picker.assetSizeWidth
+                            Layout.preferredWidth: picker.assetSizeWidth
+                            Layout.maximumWidth: picker.assetSizeWidth
+                            Layout.fillHeight: true
+
+                            // "Downloaded" badge replaces the size value when
+                            // the asset is already present locally.
+                            Rectangle {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.verticalCenter: parent.verticalCenter
+                                height: 24
+                                visible: assetRow.isDownloaded
+                                radius: Metrics.innerRadius
+                                color: Colors.successBack
+                                border.width: 1
+                                border.color: Colors.success
+                                Controls.Label {
+                                    anchors.centerIn: parent
+                                    text: qsTr("Downloaded")
+                                    color: Colors.success
+                                    font.pixelSize: Typography.t3
+                                }
                             }
-                        }
-                        Controls.Label {
-                            Layout.preferredWidth: 110
-                            visible: !assetRow.isDownloaded
-                            // Source archives have no size reported by GitHub.
-                            text: modelData.isSource === true
-                                  ? "Source"
-                                  : (modelData.sizeText || "0 B")
-                            color: modelData.isSource === true ? Colors.textAccent : Colors.textPrimary
-                            elide: Text.ElideRight
+                            Controls.Label {
+                                anchors.fill: parent
+                                visible: !assetRow.isDownloaded
+                                text: modelData.isSource === true
+                                      ? qsTr("Source")
+                                      : Utils.formatBytes(Number(modelData.size || 0))
+                                color: modelData.isSource === true
+                                       ? Colors.textAccent : Colors.textPrimary
+                                LayoutMirroring.enabled: false
+                                horizontalAlignment: Text.AlignRight
+                                elide: Text.ElideLeft
+                            }
                         }
 
                         RowLayout {
-                            Layout.preferredWidth: 180
+                            Layout.minimumWidth: picker.assetTypeWidth
+                            Layout.preferredWidth: picker.assetTypeWidth
+                            Layout.maximumWidth: picker.assetTypeWidth
                             spacing: 6
+                            LayoutMirroring.enabled: false
                             // Shield shown when GitHub provides an integrity digest;
                             // the download will be checksum-verified on completion.
                             Text {
@@ -523,20 +614,27 @@ Controls.Dialog {
                                 Controls.ToolTip {
                                     above: true
                                     active: shieldHover.hovered
-                                    text: "Integrity verified after download (" +
+                                    text: qsTr("Integrity verified after download (") +
                                           String(modelData.digest || "").split(":")[0] + ")"
                                 }
                             }
                             Controls.Label {
                                 Layout.fillWidth: true
                                 text: modelData.contentType || "application/octet-stream"
+                                LayoutMirroring.enabled: false
+                                horizontalAlignment: Text.AlignLeft
                                 elide: Text.ElideRight
                             }
                         }
 
                         Controls.Label {
-                            Layout.preferredWidth: 90
-                            text: String(modelData.downloadCount || 0)
+                            Layout.minimumWidth: picker.assetDownloadsWidth
+                            Layout.preferredWidth: picker.assetDownloadsWidth
+                            Layout.maximumWidth: picker.assetDownloadsWidth
+                            text: Utils.localizeDigits(
+                                      Number(modelData.downloadCount || 0)
+                                      .toLocaleString(Qt.locale(languageManager.currentLocale), "f", 0))
+                            LayoutMirroring.enabled: false
                             horizontalAlignment: Text.AlignRight
                         }
                     }
@@ -571,12 +669,12 @@ Controls.Dialog {
             Item { Layout.fillWidth: true }
 
             Controls.Button {
-                text: "Cancel"
+                text: qsTr("Cancel")
                 onClicked: picker.close()
             }
 
             Controls.Button {
-                text: "Add Selected to Queue"
+                text: qsTr("Add Selected to Queue")
                 style: "success"
                 isDefault: true
                 enabled: !picker.loading && picker.errorText.length === 0 && picker.selectedCount() > 0

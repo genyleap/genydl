@@ -13,9 +13,13 @@ import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import QtQuick.Window
 import "../Core" as Core
+import "../utils.js" as Utils
 
 Window {
     id: root
+
+    LayoutMirroring.enabled: Qt.application.layoutDirection === Qt.RightToLeft
+    LayoutMirroring.childrenInherit: true
 
     property int row: -1
     property var task: null
@@ -56,9 +60,9 @@ Window {
 
     title: {
         if (!task) {
-            return "Download details"
+            return qsTr("Download details")
         }
-        return Math.round(progressRatio * 100) + "% " + baseName(task.fileName())
+        return Utils.formatPercent(Math.round(progressRatio * 100), 0) + " " + baseName(task.fileName())
     }
 
     Component.onCompleted: {
@@ -91,7 +95,7 @@ Window {
 
     function baseName(path) {
         if (!path || path.length === 0) {
-            return "Unknown file"
+            return qsTr("Unknown file")
         }
         const slash = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"))
         if (slash >= 0 && slash + 1 < path.length) {
@@ -101,39 +105,15 @@ Window {
     }
 
     function formatBytes(value) {
-        var v = Number(value)
-        if (!isFinite(v) || v < 0) {
-            v = 0
-        }
-        const units = ["B", "KB", "MB", "GB", "TB"]
-        var i = 0
-        while (v >= 1024 && i < units.length - 1) {
-            v /= 1024
-            i += 1
-        }
-        const digits = v >= 100 ? 0 : (v >= 10 ? 1 : 2)
-        return v.toFixed(digits) + " " + units[i]
+        return Utils.formatBytes(value)
     }
 
     function formatSpeed(value) {
-        return formatBytes(value) + "/s"
+        return Utils.formatSpeed(value)
     }
 
     function formatEta(seconds) {
-        var s = Number(seconds)
-        if (!isFinite(s) || s < 0) {
-            return "--"
-        }
-        if (s < 60) {
-            return Math.floor(s) + " sec"
-        }
-        const m = Math.floor(s / 60)
-        const sec = Math.floor(s % 60)
-        if (m < 60) {
-            return m + " min " + sec + " sec"
-        }
-        const h = Math.floor(m / 60)
-        return h + " h " + (m % 60) + " min"
+        return Utils.formatEta(seconds)
     }
 
     function stateTone() {
@@ -218,7 +198,7 @@ Window {
                 Layout.fillWidth: true
                 text: root.title
                 role: "title"
-                elide: Text.ElideRight
+                elide: Core.AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
             }
 
             Rectangle {
@@ -237,7 +217,7 @@ Window {
                 Label {
                     id: stateLabel
                     anchors.centerIn: parent
-                    text: statusText
+                    text: languageManager.statusLabel(statusText)
                     role: "caption"
                     tone: stateTone()
                 }
@@ -255,11 +235,11 @@ Window {
             id: tabs
             Layout.fillWidth: true
 
-            TabButton { text: "General" }
-            TabButton { text: "Progress" }
-            TabButton { text: "Connections" }
-            TabButton { text: "Speed limiter" }
-            TabButton { text: "Completion" }
+            TabButton { text: qsTr("General") }
+            TabButton { text: qsTr("Progress") }
+            TabButton { text: qsTr("Connections") }
+            TabButton { text: qsTr("Speed limiter") }
+            TabButton { text: qsTr("Completion") }
         }
 
         StackLayout {
@@ -284,7 +264,7 @@ Window {
                             columnSpacing: 10
                             rowSpacing: 7
 
-                            Label { text: "URL"; role: "micro"; tone: "muted" }
+                            Label { text: qsTr("URL"); role: "micro"; tone: "muted" }
                             Label {
                                 Layout.fillWidth: true
                                 text: task ? task.url() : ""
@@ -293,47 +273,47 @@ Window {
                                 elide: Text.ElideMiddle
                             }
                             Button {
-                                text: "Copy URL"
+                                text: qsTr("Copy URL")
                                 variant: "secondary"
                                 compact: true
                                 enabled: task
                                 onClicked: if (task) root.copyRequested(task.url())
                             }
 
-                            Label { text: "Status"; role: "micro"; tone: "muted" }
-                            Label { Layout.columnSpan: 2; text: statusText === "Active" ? "Receiving data" : statusText; role: "caption"; tone: stateTone() }
+                            Label { text: qsTr("Status"); role: "micro"; tone: "muted" }
+                            Label { Layout.columnSpan: 2; text: statusText === "Active" ? qsTr("Receiving data") : languageManager.statusLabel(statusText); role: "caption"; tone: stateTone() }
 
-                            Label { text: "File size"; role: "micro"; tone: "muted" }
+                            Label { text: qsTr("File size"); role: "micro"; tone: "muted" }
                             Label { Layout.columnSpan: 2; text: formatBytes(bytesTotal); role: "mono" }
 
-                            Label { text: "Downloaded"; role: "micro"; tone: "muted" }
+                            Label { text: qsTr("Downloaded"); role: "micro"; tone: "muted" }
                             Label {
                                 Layout.columnSpan: 2
                                 text: formatBytes(bytesReceived)
                                       + (bytesTotal > 0 ? " / " + formatBytes(bytesTotal) : "")
-                                      + (bytesTotal > 0 ? " (" + (progressRatio * 100).toFixed(2) + "%)" : "")
+                                      + (bytesTotal > 0 ? " (" + Utils.formatPercent(progressRatio * 100, 2) + ")" : "")
                                 role: "mono"
                             }
 
-                            Label { text: "Transfer"; role: "micro"; tone: "muted" }
+                            Label { text: qsTr("Transfer"); role: "micro"; tone: "muted" }
                             Label { Layout.columnSpan: 2; text: formatSpeed(speedValue); role: "mono" }
 
-                            Label { text: "Time left"; role: "micro"; tone: "muted" }
+                            Label { text: qsTr("Time left"); role: "micro"; tone: "muted" }
                             Label { Layout.columnSpan: 2; text: formatEta(etaValue); role: "mono" }
 
-                            Label { text: "Resume"; role: "micro"; tone: "muted" }
+                            Label { text: qsTr("Resume"); role: "micro"; tone: "muted" }
                             Label {
                                 Layout.columnSpan: 2
-                                text: task && task.resumeWarning.length > 0 ? "Limited" : "Yes"
+                                text: task && task.resumeWarning.length > 0 ? qsTr("Limited") : qsTr("Yes")
                                 role: "caption"
                                 tone: task && task.resumeWarning.length > 0 ? "warning" : "success"
                             }
 
-                            Label { text: "Queue"; role: "micro"; tone: "muted" }
-                            Label { Layout.columnSpan: 2; text: queueName; role: "caption" }
+                            Label { text: qsTr("Queue"); role: "micro"; tone: "muted" }
+                            Label { Layout.columnSpan: 2; text: languageManager.queueLabel(queueName); role: "caption" }
 
-                            Label { text: "Category"; role: "micro"; tone: "muted" }
-                            Label { Layout.columnSpan: 2; text: categoryName; role: "caption" }
+                            Label { text: qsTr("Category"); role: "micro"; tone: "muted" }
+                            Label { Layout.columnSpan: 2; text: languageManager.categoryLabel(categoryName); role: "caption" }
                         }
                     }
 
@@ -341,20 +321,20 @@ Window {
                         Layout.fillWidth: true
 
                         Button {
-                            text: statusText === "Active" ? "Pause" : "Resume"
+                            text: statusText === "Active" ? qsTr("Pause") : qsTr("Resume")
                             enabled: row >= 0 && (statusText === "Active" || statusText === "Paused")
                             onClicked: root.pauseResumeRequested(row)
                         }
 
                         Button {
-                            text: "Cancel"
+                            text: qsTr("Cancel")
                             variant: "danger"
                             enabled: row >= 0 && (statusText === "Active" || statusText === "Paused" || statusText === "Queued")
                             onClicked: root.cancelRequested(row)
                         }
 
                         Button {
-                            text: "Retry"
+                            text: qsTr("Retry")
                             variant: "secondary"
                             enabled: row >= 0
                             onClicked: root.retryRequested(row)
@@ -363,7 +343,7 @@ Window {
                         Item { Layout.fillWidth: true }
 
                         Label {
-                            text: "Adaptive target: " + (task ? task.adaptiveTarget : 0)
+                            text: qsTr("Adaptive target: ") + (task ? task.adaptiveTarget : 0)
                             role: "caption"
                             tone: "secondary"
                         }
@@ -384,10 +364,10 @@ Window {
 
                         Repeater {
                             model: [
-                                { title: "Progress", value: (progressRatio * 100).toFixed(2) + "%", tone: "accent" },
-                                { title: "Downloaded", value: formatBytes(bytesReceived), tone: "secondary" },
-                                { title: "Speed", value: formatSpeed(speedValue), tone: "success" },
-                                { title: "ETA", value: formatEta(etaValue), tone: "secondary" }
+                                { title: qsTr("Progress"), value: Utils.formatPercent(progressRatio * 100, 2), tone: "accent" },
+                                { title: qsTr("Downloaded"), value: formatBytes(bytesReceived), tone: "secondary" },
+                                { title: qsTr("Speed"), value: formatSpeed(speedValue), tone: "success" },
+                                { title: qsTr("ETA"), value: formatEta(etaValue), tone: "secondary" }
                             ]
 
                             delegate: Card {
@@ -430,7 +410,7 @@ Window {
                                 Layout.fillWidth: true
 
                                 Label {
-                                    text: "Download speed (live)"
+                                    text: qsTr("Download speed (live)")
                                     role: "caption"
                                     tone: "secondary"
                                 }
@@ -438,13 +418,13 @@ Window {
                                 Item { Layout.fillWidth: true }
 
                                 Label {
-                                    text: "Current " + formatSpeed(speedValue)
+                                    text: qsTr("Current ") + formatSpeed(speedValue)
                                     role: "micro"
                                     tone: "secondary"
                                 }
 
                                 Label {
-                                    text: "Peak " + formatSpeed(observedMaxSpeed)
+                                    text: qsTr("Peak ") + formatSpeed(observedMaxSpeed)
                                     role: "micro"
                                     tone: "secondary"
                                 }
@@ -492,7 +472,7 @@ Window {
                                         if (!samples || samples.length === 0) {
                                             ctx.fillStyle = root.alphaColor(Core.Colors.textMuted, 0.9)
                                             ctx.font = "12px sans-serif"
-                                            ctx.fillText("Waiting for speed samples...", pad + 6, h / 2)
+                                            ctx.fillText(qsTr("Waiting for speed samples..."), pad + 6, h / 2)
                                             return
                                         }
 
@@ -548,13 +528,13 @@ Window {
                             RowLayout {
                                 Layout.fillWidth: true
                                 Label {
-                                    text: "Segmented progress map"
+                                    text: qsTr("Segmented progress map")
                                     role: "caption"
                                     tone: "secondary"
                                 }
                                 Item { Layout.fillWidth: true }
                                 Label {
-                                    text: progressGridFilled + " / " + progressGridCells + " cells"
+                                    text: qsTr("%1 / %2 cells").arg(progressGridFilled).arg(progressGridCells)
                                     role: "micro"
                                     tone: "secondary"
                                 }
@@ -630,12 +610,16 @@ Window {
 
                         Label {
                             text: {
-                                if (!task) return "Connection segments: 0"
+                                if (!task)
+                                    return qsTr("Connection segments: %1").arg(
+                                                Number(0).toLocaleString(Qt.locale(languageManager.currentLocale), "f", 0))
                                 const configured = task.segments()
                                 const active = task.effectiveSegments()
+                                const configuredText = Number(configured).toLocaleString(Qt.locale(languageManager.currentLocale), "f", 0)
+                                const activeText = Number(active).toLocaleString(Qt.locale(languageManager.currentLocale), "f", 0)
                                 return active !== configured
-                                        ? ("Connection segments: " + configured + " (" + active + " active)")
-                                        : ("Connection segments: " + configured)
+                                        ? qsTr("Connection segments: %1 (%2 active)").arg(configuredText).arg(activeText)
+                                        : qsTr("Connection segments: %1").arg(configuredText)
                             }
                             role: "caption"
                             tone: "secondary"
@@ -644,7 +628,7 @@ Window {
                         Item { Layout.fillWidth: true }
 
                         Button {
-                            text: root.showConnectionDetails ? "Hide table" : "Show table"
+                            text: root.showConnectionDetails ? qsTr("Hide table") : qsTr("Show table")
                             variant: "secondary"
                             compact: true
                             onClicked: root.showConnectionDetails = !root.showConnectionDetails
@@ -661,7 +645,7 @@ Window {
                             spacing: 8
 
                             Label {
-                                text: "Start positions and progress by connections"
+                                text: qsTr("Start positions and progress by connections")
                                 role: "caption"
                                 tone: "secondary"
                             }
@@ -738,9 +722,9 @@ Window {
                                     anchors.rightMargin: 12
                                     spacing: 8
 
-                                    Label { text: "N"; role: "micro"; tone: "muted"; Layout.preferredWidth: 40 }
-                                    Label { text: "Downloaded"; role: "micro"; tone: "muted"; Layout.preferredWidth: 170 }
-                                    Label { text: "Info"; role: "micro"; tone: "muted"; Layout.fillWidth: true }
+                                    Label { text: qsTr("N"); role: "micro"; tone: "muted"; Layout.preferredWidth: 40 }
+                                    Label { text: qsTr("Downloaded"); role: "micro"; tone: "muted"; Layout.preferredWidth: 170 }
+                                    Label { text: qsTr("Info"); role: "micro"; tone: "muted"; Layout.fillWidth: true }
                                 }
                             }
 
@@ -772,7 +756,7 @@ Window {
                                         spacing: 8
 
                                         Label {
-                                            text: String(index + 1)
+                                            text: Number(index + 1).toLocaleString(Qt.locale(languageManager.currentLocale), "f", 0)
                                             role: "mono"
                                             tone: "secondary"
                                             Layout.preferredWidth: 40
@@ -786,13 +770,13 @@ Window {
                                         }
 
                                         Label {
-                                            text: segState
+                                            text: languageManager.statusLabel(segState)
                                             role: "caption"
                                             tone: segState === "Error"
                                                   ? "danger"
                                                   : (segState === "Receiving Data" ? "accent" : "secondary")
                                             Layout.fillWidth: true
-                                            elide: Text.ElideRight
+                                            elide: Core.AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
                                         }
                                     }
                                 }
@@ -821,7 +805,7 @@ Window {
                             columnSpacing: 12
                             rowSpacing: 8
 
-                            Label { text: "Task speed cap (MB/s)"; role: "caption"; tone: "secondary" }
+                            Label { text: qsTr("Task speed cap (MB/s)"); role: "caption"; tone: "secondary" }
 
                             RowLayout {
                                 Layout.fillWidth: true
@@ -835,12 +819,12 @@ Window {
                                 }
 
                                 Button {
-                                    text: "Apply"
+                                    text: qsTr("Apply")
                                     onClicked: if (row >= 0) root.setSpeedCapRequested(row, capSpin.value * 1024 * 1024)
                                 }
 
                                 Button {
-                                    text: "Unlimited"
+                                    text: qsTr("Unlimited")
                                     variant: "secondary"
                                     onClicked: {
                                         capSpin.value = 0
@@ -849,23 +833,23 @@ Window {
                                 }
                             }
 
-                            Label { text: "Current speed"; role: "caption"; tone: "secondary" }
+                            Label { text: qsTr("Current speed"); role: "caption"; tone: "secondary" }
                             Label { text: formatSpeed(speedValue); role: "mono" }
 
-                            Label { text: "Global cap"; role: "caption"; tone: "secondary" }
+                            Label { text: qsTr("Global cap"); role: "caption"; tone: "secondary" }
                             Label {
-                                text: downloadManager.globalMaxSpeed > 0 ? formatSpeed(downloadManager.globalMaxSpeed) : "Unlimited"
+                                text: downloadManager.globalMaxSpeed > 0 ? formatSpeed(downloadManager.globalMaxSpeed) : qsTr("Unlimited")
                                 role: "mono"
                             }
 
-                            Label { text: "Queue"; role: "caption"; tone: "secondary" }
-                            Label { text: queueName; role: "caption" }
+                            Label { text: qsTr("Queue"); role: "caption"; tone: "secondary" }
+                            Label { text: languageManager.queueLabel(queueName); role: "caption" }
 
-                            Label { text: "Queue cap"; role: "caption"; tone: "secondary" }
+                            Label { text: qsTr("Queue cap"); role: "caption"; tone: "secondary" }
                             Label {
                                 text: queueName.length > 0 && downloadManager.queueMaxSpeed(queueName) > 0
                                       ? formatSpeed(downloadManager.queueMaxSpeed(queueName))
-                                      : "Unlimited"
+                                      : qsTr("Unlimited")
                                 role: "mono"
                             }
                         }
@@ -891,19 +875,19 @@ Window {
                             spacing: 8
 
                             Switch {
-                                text: "Open file when completed"
+                                text: qsTr("Open file when completed")
                                 checked: task ? task.postOpenFile : false
                                 onToggled: if (task) task.postOpenFile = checked
                             }
 
                             Switch {
-                                text: "Show in folder when completed"
+                                text: qsTr("Show in folder when completed")
                                 checked: task ? task.postRevealFolder : false
                                 onToggled: if (task) task.postRevealFolder = checked
                             }
 
                             Switch {
-                                text: "Extract after completion"
+                                text: qsTr("Extract after completion")
                                 checked: task ? task.postExtract : false
                                 onToggled: if (task) task.postExtract = checked
                             }
@@ -912,11 +896,11 @@ Window {
                                 Layout.fillWidth: true
                                 spacing: 8
 
-                                Label { text: "Post script"; role: "caption"; tone: "secondary" }
+                                Label { text: qsTr("Post script"); role: "caption"; tone: "secondary" }
                                 TextField {
                                     Layout.fillWidth: true
                                     text: task ? task.postScript : ""
-                                    placeholderText: "Optional command"
+                                    placeholderText: qsTr("Optional command")
                                     onEditingFinished: if (task) task.postScript = text
                                 }
                             }
@@ -925,7 +909,7 @@ Window {
                                 Layout.fillWidth: true
                                 spacing: 8
 
-                                Label { text: "Retry max"; role: "caption"; tone: "secondary" }
+                                Label { text: qsTr("Retry max"); role: "caption"; tone: "secondary" }
                                 SpinBox {
                                     from: -1
                                     to: 50
@@ -933,7 +917,7 @@ Window {
                                     onValueModified: if (task) task.retryMax = value
                                 }
 
-                                Label { text: "Retry delay (sec)"; role: "caption"; tone: "secondary" }
+                                Label { text: qsTr("Retry delay (sec)"); role: "caption"; tone: "secondary" }
                                 SpinBox {
                                     from: -1
                                     to: 3600
@@ -957,25 +941,25 @@ Window {
                             columnSpacing: 10
                             rowSpacing: 6
 
-                            Label { text: "User-Agent"; role: "caption"; tone: "secondary" }
+                            Label { text: qsTr("User-Agent"); role: "caption"; tone: "secondary" }
                             Label { text: task ? task.userAgent : ""; role: "caption" }
 
-                            Label { text: "Proxy"; role: "caption"; tone: "secondary" }
+                            Label { text: qsTr("Proxy"); role: "caption"; tone: "secondary" }
                             Label {
-                                text: task ? (task.proxyHost.length > 0 ? task.proxyHost + ":" + task.proxyPort : "None") : ""
+                                text: task ? (task.proxyHost.length > 0 ? task.proxyHost + ":" + task.proxyPort : qsTr("None")) : ""
                                 role: "caption"
                             }
 
-                            Label { text: "SSL policy"; role: "caption"; tone: "secondary" }
+                            Label { text: qsTr("SSL policy"); role: "caption"; tone: "secondary" }
                             Label {
-                                text: task && task.allowInsecureSsl ? "Allow insecure" : "Strict"
+                                text: task && task.allowInsecureSsl ? qsTr("Allow insecure") : qsTr("Strict")
                                 role: "caption"
                                 tone: task && task.allowInsecureSsl ? "warning" : "success"
                             }
 
-                            Label { text: "Checksum"; role: "caption"; tone: "secondary" }
+                            Label { text: qsTr("Checksum"); role: "caption"; tone: "secondary" }
                             Label {
-                                text: task ? (task.checksumState + (task.checksumAlgorithm.length > 0 ? " (" + task.checksumAlgorithm + ")" : "")) : ""
+                                text: task ? (languageManager.statusLabel(task.checksumState) + (task.checksumAlgorithm.length > 0 ? " (" + task.checksumAlgorithm + ")" : "")) : ""
                                 role: "caption"
                             }
                         }
@@ -997,20 +981,20 @@ Window {
             spacing: 8
 
             Button {
-                text: statusText === "Active" ? "Pause" : "Resume"
+                text: statusText === "Active" ? qsTr("Pause") : qsTr("Resume")
                 enabled: row >= 0 && (statusText === "Active" || statusText === "Paused")
                 onClicked: root.pauseResumeRequested(row)
             }
 
             Button {
-                text: "Retry"
+                text: qsTr("Retry")
                 variant: "secondary"
                 enabled: row >= 0
                 onClicked: root.retryRequested(row)
             }
 
             Button {
-                text: "Cancel"
+                text: qsTr("Cancel")
                 variant: "danger"
                 enabled: row >= 0 && (statusText === "Active" || statusText === "Paused" || statusText === "Queued")
                 onClicked: root.cancelRequested(row)
@@ -1019,35 +1003,35 @@ Window {
             Item { Layout.fillWidth: true }
 
             Button {
-                text: "Open"
+                text: qsTr("Open")
                 variant: "ghost"
                 enabled: row >= 0 && statusText === "Done"
                 onClicked: root.openRequested(row)
             }
 
             Button {
-                text: "Show in folder"
+                text: qsTr("Show in folder")
                 variant: "ghost"
                 enabled: row >= 0
                 onClicked: root.revealRequested(row)
             }
 
             Button {
-                text: "Verify"
+                text: qsTr("Verify")
                 variant: "ghost"
                 enabled: row >= 0
                 onClicked: root.verifyRequested(row)
             }
 
             Button {
-                text: "Remove"
+                text: qsTr("Remove")
                 variant: "danger"
                 enabled: row >= 0
                 onClicked: root.removeRequested(row)
             }
 
             Button {
-                text: "Close"
+                text: qsTr("Close")
                 variant: "secondary"
                 onClicked: root.close()
             }

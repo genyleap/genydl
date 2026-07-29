@@ -27,8 +27,8 @@ T.Label {
 
     // Text behavior
     wrapMode: Text.NoWrap
-    elide: Text.ElideRight
-    horizontalAlignment: Text.AlignLeft
+    elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
+    horizontalAlignment: Text.AlignLeading
     verticalAlignment: Text.AlignVCenter
 
     renderType: Label.QtRendering

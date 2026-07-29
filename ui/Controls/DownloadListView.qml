@@ -151,7 +151,7 @@ Item {
     Label {
         anchors.centerIn: parent
         visible: root.visibleCount === 0
-        text: "No downloads match current filters"
+        text: qsTr("No downloads match current filters")
         tone: "secondary"
         role: "caption"
     }

@@ -56,11 +56,11 @@ struct TorrentSessionPrivate {
         // status -> add_torrent/state_update/torrent_finished/metadata alerts;
         // file_progress -> per-file progress. (There is no "progress" category
         // in libtorrent 2.0 — it's split into file_/piece_/block_progress.)
+        const auto alertMask = lt::alert_category::error
+                             | lt::alert_category::status
+                             | lt::alert_category::file_progress;
         settings.set_int(lt::settings_pack::alert_mask,
-            static_cast<int>(
-                lt::alert_category::error       |
-                lt::alert_category::status      |
-                lt::alert_category::file_progress));
+            static_cast<int>(static_cast<lt::alert_category_t::underlying_type>(alertMask)));
         settings.set_bool(lt::settings_pack::enable_dht,  true);
         settings.set_bool(lt::settings_pack::enable_lsd,  true);
         settings.set_bool(lt::settings_pack::enable_upnp, true);

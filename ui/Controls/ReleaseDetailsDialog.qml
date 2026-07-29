@@ -31,7 +31,7 @@ Controls.Dialog {
     signal updateApp(var app)
     signal openUrl(string url)
 
-    title: "App Details"
+    title: qsTr("App Details")
     type: "info"
     standardButtons: Dialog.NoButton
     width: Math.min(appRoot.width - 40, 820)
@@ -45,6 +45,9 @@ Controls.Dialog {
         return details.app && details.app[key] !== undefined ? details.app[key] : ""
     }
     function str(key) { return String(val(key) || "") }
+    function safeDisplayText(value) {
+        return appRoot.safeReleaseNotes(String(value || ""))
+    }
 
     function releasesUrl() {
         const repo = str("repository").length > 1 ? str("repository")
@@ -54,9 +57,9 @@ Controls.Dialog {
 
     function formatCount(value) {
         var n = Number(value || 0)
-        if (n >= 1000000) return (n / 1000000).toFixed(n >= 10000000 ? 0 : 1) + "M"
-        if (n >= 1000) return (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "K"
-        return String(n)
+        if (n >= 1000000) return (n / 1000000).toLocaleString(Qt.locale(languageManager.currentLocale), "f", n >= 10000000 ? 0 : 1) + "M"
+        if (n >= 1000) return (n / 1000).toLocaleString(Qt.locale(languageManager.currentLocale), "f", n >= 10000 ? 0 : 1) + "K"
+        return n.toLocaleString(Qt.locale(languageManager.currentLocale), "f", 0)
     }
 
     function statusColor(s) {
@@ -107,15 +110,28 @@ Controls.Dialog {
     component InfoCell: ColumnLayout {
         property string label: ""
         property string value: ""
+        property bool localizeValueDigits: false
         spacing: 2
-        Controls.Label { text: label; color: Colors.textMuted; font.pixelSize: Typography.t3 }
         Controls.Label {
-            text: value && value.length > 0 ? value : "--"
+            Layout.fillWidth: true
+            LayoutMirroring.enabled: false
+            text: label
+            color: Colors.textMuted
+            font.pixelSize: Typography.t3
+            horizontalAlignment: AppGlobals.rtl ? Text.AlignRight : Text.AlignLeft
+        }
+        Controls.Label {
+            LayoutMirroring.enabled: false
+            text: value && value.length > 0
+                  ? (localizeValueDigits ? Utils.localizeDigits(value) : value)
+                  : "--"
             color: Colors.textPrimary
+            font.family: FontSystem.getContentFontBold.name
             font.pixelSize: Typography.t2
             font.bold: true
-            elide: Text.ElideRight
+            elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
             Layout.fillWidth: true
+            horizontalAlignment: AppGlobals.rtl ? Text.AlignRight : Text.AlignLeft
         }
     }
 
@@ -185,12 +201,14 @@ Controls.Dialog {
                     spacing: 10
                     Controls.Label {
                         Layout.fillWidth: true
+                        LayoutMirroring.enabled: false
                         text: details.str("displayName").length > 0 ? details.str("displayName") : details.str("repo")
                         font.family: FontSystem.getContentFontBold.name
                         font.pixelSize: Typography.h3
                         font.weight: Font.Bold
                         font.bold: true
-                        elide: Text.ElideRight
+                        elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
+                        horizontalAlignment: AppGlobals.rtl ? Text.AlignRight : Text.AlignLeft
                     }
                     Rectangle {
                         Layout.preferredWidth: badgeRow.implicitWidth + 22
@@ -204,7 +222,7 @@ Controls.Dialog {
                             anchors.centerIn: parent
                             spacing: 6
                             Controls.Label {
-                                text: details.str("statusText")
+                                text: languageManager.releaseStatusLabel(details.str("status"))
                                 color: details.statusColor(details.str("status"))
                                 font.pixelSize: Typography.t3
                                 font.bold: true
@@ -214,9 +232,11 @@ Controls.Dialog {
                 }
                 Controls.Label {
                     Layout.fillWidth: true
+                    LayoutMirroring.enabled: false
                     text: details.str("owner") + " / " + details.str("repo")
                     color: Colors.textSecondary
-                    elide: Text.ElideRight
+                    elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
+                    horizontalAlignment: AppGlobals.rtl ? Text.AlignRight : Text.AlignLeft
                 }
 
                 // Stat chips
@@ -235,45 +255,58 @@ Controls.Dialog {
         // ---- Description ----
         Controls.Label {
             Layout.fillWidth: true
+            LayoutMirroring.enabled: false
             visible: details.str("description").length > 0
-            text: details.str("description")
+            text: details.safeDisplayText(details.str("description"))
             color: Colors.textSecondary
             wrapMode: Text.WordWrap
+            horizontalAlignment: Utils.isRtlText(text) ? Text.AlignRight : Text.AlignLeft
         }
 
         // ---- Version info ----
         Controls.GroupBox {
             Layout.fillWidth: true
             Layout.preferredHeight: versionGrid.implicitHeight + topPadding + bottomPadding
-            title: "Versions"
+            title: qsTr("Versions")
             GridLayout {
                 id: versionGrid
                 anchors.fill: parent
                 columns: 4
                 columnSpacing: 18
                 rowSpacing: 8
+                uniformCellWidths: true
                 InfoCell {
                     Layout.fillWidth: true
-                    label: details.str("installSource") === "os" ? "Installed" : "Local"
+                    localizeValueDigits: true
+                    label: details.str("installSource") === "os" ? qsTr("Installed") : qsTr("Local")
                     value: {
                         if (details.str("installedVersion").length > 0)
                             return details.str("installedVersion")
                                    + (details.str("installSource") === "download" ? " (downloaded)" : "")
-                        if (details.str("status") === "downloaded") return "Downloaded — ready to install"
-                        return "Not installed"
+                        if (details.str("status") === "downloaded") return qsTr("Downloaded — ready to install")
+                        return qsTr("Not installed")
                     }
                 }
-                InfoCell { Layout.fillWidth: true; label: "Latest"; value: details.str("latestTag") }
-                InfoCell { Layout.fillWidth: true; label: "Released"; value: Utils.formatReleaseDate(details.val("latestPublishedAt"), details.dateFormat) }
-                InfoCell { Layout.fillWidth: true; label: "Checked"; value: details.str("lastCheckedText") }
+                InfoCell {
+                    Layout.fillWidth: true
+                    localizeValueDigits: true
+                    label: qsTr("Latest")
+                    value: appRoot.formatVersionNumber(details.str("latestTag"))
+                }
+                InfoCell { Layout.fillWidth: true; label: qsTr("Released on"); value: Utils.formatReleaseDate(details.val("latestPublishedAt"), details.dateFormat) }
+                InfoCell { Layout.fillWidth: true; label: qsTr("Checked on"); value: details.str("lastCheckedText") }
             }
         }
 
         // ---- Release notes / changelog ----
         Controls.Label {
-            text: "Release notes" + (details.str("latestTag").length > 0 ? " — " + details.str("latestTag") : "")
+            LayoutMirroring.enabled: false
+            text: qsTr("Release notes")
+                  + (details.str("latestTag").length > 0
+                     ? " — " + appRoot.formatReleaseTag(details.str("latestTag")) : "")
             font.bold: true
             font.pixelSize: Typography.t1
+            horizontalAlignment: AppGlobals.rtl ? Text.AlignRight : Text.AlignLeft
         }
         Rectangle {
             Layout.fillWidth: true
@@ -293,12 +326,15 @@ Controls.Dialog {
                 Controls.Label {
                     id: notes
                     width: notesScroll.availableWidth
-                    text: details.str("latestBody").length > 0 ? details.str("latestBody")
-                          : "No release notes were published for this release."
+                    LayoutMirroring.enabled: false
+                    text: details.str("latestBody").length > 0
+                          ? details.safeDisplayText(details.str("latestBody"))
+                          : qsTr("No release notes were published for this release.")
                     color: details.str("latestBody").length > 0 ? Colors.textPrimary : Colors.textMuted
                     textFormat: Text.MarkdownText
                     wrapMode: Text.WordWrap
                     elide: Text.ElideNone
+                    horizontalAlignment: Utils.isRtlText(text) ? Text.AlignRight : Text.AlignLeft
                     onLinkActivated: function(link) { details.openUrl(link) }
                 }
             }
@@ -311,17 +347,17 @@ Controls.Dialog {
             spacing: 8
 
             Controls.Button {
-                text: "Check now"
+                text: qsTr("Check now")
                 enabled: !releaseCenterService.loading && details.val("rowIndex") !== undefined
                 onClicked: details.checkNow(Number(details.val("rowIndex")))
             }
             Controls.Button {
-                text: "View on GitHub"
+                text: qsTr("View on GitHub")
                 onClicked: details.openUrl(details.releasesUrl())
             }
             Controls.Button {
                 visible: details.str("homepageUrl").length > 0
-                text: "Official site"
+                text: qsTr("Official site")
                 onClicked: details.openUrl(details.str("homepageUrl"))
             }
 
@@ -330,7 +366,7 @@ Controls.Dialog {
             // One-click update (auto-pick the OS asset) when an update is available.
             Controls.Button {
                 visible: details.str("status") === "update_available"
-                text: "Update"
+                text: qsTr("Update")
                 style: "success"
                 isDefault: true
                 Layout.preferredWidth: 120
@@ -338,7 +374,7 @@ Controls.Dialog {
                 onClicked: { details.updateApp(details.app); details.close() }
             }
             Controls.Button {
-                text: "Download assets"
+                text: qsTr("Download assets")
                 style: details.str("status") === "update_available" ? "default" : "success"
                 isDefault: details.str("status") !== "update_available"
                 Layout.preferredWidth: 170
@@ -346,7 +382,7 @@ Controls.Dialog {
                 onClicked: { details.downloadAssets(details.app); details.close() }
             }
             Controls.Button {
-                text: "Close"
+                text: qsTr("Close")
                 onClicked: details.close()
             }
         }

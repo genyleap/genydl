@@ -83,7 +83,7 @@ Dialog {
                                                            - footerImplicitHeight
                                                            - Metrics.padding * 2.5)
 
-    title: "About"
+    title: qsTr("About")
 
     implicitHeight: columnHeader.implicitHeight
                     + contentColumn.implicitHeight
@@ -485,6 +485,8 @@ Dialog {
         id: columnHeader
         width: parent.width
         spacing: 0
+        LayoutMirroring.enabled: AppGlobals.rtl
+        LayoutMirroring.childrenInherit: true
 
         Item {
             Layout.preferredHeight: control.dialogPadding * 1.50
@@ -498,19 +500,19 @@ Dialog {
 
             Text {
                 Layout.fillWidth: true
-                horizontalAlignment: Text.AlignLeft
+                horizontalAlignment: Text.AlignLeading
                 verticalAlignment: Text.AlignVCenter
                 text: control.title
                 font.family: FontSystem.getContentFont.name
                 font.weight: Font.Bold
                 font.pixelSize: Typography.h3
                 color: Colors.textPrimary
-                elide: Text.ElideRight
+                elide: AppGlobals.rtl ? Text.ElideLeft : Text.ElideRight
             }
 
             Text {
                 visible: control.iconText.length > 0
-                horizontalAlignment: Text.AlignLeft
+                horizontalAlignment: Text.AlignLeading
                 verticalAlignment: Text.AlignVCenter
                 text: control.iconText
                 font.family: FontSystem.getAwesomeSolid.name
@@ -531,6 +533,8 @@ Dialog {
         implicitHeight: control.hasFooter ? control.footerImplicitHeight : 0
         visible: control.hasFooter
         color: Colors.backgroundItemActivated
+        LayoutMirroring.enabled: AppGlobals.rtl
+        LayoutMirroring.childrenInherit: true
         bottomLeftRadius: Metrics.cornerRadius
         bottomRightRadius: Metrics.cornerRadius
 
@@ -593,6 +597,8 @@ Dialog {
 
     contentItem: Flickable {
         id: contentFlick
+        LayoutMirroring.enabled: AppGlobals.rtl
+        LayoutMirroring.childrenInherit: true
         implicitHeight: Math.min(contentColumn.implicitHeight + Metrics.padding * 1.5,
                                  control.contentViewportHeight)
         implicitWidth: contentColumn.implicitWidth

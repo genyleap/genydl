@@ -119,6 +119,9 @@ GENYDL_MODULE_EXPORT class UpdateClient : public QObject {
     //!< @brief Status text.
     Q_PROPERTY(QString status READ status NOTIFY statusChanged)
 
+    //!< @brief Whether the updater is currently transferring a payload.
+    Q_PROPERTY(bool downloadInProgress READ downloadInProgress NOTIFY statusChanged)
+
     //!< @brief Last error text.
     Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
 
@@ -233,6 +236,9 @@ public:
 
     //!< @brief Return status.
     QString status() const { return m_status; }
+
+    //!< @brief Return whether an update payload transfer is active.
+    bool downloadInProgress() const { return m_downloadReply != nullptr; }
 
     //!< @brief Return last error.
     QString lastError() const { return m_lastError; }

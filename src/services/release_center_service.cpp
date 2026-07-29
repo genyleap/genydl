@@ -6,6 +6,7 @@ module;
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLocale>
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QNetworkInformation>
@@ -27,7 +28,7 @@ constexpr int kMaxTransientRequestAttempts = 2;
 
 QString dateTimeText(const QDateTime& value)
 {
-    return value.isValid() ? value.toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm")) : QStringLiteral("--");
+    return value.isValid() ? QLocale().toString(value.toLocalTime(), QLocale::ShortFormat) : QStringLiteral("--");
 }
 
 QDateTime variantDateTime(const QVariant& value)
@@ -41,12 +42,12 @@ QDateTime variantDateTime(const QVariant& value)
 
 QString statusText(const QString& status)
 {
-    if (status == QStringLiteral("up_to_date")) return QStringLiteral("Up to date");
-    if (status == QStringLiteral("update_available")) return QStringLiteral("Update available");
-    if (status == QStringLiteral("downloaded")) return QStringLiteral("Ready to install");
-    if (status == QStringLiteral("check_failed")) return QStringLiteral("Check failed");
-    if (status == QStringLiteral("not_installed")) return QStringLiteral("Not installed");
-    return QStringLiteral("Never checked");
+    if (status == QStringLiteral("up_to_date")) return QCoreApplication::translate("ReleaseCenterService", "Up to date");
+    if (status == QStringLiteral("update_available")) return QCoreApplication::translate("ReleaseCenterService", "Update available");
+    if (status == QStringLiteral("downloaded")) return QCoreApplication::translate("ReleaseCenterService", "Ready to install");
+    if (status == QStringLiteral("check_failed")) return QCoreApplication::translate("ReleaseCenterService", "Check failed");
+    if (status == QStringLiteral("not_installed")) return QCoreApplication::translate("ReleaseCenterService", "Not installed");
+    return QCoreApplication::translate("ReleaseCenterService", "Never checked");
 }
 
 int statusRank(const QString& status)
@@ -285,18 +286,18 @@ QString gitHubNetworkErrorMessage(QNetworkReply::NetworkError error, const QStri
     switch (error) {
     case QNetworkReply::TimeoutError:
     case QNetworkReply::ProxyTimeoutError:
-        return QStringLiteral("GitHub request timed out. Check the connection and try again.");
+        return QCoreApplication::translate("ReleaseCenterService", "GitHub request timed out. Check the connection and try again.");
     case QNetworkReply::RemoteHostClosedError:
-        return QStringLiteral("GitHub closed the connection before the response finished. Try again.");
+        return QCoreApplication::translate("ReleaseCenterService", "GitHub closed the connection before the response finished. Try again.");
     case QNetworkReply::HostNotFoundError:
-        return QStringLiteral("Could not reach GitHub. Check the network connection and try again.");
+        return QCoreApplication::translate("ReleaseCenterService", "Could not reach GitHub. Check the network connection and try again.");
     case QNetworkReply::TemporaryNetworkFailureError:
     case QNetworkReply::NetworkSessionFailedError:
-        return QStringLiteral("Network connection failed while contacting GitHub. Try again later.");
+        return QCoreApplication::translate("ReleaseCenterService", "Network connection failed while contacting GitHub. Try again later.");
     default:
         break;
     }
-    return QStringLiteral("Network error while contacting GitHub: %1").arg(detail);
+    return QCoreApplication::translate("ReleaseCenterService", "Network error while contacting GitHub: %1").arg(detail);
 }
 
 QVariantMap releaseToAppFields(const genydl::github::ReleaseInfo& release)
@@ -461,7 +462,7 @@ bool loadDocumentIntoApps(const QByteArray& data,
     const QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
     if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
         if (errorMessage) {
-            *errorMessage = QStringLiteral("Release Center storage is malformed.");
+            *errorMessage = QCoreApplication::translate("ReleaseCenterService", "Release Center storage is malformed.");
         }
         return false;
     }
@@ -685,7 +686,7 @@ void GitHubReleaseTrackerService::previewApp(const QString& value)
 {
     const auto repo = genydl::github::parseRepositoryUrl(value);
     if (!repo) {
-        setErrorMessage(QStringLiteral("Paste a GitHub repository or releases page URL."));
+        setErrorMessage(QCoreApplication::translate("ReleaseCenterService", "Paste a GitHub repository or releases page URL."));
         return;
     }
 
@@ -695,13 +696,13 @@ void GitHubReleaseTrackerService::previewApp(const QString& value)
 bool GitHubReleaseTrackerService::confirmPreview(const QString& displayName)
 {
     if (m_preview.isEmpty() || !m_previewRepo.isValid()) {
-        setErrorMessage(QStringLiteral("No GitHub release preview is ready."));
+        setErrorMessage(QCoreApplication::translate("ReleaseCenterService", "No GitHub release preview is ready."));
         return false;
     }
     for (const auto& app : m_apps) {
         if (app.owner.compare(m_previewRepo.owner, Qt::CaseInsensitive) == 0
             && app.repo.compare(m_previewRepo.repo, Qt::CaseInsensitive) == 0) {
-            setErrorMessage(QStringLiteral("This repository is already tracked in Release Center."));
+            setErrorMessage(QCoreApplication::translate("ReleaseCenterService", "This repository is already tracked in Release Center."));
             return false;
         }
     }
@@ -850,7 +851,7 @@ void GitHubReleaseTrackerService::load()
     QFile file(storagePath());
     if (!file.exists()) return;
     if (!file.open(QIODevice::ReadOnly)) {
-        setErrorMessage(QStringLiteral("Could not read Release Center storage."));
+        setErrorMessage(QCoreApplication::translate("ReleaseCenterService", "Could not read Release Center storage."));
         return;
     }
 
@@ -885,7 +886,7 @@ void GitHubReleaseTrackerService::save()
     QDir().mkpath(QFileInfo(path).absolutePath());
     QFile file(path);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        setErrorMessage(QStringLiteral("Could not save Release Center storage."));
+        setErrorMessage(QCoreApplication::translate("ReleaseCenterService", "Could not save Release Center storage."));
         return;
     }
     const QVariantMap settings{
@@ -1003,9 +1004,9 @@ void GitHubReleaseTrackerService::handleReply(QNetworkReply* reply,
         const qint64 resetSeconds = QString::fromUtf8(reset).toLongLong();
         const QDateTime resetAt = resetSeconds > 0 ? QDateTime::fromSecsSinceEpoch(resetSeconds) : QDateTime();
         setRateLimitWarning(resetAt.isValid()
-                            ? QStringLiteral("GitHub API rate limit reached. Automatic checks paused until %1.")
-                                  .arg(resetAt.toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm")))
-                            : QStringLiteral("GitHub API rate limit reached. Automatic checks paused."));
+                            ? QCoreApplication::translate("ReleaseCenterService", "GitHub API rate limit reached. Automatic checks paused until %1.")
+                                  .arg(QLocale().toString(resetAt.toLocalTime(), QLocale::ShortFormat))
+                            : QCoreApplication::translate("ReleaseCenterService", "GitHub API rate limit reached. Automatic checks paused."));
         m_pendingChecks.clear();
     }
 
@@ -1096,7 +1097,7 @@ void GitHubReleaseTrackerService::handleReply(QNetworkReply* reply,
         ? genydl::github::parseLatestReleaseFromListJson(body, true, &parseError)
         : genydl::github::parseReleaseJson(body, &parseError);
     if (!release) {
-        fail(parseError.isEmpty() ? QStringLiteral("This repository does not publish releases.") : parseError);
+        fail(parseError.isEmpty() ? QCoreApplication::translate("ReleaseCenterService", "This repository does not publish releases.") : parseError);
         return;
     }
     if (release->owner.isEmpty()) release->owner = repo.owner;
@@ -1257,7 +1258,10 @@ void GitHubReleaseTrackerService::setDownloadRoots(const QStringList& roots)
     }
     if (cleaned == m_downloadRoots) return;
     m_downloadRoots = cleaned;
-    refreshInstallStates();
+    // Do not synchronously enumerate the download tree during application
+    // startup. On macOS a Downloads folder backed by a file provider can block
+    // opendir() for minutes, preventing the QML engine from ever loading.
+    // Install state is refreshed by the normal release-check workflow.
 }
 
 void GitHubReleaseTrackerService::refreshInstallStates()

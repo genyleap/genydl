@@ -75,7 +75,10 @@ Item {
                 control.triggered()
                 return
             }
-            control.menu.popup(control, 0, control.height + 6)
+            const menuWidth = control.menu.width > 0
+                              ? control.menu.width : control.menu.implicitWidth
+            const popupX = AppGlobals.rtl ? control.width - menuWidth : 0
+            control.menu.popup(control, popupX, control.height + 6)
         }
     }
 }

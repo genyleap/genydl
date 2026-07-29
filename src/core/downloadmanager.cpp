@@ -559,7 +559,7 @@ TorrentTask* DownloadManager::addTorrentInternal(const QString& source,
 {
     if (!m_torrentSession || !m_torrentSession->isAvailable()) {
         emit toastRequested(
-            QStringLiteral("BitTorrent support is not available (libtorrent not compiled in)."),
+            tr("BitTorrent support is not available (libtorrent not compiled in)."),
             QStringLiteral("warning"));
         return nullptr;
     }
@@ -589,13 +589,13 @@ TorrentTask* DownloadManager::addTorrentInternal(const QString& source,
             nam->deleteLater();
             if (reply->error() != QNetworkReply::NoError) {
                 emit toastRequested(
-                    QStringLiteral("Failed to download .torrent: %1").arg(reply->errorString()),
+                    tr("Failed to download .torrent: %1").arg(reply->errorString()),
                     QStringLiteral("danger"));
                 return;
             }
             const QByteArray data = reply->isOpen() ? reply->readAll() : QByteArray();
             if (data.isEmpty()) {
-                emit toastRequested(QStringLiteral("Downloaded .torrent is empty."),
+                emit toastRequested(tr("Downloaded .torrent is empty."),
                                     QStringLiteral("danger"));
                 return;
             }
@@ -606,7 +606,7 @@ TorrentTask* DownloadManager::addTorrentInternal(const QString& source,
                 QStringLiteral("genydl-%1.torrent").arg(QDateTime::currentMSecsSinceEpoch()));
             QFile f(tmpPath);
             if (!f.open(QIODevice::WriteOnly)) {
-                emit toastRequested(QStringLiteral("Cannot write temporary .torrent file."),
+                emit toastRequested(tr("Cannot write temporary .torrent file."),
                                     QStringLiteral("danger"));
                 return;
             }
@@ -615,7 +615,7 @@ TorrentTask* DownloadManager::addTorrentInternal(const QString& source,
             addTorrentInternal(tmpPath, savePath, queueName, category, startPaused);
             QFile::remove(tmpPath); // libtorrent parses synchronously; safe to drop
         });
-        emit toastRequested(QStringLiteral("Downloading torrent metadata…"),
+        emit toastRequested(tr("Downloading torrent metadata…"),
                             QStringLiteral("info"));
         return nullptr;
     }
@@ -625,7 +625,7 @@ TorrentTask* DownloadManager::addTorrentInternal(const QString& source,
         : m_torrentSession->addTorrentFile(source, savePath);
 
     if (handleId < 0) {
-        emit toastRequested(QStringLiteral("Failed to add torrent."), QStringLiteral("danger"));
+        emit toastRequested(tr("Failed to add torrent."), QStringLiteral("danger"));
         return nullptr;
     }
 
@@ -856,7 +856,7 @@ DownloaderTask* DownloadManager::addIpfsInternal(const QString &urlStr,
 {
     const ipfs::Target target = ipfs::parse(urlStr);
     if (!target.valid) {
-        emit toastRequested(QStringLiteral("Invalid IPFS reference or CID."),
+        emit toastRequested(tr("Invalid IPFS reference or CID."),
                             QStringLiteral("danger"));
         return nullptr;
     }
@@ -875,7 +875,7 @@ DownloaderTask* DownloadManager::addIpfsInternal(const QString &urlStr,
         urls.append(ipfs::buildGatewayUrl(gw, target.cidText, target.subPath));
     }
     if (urls.isEmpty()) {
-        emit toastRequested(QStringLiteral("No IPFS gateway configured."),
+        emit toastRequested(tr("No IPFS gateway configured."),
                             QStringLiteral("danger"));
         return nullptr;
     }
@@ -1079,21 +1079,21 @@ void DownloadManager::onTaskFinishedWrapper(bool success) {
         m_model.seedProgress(t, finalReceived, finalTotal);
 
         m_taskRetryCount[t] = 0;
-        emit toastRequested(QStringLiteral("Download finished: %1").arg(name), QStringLiteral("success"));
+        emit toastRequested(tr("Download finished: %1").arg(name), QStringLiteral("success"));
         applyPostActions(t);
         if (t->verifyOnComplete() || !t->checksumExpected().isEmpty()) {
             verifyChecksumAsync(t);
         }
     } else if (state == "Error") {
-        emit toastRequested(QStringLiteral("Download failed: %1").arg(name), QStringLiteral("danger"));
+        emit toastRequested(tr("Download failed: %1").arg(name), QStringLiteral("danger"));
     } else if (state == "Canceled") {
-        emit toastRequested(QStringLiteral("Download canceled: %1").arg(name), QStringLiteral("muted"));
+        emit toastRequested(tr("Download canceled: %1").arg(name), QStringLiteral("muted"));
     }
 
     if (state == "Error") {
         if (t->advanceMirror()) {
             const QString newUrl = t->url();
-            emit toastRequested(QStringLiteral("Switching mirror: %1").arg(newUrl), QStringLiteral("warning"));
+            emit toastRequested(tr("Switching mirror: %1").arg(newUrl), QStringLiteral("warning"));
             t->recover();
             startQueued();
         } else {
@@ -1109,7 +1109,7 @@ void DownloadManager::onTaskFinishedWrapper(bool success) {
                 if (!host.isEmpty() && (t->lastHttpStatus() == 429 || t->lastHttpStatus() == 503 || t->lastHttpStatus() == 504)) {
                     m_hostCooldownUntilMs[host] = QDateTime::currentMSecsSinceEpoch() + delayMs;
                 }
-                emit toastRequested(QStringLiteral("Retrying in %1s: %2").arg(delaySecUi).arg(name), QStringLiteral("warning"));
+                emit toastRequested(tr("Retrying in %1s: %2").arg(delaySecUi).arg(name), QStringLiteral("warning"));
                 QTimer::singleShot(delayMs, this, [this, taskPtr, host]() {
                     if (!taskPtr) return;
                     if (taskPtr->stateString() == "Error") {
@@ -1133,9 +1133,9 @@ void DownloadManager::onTaskFinishedWrapper(bool success) {
                 const QString reason = pauseReasonForFailure(t);
                 t->pauseAfterFailure(reason);
                 m_taskPausedByNetwork[t] = isConnectivityFailure(t);
-                emit toastRequested(QStringLiteral("Paused: %1 (%2)").arg(name, reason), QStringLiteral("warning"));
+                emit toastRequested(tr("Paused: %1 (%2)").arg(name, reason), QStringLiteral("warning"));
             } else if (!retryable) {
-                emit toastRequested(QStringLiteral("Not retryable: %1").arg(name), QStringLiteral("warning"));
+                emit toastRequested(tr("Not retryable: %1").arg(name), QStringLiteral("warning"));
             }
         }
     }
@@ -1692,10 +1692,10 @@ void DownloadManager::applyPostActions(DownloaderTask* task)
         }
 #endif
         if (launched) {
-            emit toastRequested(QStringLiteral("Extracting: %1").arg(info.fileName()), QStringLiteral("info"));
+            emit toastRequested(tr("Extracting: %1").arg(info.fileName()), QStringLiteral("info"));
             task->appendLog(QStringLiteral("Post action: Extract"));
         } else {
-            emit toastRequested(QStringLiteral("Extract failed (tool missing?)"), QStringLiteral("warning"));
+            emit toastRequested(tr("Extract failed (tool missing?)"), QStringLiteral("warning"));
         }
     }
 
@@ -1718,7 +1718,7 @@ void DownloadManager::verifyChecksumAsync(DownloaderTask* task)
     if (!task) return;
     const QString path = utils::normalizeFilePath(task->fileName());
     if (!utils::fileExistsPath(path)) {
-        emit toastRequested(QStringLiteral("File not found for checksum"), QStringLiteral("danger"));
+        emit toastRequested(tr("File not found for checksum"), QStringLiteral("danger"));
         return;
     }
 
@@ -1742,12 +1742,12 @@ void DownloadManager::verifyChecksumAsync(DownloaderTask* task)
     else if (algoUpper == "SHA512") hashAlgo = QCryptographicHash::Sha512;
     else {
         task->setChecksumState(QStringLiteral("Unknown"));
-        emit toastRequested(QStringLiteral("Unknown checksum algorithm"), QStringLiteral("warning"));
+        emit toastRequested(tr("Unknown checksum algorithm"), QStringLiteral("warning"));
         return;
     }
 
     if (m_checksumWatchers.contains(task) && m_checksumWatchers.value(task)) {
-        emit toastRequested(QStringLiteral("Checksum already running"), QStringLiteral("warning"));
+        emit toastRequested(tr("Checksum already running"), QStringLiteral("warning"));
         return;
     }
 
@@ -1785,14 +1785,14 @@ void DownloadManager::verifyChecksumAsync(DownloaderTask* task)
         if (actual.isEmpty()) {
             taskPtr->setChecksumState(QStringLiteral("Failed"));
             taskPtr->appendLog(QStringLiteral("Checksum failed"));
-            emit toastRequested(QStringLiteral("Checksum failed"), QStringLiteral("danger"));
+            emit toastRequested(tr("Checksum failed"), QStringLiteral("danger"));
             return;
         }
         taskPtr->setChecksumActual(actual);
         if (expectedRaw.isEmpty()) {
             taskPtr->setChecksumState(QStringLiteral("Computed"));
             taskPtr->appendLog(QStringLiteral("Checksum computed"));
-            emit toastRequested(QStringLiteral("Checksum computed"), QStringLiteral("info"));
+            emit toastRequested(tr("Checksum computed"), QStringLiteral("info"));
             return;
         }
         const QString expected = utils::normalizeChecksum(expectedRaw);
@@ -1800,11 +1800,11 @@ void DownloadManager::verifyChecksumAsync(DownloaderTask* task)
         if (expected == actualNorm) {
             taskPtr->setChecksumState(QStringLiteral("OK"));
             taskPtr->appendLog(QStringLiteral("Checksum OK"));
-            emit toastRequested(QStringLiteral("Checksum OK"), QStringLiteral("success"));
+            emit toastRequested(tr("Checksum OK"), QStringLiteral("success"));
         } else {
             taskPtr->setChecksumState(QStringLiteral("Mismatch"));
             taskPtr->appendLog(QStringLiteral("Checksum mismatch"));
-            emit toastRequested(QStringLiteral("Checksum mismatch"), QStringLiteral("danger"));
+            emit toastRequested(tr("Checksum mismatch"), QStringLiteral("danger"));
         }
     });
 
@@ -2027,7 +2027,7 @@ void DownloadManager::importList(const QString& path)
             }
             addDownloadAdvancedWithOptions(urlStr, filePathEntry, queue, category, startPaused);
         }
-        emit toastRequested(QStringLiteral("Imported downloads"), QStringLiteral("success"));
+        emit toastRequested(tr("Imported downloads"), QStringLiteral("success"));
         return;
     }
 
@@ -2054,7 +2054,7 @@ void DownloadManager::importList(const QString& path)
         }
         addDownloadAdvancedWithOptions(urlStr, filePathEntry, queue, category, false);
     }
-    emit toastRequested(QStringLiteral("Imported downloads"), QStringLiteral("success"));
+    emit toastRequested(tr("Imported downloads"), QStringLiteral("success"));
 }
 
 void DownloadManager::exportList(const QString& path)
@@ -2072,7 +2072,7 @@ void DownloadManager::exportList(const QString& path)
             out << task->url() << "\n";
         }
         file.close();
-        emit toastRequested(QStringLiteral("Exported list"), QStringLiteral("success"));
+        emit toastRequested(tr("Exported list"), QStringLiteral("success"));
         return;
     }
 
@@ -2095,7 +2095,7 @@ void DownloadManager::exportList(const QString& path)
     root.insert("items", items);
     file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
     file.close();
-    emit toastRequested(QStringLiteral("Exported list"), QStringLiteral("success"));
+    emit toastRequested(tr("Exported list"), QStringLiteral("success"));
 }
 
 void DownloadManager::resetPersistentState()
@@ -2190,26 +2190,26 @@ void DownloadManager::testUrl(const QString& urlStr)
 {
     const QString trimmed = urlStr.trimmed();
     if (trimmed.isEmpty()) {
-        setNetworkTestState(false, QStringLiteral("Enter a URL to test."), QStringLiteral("warning"));
-        emit toastRequested(QStringLiteral("Enter a URL to test"), QStringLiteral("warning"));
+        setNetworkTestState(false, tr("Enter a URL to test."), QStringLiteral("warning"));
+        emit toastRequested(tr("Enter a URL to test"), QStringLiteral("warning"));
         return;
     }
 
     if (m_networkTestRunning) {
-        emit toastRequested(QStringLiteral("Network test already running"), QStringLiteral("warning"));
+        emit toastRequested(tr("Network test already running"), QStringLiteral("warning"));
         return;
     }
 
     QUrl url = QUrl::fromUserInput(trimmed);
     if (!url.isValid() || (url.scheme() != QStringLiteral("http") && url.scheme() != QStringLiteral("https"))) {
-        setNetworkTestState(false, QStringLiteral("Invalid URL"), QStringLiteral("danger"));
-        emit toastRequested(QStringLiteral("Invalid URL"), QStringLiteral("danger"));
+        setNetworkTestState(false, tr("Invalid URL"), QStringLiteral("danger"));
+        emit toastRequested(tr("Invalid URL"), QStringLiteral("danger"));
         return;
     }
 
     const qint64 startedMs = QDateTime::currentMSecsSinceEpoch();
     const QString hostLabel = url.host().isEmpty() ? url.toString(QUrl::RemovePath) : url.host();
-    setNetworkTestState(true, QStringLiteral("Testing %1 ...").arg(hostLabel), QStringLiteral("info"));
+    setNetworkTestState(true, tr("Testing %1 ...").arg(hostLabel), QStringLiteral("info"));
 
     QNetworkAccessManager* net = new QNetworkAccessManager(this);
     if (!m_defaultProxyHost.isEmpty() && m_defaultProxyPort > 0) {
@@ -2250,14 +2250,14 @@ void DownloadManager::testUrl(const QString& urlStr)
         const qint64 elapsedMs = qMax<qint64>(1, QDateTime::currentMSecsSinceEpoch() - startedMs);
         const bool headSucceeded = (errCode == QNetworkReply::NoError) && (status >= 200 && status < 400);
         if (headSucceeded) {
-            QString message = QStringLiteral("HEAD %1").arg(status);
+            QString message = tr("HEAD %1").arg(status);
             if (len.isValid() && len.toLongLong() > 0) {
-                message += QStringLiteral(" • Size %1 B").arg(len.toLongLong());
+                message += tr(" • Size %1 B").arg(len.toLongLong());
             }
             if (!acceptRanges.isEmpty()) {
-                message += QStringLiteral(" • Ranges %1").arg(QString::fromUtf8(acceptRanges));
+                message += tr(" • Ranges %1").arg(QString::fromUtf8(acceptRanges));
             }
-            message += QStringLiteral(" • %1 ms").arg(elapsedMs);
+            message += tr(" • %1 ms").arg(elapsedMs);
             finishResult(true, message, QStringLiteral("success"));
             return;
         }
@@ -2265,7 +2265,7 @@ void DownloadManager::testUrl(const QString& urlStr)
         const bool shouldFallbackGet = (status == 0 || status == 403 || status == 405 || status == 429 || status == 500 || status == 501)
                                        || (errCode != QNetworkReply::NoError);
         if (!shouldFallbackGet) {
-            finishResult(false, QStringLiteral("Test failed: HTTP %1 • %2").arg(status).arg(errText), QStringLiteral("danger"));
+            finishResult(false, tr("Test failed: HTTP %1 • %2").arg(status).arg(errText), QStringLiteral("danger"));
             return;
         }
 
@@ -2301,14 +2301,14 @@ void DownloadManager::testUrl(const QString& urlStr)
             }
 
             if (getErrCode != QNetworkReply::NoError || (statusGet <= 0 || statusGet >= 500)) {
-                finishResult(false, QStringLiteral("Test failed: HTTP %1 • %2").arg(statusGet).arg(getErr), QStringLiteral("danger"));
+                finishResult(false, tr("Test failed: HTTP %1 • %2").arg(statusGet).arg(getErr), QStringLiteral("danger"));
                 delete probeBytes;
                 return;
             }
 
             const qint64 elapsedGetMs = qMax<qint64>(1, QDateTime::currentMSecsSinceEpoch() - startedMs);
             const qint64 bytesPerSec = (*probeBytes * 1000) / elapsedGetMs;
-            QString message = QStringLiteral("Probe %1 • %2 KB/s • %3 ms")
+            QString message = tr("Probe %1 • %2 KB/s • %3 ms")
                                   .arg(statusGet)
                                   .arg(qMax<qint64>(0, bytesPerSec / 1024))
                                   .arg(elapsedGetMs);
@@ -2345,7 +2345,7 @@ bool DownloadManager::moveTaskFile(int index, const QString& newPath)
     task->setFilePath(finalNew);
     m_model.updateFileName(task, finalNew);
     scheduleSave();
-    emit toastRequested(QStringLiteral("Moved to: %1").arg(QFileInfo(finalNew).fileName()), QStringLiteral("info"));
+    emit toastRequested(tr("Moved to: %1").arg(QFileInfo(finalNew).fileName()), QStringLiteral("info"));
     return true;
 }
 
@@ -3652,7 +3652,7 @@ void DownloadManager::executeQueuePostCompletionAction(const QString& action)
     if (normalized == QStringLiteral("none")) return;
 
     if (normalized == QStringLiteral("exit")) {
-        emit toastRequested(QStringLiteral("Queue completed. Exiting GenyDL."), QStringLiteral("info"));
+        emit toastRequested(tr("Queue completed. Exiting GenyDL."), QStringLiteral("info"));
         QTimer::singleShot(250, []() { QCoreApplication::quit(); });
         return;
     }
@@ -3692,8 +3692,8 @@ void DownloadManager::executeQueuePostCompletionAction(const QString& action)
     }
 
     emit toastRequested(launched
-                            ? QStringLiteral("Queue completed. Running system action.")
-                            : QStringLiteral("Queue completed, but the system action is unavailable."),
+                            ? tr("Queue completed. Running system action.")
+                            : tr("Queue completed, but the system action is unavailable."),
                         launched ? QStringLiteral("info") : QStringLiteral("warning"));
 }
 
