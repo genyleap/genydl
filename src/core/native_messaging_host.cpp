@@ -4,6 +4,7 @@
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -24,12 +25,16 @@ QString endpoint()
     return genydl::browser::socketName();
 }
 
-void respond(bool ok, const QString& message)
+void respond(bool ok, const QString& message, const QString& requestId = {})
 {
-    const QByteArray data = QJsonDocument(QJsonObject{
+    QJsonObject response{
         {QStringLiteral("ok"), ok},
-        {QStringLiteral("message"), message}
-    }).toJson(QJsonDocument::Compact);
+        {QStringLiteral("message"), message},
+        {QStringLiteral("protocolVersion"), 2}
+    };
+    if (!requestId.isEmpty())
+        response.insert(QStringLiteral("requestId"), requestId);
+    const QByteArray data = QJsonDocument(response).toJson(QJsonDocument::Compact);
     const uint32_t size = static_cast<uint32_t>(data.size());
     const char len[4] = {
         static_cast<char>(size & 0xff), static_cast<char>((size >> 8) & 0xff),
@@ -40,7 +45,8 @@ void respond(bool ok, const QString& message)
     std::cout.flush();
 }
 
-bool sendToApplication(const QByteArray& json, bool waitForUser)
+bool sendToApplication(const QByteArray& json, bool waitForUser,
+                       const QString& expectedRequestId)
 {
     QLocalSocket socket;
     socket.connectToServer(endpoint());
@@ -65,9 +71,28 @@ bool sendToApplication(const QByteArray& json, bool waitForUser)
     // Browser-originated prompts keep the native host pending until the user
     // accepts or dismisses the desktop dialog. Failure returns control to
     // the browser, which resumes its paused transfer.
-    if (!socket.waitForReadyRead(waitForUser ? 180000 : 2500)) return false;
-    const QJsonDocument reply = QJsonDocument::fromJson(socket.readAll().trimmed());
-    return reply.isObject() && reply.object().value(QStringLiteral("ok")).toBool();
+    const int timeoutMs = waitForUser ? 180000 : 2500;
+    QElapsedTimer timer;
+    timer.start();
+    QByteArray response;
+    // QLocalSocket is a byte stream: JSON may arrive in multiple chunks.
+    // Never treat a partial read as a failed desktop acknowledgment.
+    while (!response.contains('\n')) {
+        response.append(socket.readAll());
+        if (response.size() > 4096) return false;
+        if (response.contains('\n')) break;
+        const qint64 remaining = timeoutMs - timer.elapsed();
+        if (remaining <= 0 || !socket.waitForReadyRead(static_cast<int>(remaining)))
+            return false;
+    }
+    const qsizetype end = response.indexOf('\n');
+    const QJsonDocument reply = QJsonDocument::fromJson(response.left(end));
+    if (!reply.isObject()) return false;
+    const QJsonObject body = reply.object();
+    return body.value(QStringLiteral("ok")).toBool()
+        && (expectedRequestId.isEmpty()
+            || body.value(QStringLiteral("requestId")).toString()
+                == expectedRequestId);
 }
 }
 
@@ -98,15 +123,20 @@ int main(int argc, char** argv)
     const QJsonDocument document = QJsonDocument::fromJson(data);
     const QJsonObject request = document.object();
     const QString type = request.value(QStringLiteral("type")).toString();
+    const QString requestId = request.value(QStringLiteral("requestId")).toString();
+    const int version = request.value(QStringLiteral("protocolVersion")).toInt(1);
     if (!document.isObject()
         || (type != QStringLiteral("download.prompt")
             && type != QStringLiteral("download.request"))
-        || !request.value(QStringLiteral("url")).isString()) {
-        respond(false, QStringLiteral("invalid request"));
+        || !request.value(QStringLiteral("url")).isString()
+        || (version != 1 && version != 2)
+        || (version == 2 && requestId.isEmpty())) {
+        respond(false, QStringLiteral("invalid request"), requestId);
         return 1;
     }
-    const bool accepted = sendToApplication(data, type == QStringLiteral("download.prompt"));
-    respond(accepted, accepted ? QStringLiteral("user accepted GenyDL download")
-                              : QStringLiteral("not accepted; keep browser download"));
+    const bool accepted = sendToApplication(
+        data, type == QStringLiteral("download.prompt"), requestId);
+    respond(accepted, accepted ? QStringLiteral("GenyDL accepted download")
+                              : QStringLiteral("not accepted; keep browser download"), requestId);
     return 0;
 }

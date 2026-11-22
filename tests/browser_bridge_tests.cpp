@@ -50,6 +50,9 @@ private slots:
         QCOMPARE(BrowserActivation::safeFilename(QStringLiteral("..")), QString());
         QCOMPARE(BrowserActivation::safeFilename(QStringLiteral("bad\nname.zip")), QString());
         QCOMPARE(BrowserActivation::safeFilename(QStringLiteral("bad:name.zip")), QString());
+        QCOMPARE(BrowserActivation::safeFilename(QStringLiteral("CON.zip")), QString());
+        QCOMPARE(BrowserActivation::safeFilename(QStringLiteral("com1.txt")), QString());
+        QCOMPARE(BrowserActivation::safeFilename(QStringLiteral("LPT9")), QString());
     }
     void rejectedRequestNeverAcknowledged() {
         int accepted = 0;
@@ -197,6 +200,8 @@ private slots:
         QVERIFY(process.waitForStarted(3000));
 
         const QByteArray payload = QJsonDocument(QJsonObject{
+            {QStringLiteral("protocolVersion"), 2},
+            {QStringLiteral("requestId"), QStringLiteral("native-prompt-e2e")},
             {QStringLiteral("type"), QStringLiteral("download.prompt")},
             {QStringLiteral("url"), QStringLiteral("https://example.org/final-file")},
             {QStringLiteral("filename"), QStringLiteral("suggested.zip")}
@@ -226,9 +231,189 @@ private slots:
             | (static_cast<quint32>(static_cast<quint8>(output[2])) << 16)
             | (static_cast<quint32>(static_cast<quint8>(output[3])) << 24);
         QCOMPARE(static_cast<quint32>(output.size() - 4), length);
-        QVERIFY(QJsonDocument::fromJson(output.mid(4)).object()
-                .value(QStringLiteral("ok")).toBool());
+        const QJsonObject result = QJsonDocument::fromJson(output.mid(4)).object();
+        QVERIFY(result.value(QStringLiteral("ok")).toBool());
+        QCOMPARE(result.value(QStringLiteral("requestId")).toString(),
+                 QStringLiteral("native-prompt-e2e"));
+        QCOMPARE(result.value(QStringLiteral("protocolVersion")).toInt(), 2);
         QCOMPARE(autoAdds, 0);
+    }
+
+    void protocolStartupRequestsApproval()
+    {
+        int directAdds = 0;
+        int prompts = 0;
+        BrowserActivation activation([&](const QUrl&, const QString&) {
+            ++directAdds;
+            return true;
+        });
+        connect(&activation, &BrowserActivation::promptRequested,
+                &activation, [&](const QString& url, const QString&) {
+            QCOMPARE(url, QStringLiteral("https://example.org/protocol.zip"));
+            ++prompts;
+        });
+        const QString protocol = QStringLiteral("genydl://download/?url=")
+            + QString::fromUtf8(QUrl::toPercentEncoding(
+                QStringLiteral("https://example.org/protocol.zip")));
+        QVERIFY(activation.start({protocol}));
+        QTRY_COMPARE_WITH_TIMEOUT(prompts, 1, 1000);
+        QCOMPARE(directAdds, 0);
+        activation.finishPrompt(false);
+        QCOMPARE(directAdds, 0);
+    }
+
+    void manualServicesUsesReviewDialog()
+    {
+        int directAdds = 0;
+        int prompts = 0;
+        BrowserActivation activation([&](const QUrl&, const QString&) {
+            ++directAdds;
+            return true;
+        });
+        QVERIFY(activation.start({}));
+        connect(&activation, &BrowserActivation::promptRequested,
+                &activation, [&](const QString& url, const QString&) {
+            QCOMPARE(url, QStringLiteral("https://example.org/manual.dmg"));
+            ++prompts;
+        });
+        QVERIFY(activation.submitUrl(QStringLiteral("https://example.org/manual.dmg")));
+        QTRY_COMPARE_WITH_TIMEOUT(prompts, 1, 1000);
+        QCOMPARE(directAdds, 0);
+        activation.finishPrompt(false);
+        QCOMPARE(directAdds, 0);
+        QVERIFY(!activation.submitUrl(QStringLiteral("file:///etc/passwd")));
+    }
+
+    void promptWaitsForFrontendReadiness()
+    {
+        int shown = 0;
+        BrowserActivation activation([&](const QUrl&, const QString&) {
+            return true;
+        });
+        activation.setFrontendReady(false);
+        QVERIFY(activation.start({}));
+        connect(&activation, &BrowserActivation::promptRequested,
+                &activation, [&](const QString&, const QString&) { ++shown; });
+
+        QLocalSocket socket;
+        socket.connectToServer(BrowserActivation::socketName());
+        QVERIFY(socket.waitForConnected(1500));
+        const QByteArray message = QJsonDocument(QJsonObject{
+            {QStringLiteral("protocolVersion"), 2},
+            {QStringLiteral("requestId"), QStringLiteral("startup-before-qml")},
+            {QStringLiteral("type"), QStringLiteral("download.prompt")},
+            {QStringLiteral("url"), QStringLiteral("https://example.org/startup.zip")}
+        }).toJson(QJsonDocument::Compact) + '\n';
+        socket.write(message);
+        QVERIFY(socket.waitForBytesWritten(1500));
+        QCoreApplication::processEvents();
+        QCOMPARE(shown, 0);
+        QCOMPARE(socket.bytesAvailable(), qint64(0));
+
+        activation.setFrontendReady(true);
+        QTRY_COMPARE_WITH_TIMEOUT(shown, 1, 1500);
+        activation.finishPrompt(false);
+        QTRY_VERIFY_WITH_TIMEOUT(socket.bytesAvailable() > 0, 1500);
+        const QJsonObject reply = QJsonDocument::fromJson(
+            socket.readAll().trimmed()).object();
+        QVERIFY(!reply.value(QStringLiteral("ok")).toBool());
+        QCOMPARE(reply.value(QStringLiteral("requestId")).toString(),
+                 QStringLiteral("startup-before-qml"));
+    }
+
+    void queuedPromptsUseIndependentIds()
+    {
+        QStringList shown;
+        int directAdds = 0;
+        BrowserActivation activation([&](const QUrl&, const QString&) {
+            ++directAdds;
+            return true;
+        });
+        QVERIFY(activation.start({}));
+        connect(&activation, &BrowserActivation::promptRequested,
+                &activation, [&](const QString& url, const QString&) { shown << url; });
+
+        auto submit = [&](QLocalSocket& socket, const QString& id) {
+            socket.connectToServer(BrowserActivation::socketName());
+            QVERIFY(socket.waitForConnected(1500));
+            const QByteArray message = QJsonDocument(QJsonObject{
+                {QStringLiteral("protocolVersion"), 2},
+                {QStringLiteral("requestId"), id},
+                {QStringLiteral("type"), QStringLiteral("download.prompt")},
+                {QStringLiteral("url"),
+                 QStringLiteral("https://example.org/") + id + QStringLiteral(".zip")}
+            }).toJson(QJsonDocument::Compact) + '\n';
+            QCOMPARE(socket.write(message), message.size());
+            QVERIFY(socket.waitForBytesWritten(1500));
+        };
+
+        QLocalSocket first;
+        QLocalSocket second;
+        QLocalSocket duplicate;
+        submit(first, QStringLiteral("test-first"));
+        QTRY_COMPARE_WITH_TIMEOUT(shown.size(), 1, 1000);
+        submit(second, QStringLiteral("test-second"));
+        QCoreApplication::processEvents();
+        QCOMPARE(shown.size(), 1);
+        QCOMPARE(directAdds, 0);
+
+        // A duplicate ID must not open another dialog or steal a slot.
+        submit(duplicate, QStringLiteral("test-first"));
+        QTRY_VERIFY_WITH_TIMEOUT(duplicate.bytesAvailable() > 0, 1000);
+        const QJsonObject repeated = QJsonDocument::fromJson(
+            duplicate.readAll().trimmed()).object();
+        QVERIFY(!repeated.value(QStringLiteral("ok")).toBool());
+        QCOMPARE(shown.size(), 1);
+
+        activation.finishPrompt(true);
+        QTRY_VERIFY_WITH_TIMEOUT(first.bytesAvailable() > 0, 1000);
+        const QJsonObject accepted = QJsonDocument::fromJson(
+            first.readAll().trimmed()).object();
+        QVERIFY(accepted.value(QStringLiteral("ok")).toBool());
+        QCOMPARE(accepted.value(QStringLiteral("requestId")).toString(),
+                 QStringLiteral("test-first"));
+        QTRY_COMPARE_WITH_TIMEOUT(shown.size(), 2, 2500);
+        QCOMPARE(shown.last(), QStringLiteral("https://example.org/test-second.zip"));
+        activation.finishPrompt(false);
+        QTRY_VERIFY_WITH_TIMEOUT(second.bytesAvailable() > 0, 1000);
+        const QJsonObject declined = QJsonDocument::fromJson(
+            second.readAll().trimmed()).object();
+        QVERIFY(!declined.value(QStringLiteral("ok")).toBool());
+        QCOMPARE(declined.value(QStringLiteral("requestId")).toString(),
+                 QStringLiteral("test-second"));
+        QCOMPARE(directAdds, 0);
+    }
+
+    void v2AutomaticRequestIsIdempotent()
+    {
+        int directAdds = 0;
+        BrowserActivation activation([&](const QUrl&, const QString&) {
+            ++directAdds;
+            return true;
+        });
+        QVERIFY(activation.start({}));
+
+        const QByteArray message = QJsonDocument(QJsonObject{
+            {QStringLiteral("protocolVersion"), 2},
+            {QStringLiteral("requestId"), QStringLiteral("automatic-example")},
+            {QStringLiteral("type"), QStringLiteral("download.request")},
+            {QStringLiteral("url"), QStringLiteral("https://example.org/auto.zip")}
+        }).toJson(QJsonDocument::Compact) + '\n';
+        auto submit = [&](QLocalSocket& socket) {
+            socket.connectToServer(BrowserActivation::socketName());
+            QVERIFY(socket.waitForConnected(1500));
+            QCOMPARE(socket.write(message), message.size());
+            QVERIFY(socket.waitForBytesWritten(1500));
+            QTRY_VERIFY_WITH_TIMEOUT(socket.bytesAvailable() > 0, 1000);
+        };
+        QLocalSocket first, repeated;
+        submit(first);
+        QVERIFY(QJsonDocument::fromJson(first.readAll().trimmed()).object()
+                .value(QStringLiteral("ok")).toBool());
+        submit(repeated);
+        QVERIFY(!QJsonDocument::fromJson(repeated.readAll().trimmed()).object()
+                 .value(QStringLiteral("ok")).toBool());
+        QCOMPARE(directAdds, 1);
     }
 
     void nativeHandoffAndAck() {

@@ -1,156 +1,185 @@
-/* GenyDL WebExtension — Chrome, Edge, Firefox.
- * Pause a browser download while the user reviews the GenyDL Add dialog.
- * Cancel and erase the browser history entry ONLY after explicit user approval.
- * On rejection or native communication failure, resume the browser download.
+/* GenyDL Browser Integration v2.
+ * User-controlled: Manual by default; Ask and Always require opt-in.
+ * Each request has an isolated native Port to keep MV3 workers alive while
+ * the desktop user reviews the Add Download dialog.
  */
 const EXT = globalThis.browser ?? globalThis.chrome;
-const NATIVE_HOST = "com.genyleap.genydl";
+const HOST = "com.genyleap.genydl";
 const MENU_ID = "genydl-download";
 const FILE_EXTENSION = /\.(?:7z|apk|appimage|bz2|csv|deb|dmg|docx?|epub|exe|flac|gz|iso|m4a|mkv|mov|mp3|mp4|msi|pdf|pkg|pptx?|rar|rpm|tar|tgz|torrent|wav|webm|xlsx?|xz|zip)$/i;
-const activeRequests = new Set();
+const activeDownloads = new Set();
+const PROTOCOL_VERSION = 2;
 
-function checkUrl(raw) {
+function validatedUrl(raw) {
   try {
     const url = new URL(raw);
-    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) return null;
+    if (!["https:", "http:"].includes(url.protocol) || url.username || url.password)
+      return null;
     if (url.hostname === "localhost" || url.hostname.endsWith(".localhost")) return null;
     return url;
   } catch { return null; }
 }
 
-function excluded(hostname, excludedHosts) {
-  return excludedHosts.some(rule => {
-    const host = String(rule).trim().toLowerCase().replace(/^\*\./, "");
-    return host && (hostname === host || hostname.endsWith("." + host));
+function hostnameExcluded(host, rules) {
+  return (rules || []).some(rule => {
+    const suffix = String(rule).trim().toLowerCase().replace(/^\*\./, "");
+    return suffix && (host === suffix || host.endsWith("." + suffix));
   });
 }
 
-function sendNative(url, filename = "") {
-  const message = {type: "download.prompt", url};
-  if (filename) message.filename = filename;
-  if (typeof globalThis.browser !== "undefined")
-    return globalThis.browser.runtime.sendNativeMessage(NATIVE_HOST, message);
-  return new Promise((resolve, reject) => {
-    EXT.runtime.sendNativeMessage(NATIVE_HOST, message, response => {
-      const error = EXT.runtime.lastError;
-      if (error) reject(new Error(error.message));
-      else resolve(response);
-    });
-  });
-}
-
-// Browser download metadata may contain the real filename even when the
-// redirected final URL has no extension (e.g. GitHub codeload/.../main).
 function filenameHint(item) {
-  const provided = String(item.filename || "").replace(/\\/g, "/").split("/").pop().trim();
-  if (provided && FILE_EXTENSION.test(provided)) return provided;
-  const original = checkUrl(item.url);
+  const supplied = String(item.filename || "").replace(/\\/g, "/").split("/").pop().trim();
+  if (supplied && FILE_EXTENSION.test(supplied)) return supplied;
+  const original = validatedUrl(item.url);
   if (original) {
     let name = original.pathname.split("/").pop() || "";
-    try { name = decodeURIComponent(name); } catch { /* Keep encoded form. */ }
+    try { name = decodeURIComponent(name); } catch { /* retain encoded form */ }
     if (FILE_EXTENSION.test(name)) return name;
   }
-  return provided;
+  return supplied;
 }
 
-// Firefox exposes Promise-based downloads methods. Chromium callback APIs
-// are normalized to Promises for a single fail-open transfer state machine.
+function newRequestId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  // The fallback still distinguishes simultaneous downloads; the native
+  // bridge never relies on request IDs for authorization.
+  return String(Date.now()) + "-" + Math.random().toString(36).slice(2);
+}
+
+function nativeHandoff(url, filename, type) {
+  return new Promise((resolve, reject) => {
+    let port;
+    try { port = EXT.runtime.connectNative(HOST); }
+    catch (error) { reject(error); return; }
+
+    let settled = false;
+    const requestId = newRequestId();
+    const timeout = setTimeout(() => finish(new Error("GenyDL response timed out")), 160000);
+    function finish(error, message) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      try { port.disconnect(); } catch { /* already disconnected */ }
+      if (error) reject(error);
+      else resolve(message);
+    }
+    port.onMessage.addListener(reply => {
+      if (reply?.requestId && reply.requestId !== requestId) {
+        finish(new Error("Mismatched GenyDL request ID"));
+        return;
+      }
+      finish(null, reply);
+    });
+    port.onDisconnect.addListener(() => {
+      const message = EXT.runtime.lastError?.message || "GenyDL native host disconnected";
+      finish(new Error(message));
+    });
+    try {
+      port.postMessage({
+        protocolVersion: PROTOCOL_VERSION, requestId, type,
+        url, ...(filename ? {filename} : {})
+      });
+    } catch (error) { finish(error); }
+  });
+}
+
 function downloadAction(method, argument) {
   if (typeof globalThis.browser !== "undefined")
     return globalThis.browser.downloads[method](argument);
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) =>
     EXT.downloads[method](argument, value => {
       const error = EXT.runtime.lastError;
       if (error) reject(new Error(error.message));
       else resolve(value);
-    });
-  });
+    }));
 }
 
-async function resumeBrowserDownload(id) {
+async function resumeIfPossible(id) {
   try { await downloadAction("resume", id); }
-  catch (err) {
-    console.warn("GenyDL could not resume browser download", String(err));
+  catch (error) {
+    console.warn("GenyDL could not resume browser download", String(error));
   }
 }
 
-async function settings() {
-  const defaults = {mode: "smart", excludedHosts: []};
-  if (typeof globalThis.browser !== "undefined")
-    return globalThis.browser.storage.local.get(defaults);
-  return new Promise(resolve => EXT.storage.local.get(defaults, resolve));
+function normalizedMode(value) {
+  // Earlier releases defaulted to automatic capture. Do not silently carry
+  // that behavior forward after introducing a user-controlled Manual default.
+  if (["smart", "all", "automatic"].includes(value)) return "manual";
+  if (value === "ask") return "ask";
+  return ["manual", "always", "off"].includes(value) ? value : "manual";
+}
+
+async function readSettings() {
+  const defaults = {mode: "manual", captureScope: "recognized", excludedHosts: []};
+  const stored = typeof globalThis.browser !== "undefined"
+    ? await globalThis.browser.storage.local.get(defaults)
+    : await new Promise(resolve => EXT.storage.local.get(defaults, resolve));
+  return {...defaults, ...stored, mode: normalizedMode(stored.mode)};
+}
+
+function supportedDownload(item, url, scope) {
+  if (scope === "all") return true;
+  const original = validatedUrl(item.url);
+  const mime = String(item.mime || "").toLowerCase();
+  return FILE_EXTENSION.test(url.pathname)
+    || (original && FILE_EXTENSION.test(original.pathname))
+    || FILE_EXTENSION.test(filenameHint(item))
+    || ["application/octet-stream", "application/zip",
+        "application/x-zip-compressed"].includes(mime);
 }
 
 async function capture(item) {
-  if (!item || activeRequests.has(item.id) || item.state === "complete") return;
-  const url = checkUrl(item.finalUrl || item.url);
+  if (!item || activeDownloads.has(item.id) || item.state === "complete") return;
+  const url = validatedUrl(item.finalUrl || item.url);
   if (!url) return;
+  const config = await readSettings();
+  if (config.mode === "manual" || config.mode === "off") return;
+  if (hostnameExcluded(url.hostname.toLowerCase(), config.excludedHosts)) return;
+  if (!supportedDownload(item, url, config.captureScope)) return;
 
-  const config = await settings();
-  if (config.mode === "off" || config.mode === "manual") return;
-  if (excluded(url.hostname.toLowerCase(), config.excludedHosts || [])) return;
-  // Smart mode does not claim to intercept arbitrary POST/blob/streaming flows.
-  const mime = String(item.mime || "").toLowerCase();
-  const filename = filenameHint(item);
-  const original = checkUrl(item.url);
-  const directLink = FILE_EXTENSION.test(url.pathname)
-    || (original && FILE_EXTENSION.test(original.pathname))
-    || FILE_EXTENSION.test(filename)
-    || ["application/octet-stream", "application/zip",
-        "application/x-zip-compressed"].includes(mime);
-  if (config.mode === "smart" && !directLink) return;
-
-  activeRequests.add(item.id);
+  activeDownloads.add(item.id);
   let paused = false;
   let cancelled = false;
   try {
-    // Do not ask GenyDL to take over a transfer that cannot be paused:
-    // it might already be complete or cannot safely be interrupted.
     await downloadAction("pause", item.id);
     paused = true;
-
-    // This response is held open by the native host until the desktop
-    // user presses Add or dismisses the dialog (or the request times out).
-    const ack = await sendNative(url.href, filename);
-    if (!ack || ack.ok !== true) return;
+    const response = await nativeHandoff(url.href, filenameHint(item),
+      config.mode === "always" ? "download.request" : "download.prompt");
+    if (response?.ok !== true) return;
 
     await downloadAction("cancel", item.id);
     cancelled = true;
     paused = false;
-    // Erase just this cancelled record; never clear other download history.
-    await downloadAction("erase", {id: item.id});
-  } catch (err) {
-    console.warn("GenyDL download handoff incomplete", String(err));
+    // This is optional UI cleanup. It must never affect the accepted transfer.
+    try { await downloadAction("erase", {id: item.id}); }
+    catch (error) { console.debug("GenyDL could not clear download history", String(error)); }
+  } catch (error) {
+    console.warn("GenyDL handoff failed; keeping browser download", String(error));
   } finally {
-    if (paused && !cancelled) await resumeBrowserDownload(item.id);
-    activeRequests.delete(item.id);
+    if (paused && !cancelled) await resumeIfPossible(item.id);
+    activeDownloads.delete(item.id);
   }
 }
 
-if (EXT.downloads?.onCreated) {
+async function offerContextLink(info) {
+  if (info.menuItemId !== MENU_ID) return;
+  if ((await readSettings()).mode === "off") return;
+  const url = validatedUrl(info.linkUrl);
+  if (!url) return;
+  try { await nativeHandoff(url.href, "", "download.prompt"); }
+  catch (error) { console.warn("GenyDL is unavailable", String(error)); }
+}
+
+if (EXT.downloads?.onCreated)
   EXT.downloads.onCreated.addListener(item => { capture(item).catch(console.warn); });
-}
 
-if (EXT.runtime?.onInstalled) {
-  EXT.runtime.onInstalled.addListener(() => {
-    if (EXT.contextMenus?.create) {
-      EXT.contextMenus.create({id: MENU_ID, title: "Download with GenyDL",
-        contexts: ["link"]}, () => void EXT.runtime.lastError);
-    }
-  });
+function registerMenu() {
+  if (!EXT.contextMenus?.create) return;
+  EXT.contextMenus.create({
+    id: MENU_ID, title: "Download with GenyDL", contexts: ["link"]
+  }, () => { void EXT.runtime.lastError; });
 }
-
-if (EXT.contextMenus?.onClicked) {
-  EXT.contextMenus.onClicked.addListener(async (info) => {
-    if (info.menuItemId !== MENU_ID) return;
-    const url = checkUrl(info.linkUrl);
-    if (!url) return;
-    try {
-      // Context-menu handoffs show the same review dialog, but there is no
-      // existing browser download to pause, cancel or erase.
-      await sendNative(url.href);
-    } catch (err) {
-      console.warn("GenyDL is unavailable; no browser download was modified", String(err));
-    }
-  });
-}
+if (EXT.runtime?.onInstalled) EXT.runtime.onInstalled.addListener(registerMenu);
+if (EXT.runtime?.onStartup) EXT.runtime.onStartup.addListener(registerMenu);
+if (EXT.contextMenus?.onClicked)
+  EXT.contextMenus.onClicked.addListener(info => { offerContextLink(info).catch(console.warn); });

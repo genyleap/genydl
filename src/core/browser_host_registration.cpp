@@ -8,6 +8,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSaveFile>
+#include <QSettings>
+#include <QStandardPaths>
 #include <QStringList>
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -23,24 +25,67 @@ bool writeManifest(const QString& filename, const QJsonObject& json)
     if (!QDir().mkpath(info.absolutePath())) return false;
     QSaveFile out(filename);
     if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate)) return false;
-    if (out.write(QJsonDocument(json).toJson(QJsonDocument::Indented)) < 0) return false;
+    const QByteArray bytes = QJsonDocument(json).toJson(QJsonDocument::Indented);
+    if (out.write(bytes) != bytes.size()) return false;
     return out.commit();
 }
 
+bool validChromiumId(const QString& raw)
+{
+    if (raw.size() != 32) return false;
+    for (const QChar c : raw) {
+        if (c < QLatin1Char('a') || c > QLatin1Char('p')) return false;
+    }
+    return true;
+}
+
+QStringList extensionIds(const QString& name, const QStringList& configured)
+{
+    QStringList ids;
+    QSettings settings;
+    const QStringList extra = settings.value(
+        QStringLiteral("browserIntegration/extensionIds/") + name).toStringList();
+    for (const QString& raw : configured + extra) {
+        const QString id = raw.trimmed().toLower();
+        if (validChromiumId(id) && !ids.contains(id)) ids << id;
+    }
+    return ids;
+}
+
+QJsonObject chromiumManifest(const QJsonObject& base, const QStringList& ids)
+{
+    if (ids.isEmpty()) return {};
+    QJsonObject result(base);
+    QJsonArray origins;
+    for (const QString& id : ids)
+        origins.append(QStringLiteral("chrome-extension://") + id + QLatin1Char('/'));
+    result.insert(QStringLiteral("allowed_origins"), origins);
+    return result;
+}
+
 #ifdef Q_OS_WIN
-void writeRegistryKey(const QString& key, const QString& value)
+bool writeRegistryKey(const QString& key, const QString& value)
 {
     HKEY handle = nullptr;
     if (RegCreateKeyExW(HKEY_CURRENT_USER,
             reinterpret_cast<LPCWSTR>(key.utf16()), 0, nullptr, 0, KEY_SET_VALUE,
-            nullptr, &handle, nullptr) != ERROR_SUCCESS) return;
+            nullptr, &handle, nullptr) != ERROR_SUCCESS) return false;
     const std::wstring path = value.toStdWString();
-    RegSetValueExW(handle, nullptr, 0, REG_SZ,
+    const LSTATUS result = RegSetValueExW(handle, nullptr, 0, REG_SZ,
         reinterpret_cast<const BYTE*>(path.c_str()),
         static_cast<DWORD>((path.size() + 1) * sizeof(wchar_t)));
     RegCloseKey(handle);
+    return result == ERROR_SUCCESS;
 }
 #endif
+
+struct BrowserTarget {
+    QString key;
+    QString macFolder;
+    QString linuxFolder;
+    QString windowsRegistry;
+    QStringList ids;
+};
 }
 
 void registerBrowserNativeHosts()
@@ -52,69 +97,98 @@ void registerBrowserNativeHosts()
 #endif
     if (!QFileInfo::exists(hostBinary)) return;
 
-    const QString hostFilename = QString::fromLatin1(kHostName) + QStringLiteral(".json");
+    const QString filename = QString::fromLatin1(kHostName) + QStringLiteral(".json");
     const QJsonObject base{
         {QStringLiteral("name"), QString::fromLatin1(kHostName)},
-        {QStringLiteral("description"), QStringLiteral("GenyDL browser download handoff")},
+        {QStringLiteral("description"), QStringLiteral("GenyDL browser download bridge")},
         {QStringLiteral("path"), hostBinary},
         {QStringLiteral("type"), QStringLiteral("stdio")}
     };
 
     QJsonObject firefox(base);
-    firefox.insert(QStringLiteral("allowed_extensions"), QJsonArray{
-        QString::fromLatin1(kFirefoxId)});
-    const QString chromeId = QString::fromLatin1(GENYDL_CHROMIUM_EXTENSION_ID).trimmed();
-    QJsonObject chromium(base);
-    if (chromeId.size() == 32) {
-        bool valid = true;
-        for (QChar c : chromeId)
-            valid = valid && (c >= QLatin1Char('a') && c <= QLatin1Char('p'));
-        if (valid) {
-            chromium.insert(QStringLiteral("allowed_origins"), QJsonArray{
-                QStringLiteral("chrome-extension://") + chromeId + QStringLiteral("/")});
-        }
-    }
+    firefox.insert(QStringLiteral("allowed_extensions"),
+                   QJsonArray{QString::fromLatin1(kFirefoxId)});
+
+    const QString legacy = QString::fromLatin1(GENYDL_CHROMIUM_EXTENSION_ID);
+    const QString chromeId = QString::fromLatin1(GENYDL_CHROME_EXTENSION_ID);
+    const QString edgeId = QString::fromLatin1(GENYDL_EDGE_EXTENSION_ID);
+    const QString braveId = QString::fromLatin1(GENYDL_BRAVE_EXTENSION_ID);
+    const QString vivaldiId = QString::fromLatin1(GENYDL_VIVALDI_EXTENSION_ID);
+
+    const QList<BrowserTarget> targets{
+        {QStringLiteral("chrome"), QStringLiteral("Google/Chrome"),
+         QStringLiteral("google-chrome"), QStringLiteral("Google\\Chrome"),
+         extensionIds(QStringLiteral("chrome"), {chromeId, legacy})},
+        {QStringLiteral("edge"), QStringLiteral("Microsoft Edge"),
+         QStringLiteral("microsoft-edge"), QStringLiteral("Microsoft\\Edge"),
+         extensionIds(QStringLiteral("edge"), {edgeId, chromeId, legacy})},
+        {QStringLiteral("brave"), QStringLiteral("BraveSoftware/Brave-Browser"),
+         QStringLiteral("BraveSoftware/Brave-Browser"), QStringLiteral("BraveSoftware\\Brave"),
+         extensionIds(QStringLiteral("brave"), {braveId, chromeId, legacy})},
+        {QStringLiteral("chromium"), QStringLiteral("Chromium"),
+         QStringLiteral("chromium"), QStringLiteral("Chromium"),
+         extensionIds(QStringLiteral("chromium"), {chromeId, legacy})},
+        {QStringLiteral("vivaldi"), QStringLiteral("Vivaldi"),
+         QStringLiteral("vivaldi"), QStringLiteral("Vivaldi"),
+         extensionIds(QStringLiteral("vivaldi"), {vivaldiId, chromeId, legacy})}
+    };
 
 #ifdef Q_OS_WIN
-    const QString data = QDir::homePath() + QStringLiteral("/AppData/Roaming/GenyDL/NativeMessaging");
-    const QString firefoxPath = QDir(data).filePath(QStringLiteral("firefox-") + hostFilename);
+    const QString userData = QStandardPaths::writableLocation(
+        QStandardPaths::AppLocalDataLocation);
+    if (userData.isEmpty()) return;
+    const QDir nativeDir(QDir(userData).filePath(QStringLiteral("NativeMessagingHosts")));
+    const QString firefoxPath = nativeDir.filePath(QStringLiteral("firefox-") + filename);
     if (writeManifest(firefoxPath, firefox)) {
-        writeRegistryKey(QStringLiteral("Software\\Mozilla\\NativeMessagingHosts\\") + QString::fromLatin1(kHostName),
-                         firefoxPath);
+        writeRegistryKey(QStringLiteral("Software\\Mozilla\\NativeMessagingHosts\\")
+                         + QString::fromLatin1(kHostName), firefoxPath);
     }
-    if (chromium.contains(QStringLiteral("allowed_origins"))) {
-        const QString chromePath = QDir(data).filePath(hostFilename);
-        if (writeManifest(chromePath, chromium)) {
-            for (const QString& vendor : {QStringLiteral("Google\\Chrome"),
-                                          QStringLiteral("Microsoft\\Edge"),
-                                          QStringLiteral("BraveSoftware\\Brave")}) {
-                writeRegistryKey(QStringLiteral("Software\\") + vendor +
-                    QStringLiteral("\\NativeMessagingHosts\\") + QString::fromLatin1(kHostName),
-                    chromePath);
-            }
+    // Brave and Vivaldi on Windows discover native hosts through Chrome's
+    // registry location. Put every explicitly configured Chrome-family ID
+    // in that one allowlist; writing independent Brave/Vivaldi registry keys
+    // would not be reliably discovered by these browsers.
+    QStringList chromeFamilyIds;
+    for (const BrowserTarget& target : targets) {
+        if (target.key != QStringLiteral("chrome")
+            && target.key != QStringLiteral("brave")
+            && target.key != QStringLiteral("vivaldi"))
+            continue;
+        for (const QString& id : target.ids)
+            if (!chromeFamilyIds.contains(id)) chromeFamilyIds.append(id);
+    }
+    for (const BrowserTarget& target : targets) {
+        if (target.key == QStringLiteral("brave")
+            || target.key == QStringLiteral("vivaldi"))
+            continue;
+        const QJsonObject manifest = chromiumManifest(
+            base, target.key == QStringLiteral("chrome") ? chromeFamilyIds : target.ids);
+        if (manifest.isEmpty()) continue;
+        const QString path = nativeDir.filePath(target.key + QLatin1Char('-') + filename);
+        if (writeManifest(path, manifest)) {
+            writeRegistryKey(QStringLiteral("Software\\") + target.windowsRegistry
+                             + QStringLiteral("\\NativeMessagingHosts\\")
+                             + QString::fromLatin1(kHostName), path);
         }
     }
 #elif defined(Q_OS_MACOS)
     const QString home = QDir::homePath() + QStringLiteral("/Library/Application Support/");
-    writeManifest(home + QStringLiteral("Mozilla/NativeMessagingHosts/") + hostFilename, firefox);
-    if (chromium.contains(QStringLiteral("allowed_origins"))) {
-        for (const QString& vendor : {QStringLiteral("Google/Chrome/NativeMessagingHosts/"),
-                                      QStringLiteral("Microsoft Edge/NativeMessagingHosts/"),
-                                      QStringLiteral("BraveSoftware/Brave-Browser/NativeMessagingHosts/")}) {
-            writeManifest(home + vendor + hostFilename, chromium);
-        }
+    writeManifest(home + QStringLiteral("Mozilla/NativeMessagingHosts/") + filename,
+                  firefox);
+    for (const BrowserTarget& target : targets) {
+        const QJsonObject manifest = chromiumManifest(base, target.ids);
+        if (manifest.isEmpty()) continue;
+        writeManifest(home + target.macFolder
+                      + QStringLiteral("/NativeMessagingHosts/") + filename, manifest);
     }
 #else
     const QString home = QDir::homePath();
-    writeManifest(home + QStringLiteral("/.mozilla/native-messaging-hosts/") + hostFilename, firefox);
-    if (chromium.contains(QStringLiteral("allowed_origins"))) {
-        for (const QString& browser : {QStringLiteral("google-chrome"),
-                                       QStringLiteral("microsoft-edge"),
-                                       QStringLiteral("BraveSoftware/Brave-Browser"),
-                                       QStringLiteral("chromium")}) {
-            writeManifest(home + QStringLiteral("/.config/") + browser
-                        + QStringLiteral("/NativeMessagingHosts/") + hostFilename, chromium);
-        }
+    writeManifest(home + QStringLiteral("/.mozilla/native-messaging-hosts/") + filename,
+                  firefox);
+    for (const BrowserTarget& target : targets) {
+        const QJsonObject manifest = chromiumManifest(base, target.ids);
+        if (manifest.isEmpty()) continue;
+        writeManifest(home + QStringLiteral("/.config/") + target.linuxFolder
+                      + QStringLiteral("/NativeMessagingHosts/") + filename, manifest);
     }
 #endif
 }

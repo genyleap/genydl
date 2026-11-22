@@ -15,6 +15,7 @@
 #include <QSet>
 #include "browser_activation.h"
 #include "browser_host_registration.h"
+#include "browser_integration_manager.h"
 #ifdef Q_OS_MACOS
 #include "macos_browser_integration.h"
 #endif
@@ -123,6 +124,7 @@ auto main(int argc, char *argv[]) -> int
     // Create DownloadManager instance
     DownloadManager manager(&torrentSession, &gatewayService);
     UpdateClient updateClient;
+    BrowserIntegrationManager browserIntegration;
     GitHubReleaseService githubReleaseService;
     GitHubReleaseTrackerService releaseCenterService;
     AppController appController(&manager);
@@ -155,6 +157,7 @@ auto main(int argc, char *argv[]) -> int
 
     // Expose the manager to QML
     engine.rootContext()->setContextProperty("downloadManager", &manager);
+    engine.rootContext()->setContextProperty("browserIntegration", &browserIntegration);
     engine.rootContext()->setContextProperty("torrentSession", &torrentSession);
     engine.rootContext()->setContextProperty("gatewayService", &gatewayService);
     engine.rootContext()->setContextProperty("updateClient", &updateClient);
@@ -207,6 +210,7 @@ auto main(int argc, char *argv[]) -> int
         if (!accepted) reservedBrowserPaths.remove(uniquePath);
         return accepted;
     });
+    browserActivation.setFrontendReady(false);
     if (!browserActivation.start(app.arguments().mid(1)))
         return 0;
 
@@ -248,6 +252,7 @@ auto main(int argc, char *argv[]) -> int
         return -1;
 
     appController.setMainWindow(engine.rootObjects().first());
+    browserActivation.setFrontendReady(true);
     registerBrowserNativeHosts();
 #ifdef Q_OS_MACOS
     registerMacBrowserService(&browserActivation);

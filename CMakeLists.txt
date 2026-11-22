@@ -626,6 +626,8 @@ qt_add_executable(${APP_NAME}
     src/core/browser_activation.cpp
     src/core/browser_host_registration.h
     src/core/browser_host_registration.cpp
+    src/core/browser_integration_manager.h
+    src/core/browser_integration_manager.cpp
 )
 
 if(TARGET genydl_legacy_module_moc)
@@ -634,7 +636,15 @@ if(TARGET genydl_legacy_module_moc)
 endif()
 
 set(GENYDL_CHROMIUM_EXTENSION_ID "" CACHE STRING
-    "32-character published Chrome/Edge extension ID for native messaging")
+    "Legacy shared Chromium extension ID (retained for compatibility)")
+set(GENYDL_CHROME_EXTENSION_ID "" CACHE STRING
+    "Published Chrome Web Store extension ID")
+set(GENYDL_EDGE_EXTENSION_ID "" CACHE STRING
+    "Published Microsoft Edge Add-ons extension ID")
+set(GENYDL_BRAVE_EXTENSION_ID "" CACHE STRING
+    "Brave-specific extension ID (otherwise Chrome ID is used)")
+set(GENYDL_VIVALDI_EXTENSION_ID "" CACHE STRING
+    "Vivaldi-specific extension ID (otherwise Chrome ID is used)")
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/src/core/browser_config.h.in"
     "${CMAKE_CURRENT_BINARY_DIR}/browser_config.h"
@@ -664,12 +674,34 @@ else()
         COMMENT "Install browser native-messaging host beside GenyDL" VERBATIM)
 endif()
 
+# The Firefox and Chromium Manifest V3 backgrounds have different
+# schemas. Build two browser-ready distributions from the same JS/CSS assets.
+set(GENYDL_BROWSER_STAGE "${CMAKE_BINARY_DIR}/browser-extensions")
+foreach(genydl_browser IN ITEMS firefox chromium)
+    file(MAKE_DIRECTORY "${GENYDL_BROWSER_STAGE}/${genydl_browser}")
+    foreach(genydl_asset IN ITEMS background.js options.html options.js icon128.png)
+        configure_file(
+            "${CMAKE_CURRENT_SOURCE_DIR}/browser-extension/${genydl_asset}"
+            "${GENYDL_BROWSER_STAGE}/${genydl_browser}/${genydl_asset}" COPYONLY)
+    endforeach()
+endforeach()
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/browser-extension/manifest.json"
+    "${GENYDL_BROWSER_STAGE}/firefox/manifest.json" COPYONLY)
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/browser-extension/manifest.chromium.json"
+    "${GENYDL_BROWSER_STAGE}/chromium/manifest.json" COPYONLY)
+
 add_custom_target(browser-extension-zip
-    COMMAND ${CMAKE_COMMAND} -E tar cf
-        "${CMAKE_BINARY_DIR}/GenyDL-browser-extension.zip" --format=zip
+    COMMAND ${CMAKE_COMMAND} -E chdir "${GENYDL_BROWSER_STAGE}/firefox"
+        ${CMAKE_COMMAND} -E tar cf
+        "${CMAKE_BINARY_DIR}/GenyDL-Firefox-extension.zip" --format=zip
         "manifest.json" "background.js" "options.html" "options.js" "icon128.png"
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/browser-extension"
-    COMMENT "Package GenyDL WebExtension for browser store submission"
+    COMMAND ${CMAKE_COMMAND} -E chdir "${GENYDL_BROWSER_STAGE}/chromium"
+        ${CMAKE_COMMAND} -E tar cf
+        "${CMAKE_BINARY_DIR}/GenyDL-Chromium-extension.zip" --format=zip
+        "manifest.json" "background.js" "options.html" "options.js" "icon128.png"
+    COMMENT "Package separate Firefox and Chromium WebExtensions"
     VERBATIM)
 
 

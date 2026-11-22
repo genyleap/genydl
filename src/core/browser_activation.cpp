@@ -10,6 +10,8 @@
 #endif
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRegularExpression>
+#include <QTimer>
 #include <QLocalSocket>
 #include <QHostAddress>
 #include <memory>
@@ -18,12 +20,15 @@
 namespace {
 constexpr int kMaxRequestBytes = 16 * 1024;
 
-QByteArray encodeReply(bool ok, const QString& message)
+QByteArray encodeReply(bool ok, const QString& message, const QString& requestId = {})
 {
-    return QJsonDocument(QJsonObject{
+    QJsonObject reply{
         {QStringLiteral("ok"), ok},
         {QStringLiteral("message"), message},
-    }).toJson(QJsonDocument::Compact) + '\n';
+        {QStringLiteral("protocolVersion"), 2}
+    };
+    if (!requestId.isEmpty()) reply.insert(QStringLiteral("requestId"), requestId);
+    return QJsonDocument(reply).toJson(QJsonDocument::Compact) + '\n';
 }
 
 QString safeArgument(const QString& argument)
@@ -91,25 +96,115 @@ QString BrowserActivation::safeFilename(const QString& raw)
         if (!c.isPrint() || QStringLiteral("<>:\"|?*").contains(c))
             return {};
     }
+    // Windows device names remain reserved even with extensions (CON.zip,
+    // COM1.txt, etc.). Reject them on every OS for portable handoffs.
+    const QString stem = leaf.section(QLatin1Char('.'), 0, 0).toUpper();
+    if (stem == QStringLiteral("CON") || stem == QStringLiteral("PRN")
+        || stem == QStringLiteral("AUX") || stem == QStringLiteral("NUL")
+        || (stem.size() == 4
+            && ((stem.startsWith(QStringLiteral("COM"))
+                 || stem.startsWith(QStringLiteral("LPT")))
+                && stem.at(3) >= QLatin1Char('1')
+                && stem.at(3) <= QLatin1Char('9'))))
+        return {};
     return leaf;
+}
+
+void BrowserActivation::scheduleNextPrompt()
+{
+    // Give the QML Dialog its close transition before opening the next one.
+    // New sockets arriving in the interim remain queued, not rejected.
+    m_promptTransitioning = true;
+    QTimer::singleShot(350, this, [this] {
+        m_promptTransitioning = false;
+        activateNextPrompt();
+    });
+}
+
+void BrowserActivation::setFrontendReady(bool ready)
+{
+    m_frontendReady = ready;
+    if (ready) activateNextPrompt();
+}
+
+void BrowserActivation::activateNextPrompt()
+{
+    if (!m_frontendReady || m_pendingPromptSocket || m_localPromptActive
+        || m_promptTransitioning) return;
+    while (!m_promptQueue.isEmpty()) {
+        const PendingPrompt pending = m_promptQueue.dequeue();
+        if (!pending.localRequest
+            && (!pending.client
+                || pending.client->state() != QLocalSocket::ConnectedState))
+            continue;
+        m_pendingPromptSocket = pending.client;
+        m_localPromptActive = pending.localRequest;
+        m_activeRequestId = pending.requestId;
+        emit promptRequested(pending.url, pending.filename);
+        return;
+    }
+}
+
+void BrowserActivation::expirePrompt(QLocalSocket* client)
+{
+    if (!client) return;
+    if (m_pendingPromptSocket == client) {
+        m_pendingPromptSocket.clear();
+        m_outstandingRequestIds.remove(m_activeRequestId);
+        m_activeRequestId.clear();
+        emit promptAborted();
+    } else {
+        for (int i = 0; i < m_promptQueue.size(); ++i) {
+            if (m_promptQueue.at(i).client == client) {
+                m_outstandingRequestIds.remove(m_promptQueue.at(i).requestId);
+                m_promptQueue.removeAt(i);
+                break;
+            }
+        }
+    }
+    if (client->state() == QLocalSocket::ConnectedState) {
+        client->write(encodeReply(false, QStringLiteral("download prompt expired")));
+        client->flush();
+        client->disconnectFromServer();
+    }
+    scheduleNextPrompt();
 }
 
 void BrowserActivation::finishPrompt(bool accepted)
 {
-    if (!m_pendingPromptSocket) return;
+    if (!m_pendingPromptSocket && !m_localPromptActive) return;
     QPointer<QLocalSocket> client = m_pendingPromptSocket;
+    const QString requestId = m_activeRequestId;
     m_pendingPromptSocket.clear();
-    if (!client) return;
-    client->write(encodeReply(accepted,
-        accepted ? QStringLiteral("user accepted")
-                 : QStringLiteral("user declined")));
-    client->flush();
-    client->disconnectFromServer();
+    m_localPromptActive = false;
+    m_activeRequestId.clear();
+    m_outstandingRequestIds.remove(requestId);
+    if (accepted && !requestId.isEmpty()) {
+        m_handledRequestIds.insert(requestId);
+        m_handledRequestOrder.enqueue(requestId);
+        if (m_handledRequestOrder.size() > 256)
+            m_handledRequestIds.remove(m_handledRequestOrder.dequeue());
+    }
+    if (client) {
+        client->write(encodeReply(accepted,
+            accepted ? QStringLiteral("user accepted")
+                     : QStringLiteral("user declined"), requestId));
+        client->flush();
+        client->disconnectFromServer();
+    }
+    scheduleNextPrompt();
 }
 
 bool BrowserActivation::submitUrl(const QString& raw)
 {
-    return deliver(raw);
+    // macOS Services and OS protocol handlers represent an explicit user
+    // action. Queue a review dialog rather than starting the download.
+    const QUrl url = parseDownloadUrl(raw);
+    if (!isSafeHttpUrl(url) || m_promptQueue.size() >= 16) return false;
+    m_promptQueue.enqueue({nullptr, url.toString(QUrl::FullyEncoded),
+                           QString(), QString(), true});
+    activateNextPrompt();
+    return true;
 }
 
 bool BrowserActivation::deliver(const QString& raw, const QString& filename)
@@ -126,13 +221,17 @@ bool BrowserActivation::deliverToRunningInstance(const QStringList& arguments)
     if (!socket.waitForConnected(250)) return false;
 
     auto send = [&socket](const QString& input) -> bool {
+        const bool protocolPrompt = input.startsWith(
+            QStringLiteral("genydl:"), Qt::CaseInsensitive);
         const QByteArray message = QJsonDocument(QJsonObject{
-            {QStringLiteral("type"), QStringLiteral("download.request")},
+            {QStringLiteral("type"), protocolPrompt
+                ? QStringLiteral("download.prompt")
+                : QStringLiteral("download.request")},
             {QStringLiteral("url"), input}
         }).toJson(QJsonDocument::Compact) + '\n';
         if (socket.write(message) != message.size()) return false;
         if (!socket.waitForBytesWritten(1000)) return false;
-        if (!socket.waitForReadyRead(1500)) return false;
+        if (!socket.waitForReadyRead(protocolPrompt ? 125000 : 1500)) return false;
         const QJsonObject reply = QJsonDocument::fromJson(socket.readAll().trimmed()).object();
         return reply.value(QStringLiteral("ok")).toBool();
     };
@@ -161,8 +260,13 @@ bool BrowserActivation::start(const QStringList& arguments)
         QLocalServer::removeServer(socketName());
         if (!m_server.listen(socketName())) return false;
     }
-    for (const QString& arg : arguments)
-        if (!safeArgument(arg).isEmpty()) deliver(arg);
+    for (const QString& arg : arguments) {
+        if (safeArgument(arg).isEmpty()) continue;
+        if (arg.startsWith(QStringLiteral("genydl:"), Qt::CaseInsensitive))
+            submitUrl(arg);
+        else
+            deliver(arg); // Legacy raw CLI URL keeps its direct behavior.
+    }
     return true;
 }
 
@@ -174,7 +278,7 @@ bool BrowserActivation::eventFilter(QObject* object, QEvent* event)
         const QString raw = opened->url().isValid()
             ? opened->url().toString(QUrl::FullyEncoded)
             : opened->file();
-        if (deliver(raw)) return true;
+        if (submitUrl(raw)) return true;
     }
 #endif
     return QObject::eventFilter(object, event);
@@ -185,8 +289,9 @@ void BrowserActivation::onConnection()
     while (QLocalSocket* client = m_server.nextPendingConnection()) {
         client->setParent(this);
         auto buffer = std::make_shared<QByteArray>();
-        connect(client, &QLocalSocket::readyRead, this, [this, client, buffer] {
-            if (m_pendingPromptSocket == client) return;
+        auto handled = std::make_shared<bool>(false);
+        connect(client, &QLocalSocket::readyRead, this, [this, client, buffer, handled] {
+            if (*handled) { client->readAll(); return; }
             *buffer += client->readAll();
             if (buffer->size() > kMaxRequestBytes) {
                 client->write(encodeReply(false, QStringLiteral("request too large")));
@@ -196,38 +301,86 @@ void BrowserActivation::onConnection()
             }
             const qsizetype end = buffer->indexOf('\n');
             if (end < 0) return;
+            *handled = true;
             const QJsonDocument document = QJsonDocument::fromJson(buffer->left(end));
             const QJsonObject message = document.object();
             const QString type = message.value(QStringLiteral("type")).toString();
             const QString rawUrl = message.value(QStringLiteral("url")).toString();
             const QString filename = safeFilename(
                 message.value(QStringLiteral("filename")).toString());
-            if (type == QStringLiteral("download.prompt")) {
-                const QUrl url = parseDownloadUrl(rawUrl);
-                if (!isSafeHttpUrl(url) || m_pendingPromptSocket) {
-                    client->write(encodeReply(false,
-                        QStringLiteral("invalid URL or another prompt is active")));
-                    client->flush();
-                    client->disconnectFromServer();
-                    return;
-                }
-                m_pendingPromptSocket = client;
-                // The native host keeps this socket open while the user
-                // chooses. No download and no success ACK occurs yet.
-                emit promptRequested(url.toString(QUrl::FullyEncoded), filename);
+            const int version = message.value(QStringLiteral("protocolVersion")).toInt(1);
+            const QString requestId = message.value(QStringLiteral("requestId")).toString();
+            static const QRegularExpression validId(QStringLiteral("^[A-Za-z0-9_-]{1,96}$"));
+            const bool validRequest = document.isObject()
+                && (version == 1 || version == 2)
+                && (version == 1 || validId.match(requestId).hasMatch())
+                && (requestId.isEmpty() || validId.match(requestId).hasMatch());
+            auto reject = [client, &requestId](const QString& reason) {
+                client->write(encodeReply(false, reason, requestId));
+                client->flush();
+                client->disconnectFromServer();
+            };
+            if (!validRequest) {
+                reject(QStringLiteral("invalid protocol or request ID"));
                 return;
             }
-            const bool accepted = type == QStringLiteral("download.request")
-                && deliver(rawUrl, filename);
+            if (type == QStringLiteral("download.prompt")) {
+                const QUrl url = parseDownloadUrl(rawUrl);
+                if (!isSafeHttpUrl(url)) {
+                    reject(QStringLiteral("invalid URL"));
+                    return;
+                }
+                if (m_promptQueue.size() >= 16
+                    || (!requestId.isEmpty() && (
+                        m_outstandingRequestIds.contains(requestId)
+                        || m_handledRequestIds.contains(requestId)))) {
+                    reject(QStringLiteral("prompt queue full or duplicate request"));
+                    return;
+                }
+                if (!requestId.isEmpty()) m_outstandingRequestIds.insert(requestId);
+                m_promptQueue.enqueue({client, url.toString(QUrl::FullyEncoded),
+                                      filename, requestId});
+                // The timeout is shorter than the native host's 180 seconds.
+                // Queued requests have the same bounded lifetime as active ones.
+                QTimer::singleShot(120000, client, [this, client] { expirePrompt(client); });
+                activateNextPrompt();
+                return;
+            }
+            if (type != QStringLiteral("download.request")) {
+                reject(QStringLiteral("unknown request type"));
+                return;
+            }
+            if (!requestId.isEmpty() && (
+                m_outstandingRequestIds.contains(requestId)
+                || m_handledRequestIds.contains(requestId))) {
+                reject(QStringLiteral("duplicate request ID"));
+                return;
+            }
+            const bool accepted = deliver(rawUrl, filename);
+            if (accepted && !requestId.isEmpty()) {
+                m_handledRequestIds.insert(requestId);
+                m_handledRequestOrder.enqueue(requestId);
+                if (m_handledRequestOrder.size() > 256)
+                    m_handledRequestIds.remove(m_handledRequestOrder.dequeue());
+            }
             client->write(encodeReply(accepted, accepted ? QStringLiteral("accepted")
-                                                         : QStringLiteral("invalid or rejected request")));
+                : QStringLiteral("invalid or rejected request"), requestId));
             client->flush();
             client->disconnectFromServer();
         });
         connect(client, &QLocalSocket::disconnected, this, [this, client] {
             if (m_pendingPromptSocket == client) {
                 m_pendingPromptSocket.clear();
+                m_outstandingRequestIds.remove(m_activeRequestId);
+                m_activeRequestId.clear();
                 emit promptAborted();
+                scheduleNextPrompt();
+            }
+            for (int i = m_promptQueue.size() - 1; i >= 0; --i) {
+                if (m_promptQueue.at(i).client == client) {
+                    m_outstandingRequestIds.remove(m_promptQueue.at(i).requestId);
+                    m_promptQueue.removeAt(i);
+                }
             }
             client->deleteLater();
         });

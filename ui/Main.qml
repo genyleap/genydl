@@ -102,6 +102,7 @@ ApplicationWindow {
     property int themeMode: Colors.modeSystem
     property int downloadsViewMode: 0
     property int configurationTabIndex: 0
+    property var browserHostRows: []
     property string lastUpdateNotificationVersion: ""
 
     property int selectedTaskIndex: -1
@@ -2424,10 +2425,21 @@ ApplicationWindow {
         onAccepted: {
             addDialogErrorLabel.text = ""
             if (appRoot.browserPromptActive) {
+                const proposedName = addDialogFilenameField.text.trim()
+                const safeName = proposedName.length > 0
+                    ? browserActivation.sanitizeFilename(proposedName) : ""
+                if (proposedName.length > 0 && safeName !== proposedName) {
+                    appRoot.appendNotification(
+                        qsTr("Invalid file name"),
+                        qsTr("The file name cannot contain directories or reserved characters."),
+                        "warning")
+                    browserActivation.finishPrompt(false)
+                    appRoot.browserPromptActive = false
+                    return
+                }
                 const before = downloadManager.taskCount()
-                const output = addDialogFilenameField.text.trim().length > 0
-                    ? appRoot.downloadPathForAsset(
-                          addDialogPathField.text, addDialogFilenameField.text.trim())
+                const output = safeName.length > 0
+                    ? appRoot.downloadPathForAsset(addDialogPathField.text, safeName)
                     : addDialogPathField.text
                 const added = appRoot.submitDownload(
                     addDialogUrlField.text,
@@ -2894,6 +2906,7 @@ ApplicationWindow {
                 Controls.TabButton { text: qsTr("Network") }
                 Controls.TabButton { text: qsTr("Updates") }
                 Controls.TabButton { text: qsTr("Release Center") }
+                Controls.TabButton { text: qsTr("Browsers") }
             }
 
             StackLayout {
@@ -3686,6 +3699,117 @@ ApplicationWindow {
                         spacing: 12
 
                         Controls.ReleaseCenterSettings { Layout.fillWidth: true }
+
+                        Item { Layout.fillHeight: true }
+                    }
+                }
+
+                ScrollView {
+                    id: browserConfigView
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+
+                    ColumnLayout {
+                        width: Math.max(320, browserConfigView.availableWidth)
+                        spacing: 12
+
+                        Controls.GroupBox {
+                            title: qsTr("Browser integration setup")
+                            Layout.fillWidth: true
+                            implicitHeight: browserSetupLayout.implicitHeight
+                                + topPadding + bottomPadding
+
+                            ColumnLayout {
+                                id: browserSetupLayout
+                                width: parent.width
+                                spacing: 10
+
+                                Controls.Label {
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
+                                    text: qsTr("GenyDL can register and repair the native messaging host without administrator privileges. Installing the extension and granting its permissions still require your confirmation in each browser.")
+                                }
+                                Controls.Label {
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
+                                    color: Colors.textMuted
+                                    text: qsTr("Registered means the host manifest points to this copy of GenyDL. It does not confirm that the browser extension is installed or enabled.")
+                                }
+                                RowLayout {
+                                    Controls.Button {
+                                        text: qsTr("Repair native hosts")
+                                        onClicked: {
+                                            browserIntegration.repairNativeHosts()
+                                            appRoot.browserHostRows = browserIntegration.statuses()
+                                        }
+                                    }
+                                    Controls.Button {
+                                        text: qsTr("Refresh")
+                                        onClicked: appRoot.browserHostRows = browserIntegration.statuses()
+                                    }
+                                    Item { Layout.fillWidth: true }
+                                }
+                            }
+                        }
+
+                        Repeater {
+                            model: appRoot.browserHostRows
+                            delegate: Controls.GroupBox {
+                                required property var modelData
+                                readonly property var browserRow: modelData
+                                title: browserRow.name
+                                Layout.fillWidth: true
+                                implicitHeight: browserEntryLayout.implicitHeight
+                                    + topPadding + bottomPadding
+
+                                ColumnLayout {
+                                    id: browserEntryLayout
+                                    width: parent.width
+                                    spacing: 8
+
+                                    Controls.Label {
+                                        Layout.fillWidth: true
+                                        wrapMode: Text.WordWrap
+                                        text: browserRow.statusText
+                                        color: browserRow.hostRegistered
+                                            ? Colors.textPrimary : Colors.textMuted
+                                    }
+                                    Controls.Label {
+                                        Layout.fillWidth: true
+                                        wrapMode: Text.WrapAnywhere
+                                        font.pixelSize: Typography.t4
+                                        color: Colors.textMuted
+                                        text: browserRow.manifestPath
+                                    }
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        visible: browserRow.code !== "firefox"
+                                            && browserRow.code !== "safari"
+                                        Controls.TextField {
+                                            id: browserExtensionIdInput
+                                            Layout.fillWidth: true
+                                            text: browserRow.savedExtensionId
+                                            placeholderText: qsTr("32-character extension ID")
+                                            validator: RegularExpressionValidator {
+                                                regularExpression: /^[a-p]{32}$/
+                                            }
+                                        }
+                                        Controls.Button {
+                                            text: qsTr("Register ID")
+                                            enabled: browserExtensionIdInput.text.length === 32
+                                            onClicked: {
+                                                if (browserIntegration.registerExtensionId(
+                                                        browserRow.code,
+                                                        browserExtensionIdInput.text)) {
+                                                    appRoot.browserHostRows = browserIntegration.statuses()
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
 
                         Item { Layout.fillHeight: true }
                     }
@@ -5319,6 +5443,7 @@ ApplicationWindow {
             Controls.AppMenuItem { text: qsTr("Queues"); iconGlyph: "\uf0ca"; onTriggered: appRoot.openConfigurationDialog(1) }
             Controls.AppMenuItem { text: qsTr("Network"); iconGlyph: "\uf1eb"; onTriggered: appRoot.openConfigurationDialog(2) }
             Controls.AppMenuItem { text: qsTr("Updates"); iconGlyph: "\uf021"; onTriggered: appRoot.openConfigurationDialog(3) }
+            Controls.AppMenuItem { text: qsTr("Browser Integration"); iconGlyph: "\uf0c1"; onTriggered: appRoot.openConfigurationDialog(5) }
             Controls.AppMenuSeparator { }
             Controls.AppMenuItem {
                 text: appRoot.sortAscending ? qsTr("Sort Desc") : qsTr("Sort Asc")

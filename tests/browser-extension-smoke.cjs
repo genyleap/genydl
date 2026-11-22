@@ -3,127 +3,154 @@
 const fs = require("node:fs");
 const vm = require("node:vm");
 const assert = require("node:assert/strict");
-const source = fs.readFileSync("browser-extension/background.js", "utf8");
+const script = fs.readFileSync("browser-extension/background.js", "utf8");
 
-const flush = async () => {
-  for (let i = 0; i < 20; ++i) await new Promise(resolve => setImmediate(resolve));
+const tick = async () => {
+  for (let i = 0; i < 15; i++) await new Promise(r => setImmediate(r));
 };
+let passed = 0;
 
-let count = 0;
-async function runCase({
-  ack = true, mode = "smart", url = "https://example.org/a.zip",
-  finalUrl, filename, mime = "application/zip", deferred = false,
-  failPause = false, expected = {},
-  contextMenu = false
+async function scenario({
+  mode, scope, url = "https://example.org/dl.zip",
+  finalUrl, filename, mime = "application/zip", contextLink = false,
+  deferred = false, approve = true, failPause = false,
+  nativeDisconnect = false, failErase = false, expected = {},
 }) {
-  let listener;
-  let menuListener;
-  let replyNative;
-  const calls = {paused: [], resumed: [], cancelled: [], erased: [], native: []};
-  const chrome = {
-    downloads: {
-      onCreated: {addListener: fn => { listener = fn; }},
-      pause: (id, cb) => {
-        calls.paused.push(id);
-        if (failPause) chrome.runtime.lastError = {message: "pause unavailable"};
-        cb();
-        chrome.runtime.lastError = null;
-      },
-      resume: (id, cb) => { calls.resumed.push(id); cb(); },
-      cancel: (id, cb) => { calls.cancelled.push(id); cb(); },
-      erase: (query, cb) => { calls.erased.push(query.id); cb([query.id]); }
-    },
-    runtime: {
-      lastError: null,
-      onInstalled: {addListener: () => {}},
-      sendNativeMessage: (name, message, cb) => {
-        calls.native.push({name, message});
-        if (deferred) replyNative = cb;
-        else if (ack === "error") {
-          chrome.runtime.lastError = {message: "native host unavailable"};
-          cb();
-          chrome.runtime.lastError = null;
-        } else cb({ok: ack});
-      }
-    },
-    storage: {local: {get: (_defaults, cb) => cb({mode, excludedHosts: []})}},
-    contextMenus: {
-      create: (_opts, cb) => cb(),
-      onClicked: {addListener: fn => {menuListener = fn;}}
-    },
-    tabs: {create: () => {throw new Error("unwanted protocol fallback");}}
+  let onDownload, onMenu, reply, failNative;
+  const calls = {pause: [], resume: [], cancel: [], erase: [], native: []};
+  let lastError = null;
+  const runtime = {
+    get lastError() { return lastError; },
+    onInstalled: {addListener() {}},
+    onStartup: {addListener() {}},
+    connectNative(host) {
+      assert.equal(host, "com.genyleap.genydl");
+      let onMessage, onDisconnect;
+      const port = {
+        onMessage: {addListener(fn) {onMessage = fn;}},
+        onDisconnect: {addListener(fn) {onDisconnect = fn;}},
+        postMessage(message) {
+          calls.native.push(message);
+          reply = (ok = approve) => onMessage({
+            requestId: message.requestId, protocolVersion: 2, ok
+          });
+          failNative = () => {
+            lastError = {message: "Host terminated"};
+            onDisconnect();
+            lastError = null;
+          };
+          if (!deferred && !nativeDisconnect)
+            queueMicrotask(() => reply());
+          if (!deferred && nativeDisconnect)
+            queueMicrotask(() => failNative());
+        },
+        disconnect() {}
+      };
+      return port;
+    }
   };
-  const logs = {debug: () => {}, warn: () => {}};
-  vm.runInNewContext(source, {
-    chrome, console: logs, URL, Set, Promise, String, Error,
-    decodeURIComponent
-  });
-  if (contextMenu) {
-    assert.equal(typeof menuListener, "function");
-    menuListener({menuItemId: "genydl-download", linkUrl: url});
-  } else {
-    assert.equal(typeof listener, "function");
-    listener({id: 42, url, finalUrl, filename, state: "in_progress", mime});
+  function call(name, cb, arg) {
+    calls[name].push(arg);
+    if (name === "pause" && failPause) lastError = {message: "Cannot pause"};
+    if (name === "erase" && failErase) lastError = {message: "Cannot erase"};
+    cb(name === "erase" ? [42] : undefined);
+    lastError = null;
   }
-  await flush();
+  const chrome = {
+    runtime,
+    downloads: {
+      onCreated: {addListener(fn) {onDownload = fn;}},
+      pause: (id, cb) => call("pause", cb, id),
+      resume: (id, cb) => call("resume", cb, id),
+      cancel: (id, cb) => call("cancel", cb, id),
+      erase: (query, cb) => call("erase", cb, query.id),
+    },
+    contextMenus: {
+      create(_opts, cb) {cb();},
+      onClicked: {addListener(fn) {onMenu = fn;}}
+    },
+    storage: {local: {get(_defaults, cb) {
+      cb({mode, captureScope: scope || "recognized", excludedHosts: []});
+    }}}
+  };
+  vm.runInNewContext(script, {
+    chrome, console: {warn() {}, debug() {}}, URL, Set, Promise, String, Error,
+    Date, Math, decodeURIComponent, setTimeout, clearTimeout, queueMicrotask
+  });
+  if (contextLink)
+    onMenu({menuItemId: "genydl-download", linkUrl: url});
+  else
+    onDownload({id: 42, state: "in_progress", url, finalUrl, filename, mime});
+  await tick();
 
   if (deferred) {
-    assert.equal(calls.native.length, 1, "prompt sent");
-    assert.deepEqual(calls.cancelled, [], "never cancel while user reviews dialog");
-    assert.deepEqual(calls.erased, [], "never erase before user approves");
-    assert.deepEqual(calls.resumed, [], "remain paused while waiting for decision");
-    replyNative({ok: ack});
-    await flush();
+    assert.equal(calls.cancel.length, 0, "no cancellation before user decision");
+    assert.equal(calls.erase.length, 0, "no erasure before user decision");
+    assert.equal(calls.native.length, 1, "one live native request");
+    if (nativeDisconnect) failNative();
+    else reply(approve);
+    await tick();
   }
-
-  assert.equal(calls.native.length, expected.native ?? (contextMenu ? 1 : 1));
-  for (const key of ["paused", "resumed", "cancelled", "erased"]) {
-    if (expected[key] !== undefined)
-      assert.equal(calls[key].length, expected[key], key + " count");
+  for (const [key, value] of Object.entries(expected)) {
+    if (["pause", "resume", "cancel", "erase", "native"].includes(key))
+      assert.equal(calls[key].length, value, key + " count");
   }
-  for (const {name, message} of calls.native) {
-    assert.equal(name, "com.genyleap.genydl");
-    assert.equal(message.type, "download.prompt");
+  if (calls.native.length) {
+    const message = calls.native[0];
+    assert.equal(message.type, mode === "always" && !contextLink
+      ? "download.request" : "download.prompt");
+    assert.equal(message.protocolVersion, 2);
+    assert.ok(message.requestId, "request ID present");
     if (expected.filename !== undefined)
       assert.equal(message.filename, expected.filename);
     if (expected.url !== undefined)
       assert.equal(message.url, expected.url);
   }
-  ++count;
+  ++passed;
 }
 
 (async () => {
-  await runCase({expected: {paused: 1, resumed: 0, cancelled: 1, erased: 1}});
-  await runCase({ack: false, expected: {paused: 1, resumed: 1, cancelled: 0, erased: 0}});
-  await runCase({mode: "manual", expected: {native: 0, paused: 0, resumed: 0, cancelled: 0, erased: 0}});
-  await runCase({url: "https://example.org/download", mime: "text/html",
-    expected: {native: 0, paused: 0, cancelled: 0, erased: 0}});
-  await runCase({mode: "automatic", url: "https://example.org/download",
-    expected: {native: 1, paused: 1, cancelled: 1, erased: 1}});
-  await runCase({mode: "automatic", url: "file:///tmp/local.zip",
-    expected: {native: 0, paused: 0, cancelled: 0, erased: 0}});
-  await runCase({
+  await scenario({expected: {native: 0, pause: 0, cancel: 0}}); // default Manual
+  await scenario({mode: "manual", expected: {native: 0, pause: 0, cancel: 0}});
+  await scenario({mode: "off", expected: {native: 0, pause: 0, cancel: 0}});
+  await scenario({mode: "ask", expected: {native: 1, pause: 1, cancel: 1, erase: 1}});
+  await scenario({mode: "ask", approve: false,
+    expected: {native: 1, pause: 1, resume: 1, cancel: 0, erase: 0}});
+  await scenario({mode: "always",
+    expected: {native: 1, pause: 1, cancel: 1, erase: 1}});
+  await scenario({mode: "ask", deferred: true,
+    expected: {native: 1, pause: 1, cancel: 1, erase: 1}});
+  await scenario({mode: "ask", deferred: true, approve: false,
+    expected: {native: 1, resume: 1, cancel: 0, erase: 0}});
+  await scenario({mode: "ask", deferred: true, nativeDisconnect: true,
+    expected: {native: 1, resume: 1, cancel: 0, erase: 0}});
+  await scenario({mode: "ask", failPause: true,
+    expected: {native: 0, pause: 1, cancel: 0, erase: 0}});
+  await scenario({mode: "ask", failErase: true,
+    expected: {native: 1, pause: 1, cancel: 1, erase: 1}});
+  await scenario({mode: "smart",
+    expected: {native: 0, pause: 0, cancel: 0}});
+  await scenario({mode: "automatic",
+    expected: {native: 0, pause: 0, cancel: 0}});
+  await scenario({mode: "ask", url: "https://example.org/page", mime: "text/html",
+    expected: {native: 0, pause: 0, cancel: 0}});
+  await scenario({mode: "ask", scope: "all",
+    url: "https://example.org/page", mime: "text/html",
+    expected: {native: 1, pause: 1, cancel: 1}});
+  await scenario({mode: "always", url: "file:///etc/passwd",
+    expected: {native: 0, pause: 0, cancel: 0}});
+  await scenario({mode: "manual", contextLink: true,
+    expected: {native: 1, pause: 0, cancel: 0}});
+  await scenario({mode: "off", contextLink: true,
+    expected: {native: 0, pause: 0, cancel: 0}});
+  await scenario({
+    mode: "ask",
     url: "https://github.com/genyleap/genydl/archive/refs/heads/main.zip",
     finalUrl: "https://codeload.github.com/genyleap/genydl/zip/refs/heads/main",
     filename: "/Users/example/Downloads/genydl-main.zip",
-    expected: {native: 1, paused: 1, cancelled: 1, erased: 1,
+    expected: {native: 1, cancel: 1,
       filename: "genydl-main.zip",
       url: "https://codeload.github.com/genyleap/genydl/zip/refs/heads/main"}
   });
-  await runCase({
-    url: "https://github.com/genyleap/genydl/archive/refs/heads/main.zip",
-    finalUrl: "https://codeload.github.com/genyleap/genydl/zip/refs/heads/main",
-    expected: {native: 1, paused: 1, cancelled: 1, erased: 1, filename: "main.zip"}
-  });
-  await runCase({deferred: true,
-    expected: {native: 1, paused: 1, resumed: 0, cancelled: 1, erased: 1}});
-  await runCase({deferred: true, ack: false,
-    expected: {native: 1, paused: 1, resumed: 1, cancelled: 0, erased: 0}});
-  await runCase({failPause: true,
-    expected: {native: 0, paused: 1, resumed: 0, cancelled: 0, erased: 0}});
-  await runCase({ack: "error",
-    expected: {native: 1, paused: 1, resumed: 1, cancelled: 0, erased: 0}});
-  await runCase({contextMenu: true,
-    expected: {native: 1, paused: 0, resumed: 0, cancelled: 0, erased: 0}});
-  console.log(`GenyDL browser extension smoke: ${count}/${count} passed`);
+  console.log("GenyDL browser integration tests: " + passed + "/" + passed + " passed");
 })().catch(error => {console.error(error); process.exitCode = 1;});

@@ -32,8 +32,10 @@ GenyDL is a modern, high-performance download manager built with **C++23**, **Qt
 - URL probe, advanced GitHub, and IPFS-based update client
 - Session persistence, import/export, and post-download action foundation
 - Cross-platform packaging for macOS and Windows
-- Experimental cross-browser download handoff: Native Messaging for Chromium/Firefox,
-  custom `genydl://` links, and macOS Services (details in `docs/browser-integration.md`)
+- Experimental desktop browser integration v2: Manual right-click by default,
+  opt-in Ask/Always capture, optional permissions, versioned Native Messaging,
+  and Firefox/Chromium packaging for macOS, Windows and Linux. Safari still
+  requires a signed Web Extension (details in `docs/browser-integration.md`).
 
 ## Planned Features
 

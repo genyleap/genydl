@@ -597,7 +597,9 @@ function openDetailsFor(row, taskObj, queueName, categoryName) {
 }
 
 function openConfigurationDialog(tabIndex) {
-    configurationTabIndex = Math.max(0, Math.min(4, Number(tabIndex)))
+    configurationTabIndex = Math.max(0, Math.min(5, Number(tabIndex)))
+    if (configurationTabIndex === 5)
+        browserHostRows = browserIntegration.statuses()
     if (!queueEditorName || queueEditorName.length === 0) {
         if (downloadManager.queueNames.length > 0)
             queueEditorName = downloadManager.queueNames[0]
