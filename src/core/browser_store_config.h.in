@@ -1,0 +1,6 @@
+#pragma once
+// Distributor-supplied HTTPS listing URLs. Empty in development builds;
+// never pretend a store listing exists before the platform approves it.
+#define GENYDL_CHROME_STORE_URL "@GENYDL_CHROME_STORE_URL@"
+#define GENYDL_FIREFOX_STORE_URL "@GENYDL_FIREFOX_STORE_URL@"
+#define GENYDL_EDGE_STORE_URL "@GENYDL_EDGE_STORE_URL@"

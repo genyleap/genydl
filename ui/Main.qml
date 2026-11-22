@@ -3710,6 +3710,13 @@ ApplicationWindow {
 
                 ScrollView {
                     id: browserConfigView
+                    Timer {
+                        interval: 12000
+                        repeat: true
+                        running: configurationDialog.visible
+                            && appRoot.configurationTabIndex === 5
+                        onTriggered: appRoot.browserHostRows = browserIntegration.statuses()
+                    }
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     clip: true
@@ -3775,12 +3782,14 @@ ApplicationWindow {
                                                 wrapMode: Text.WordWrap
                                                 color: Colors.textMuted
                                                 text: browserRow.supported
-                                                    ? (browserRow.enabled
-                                                        ? (browserRow.ready
-                                                            ? qsTr("Allowed by GenyDL. Confirm the extension is enabled in your browser.")
-                                                            : qsTr("Could not enable the connection."))
-                                                        : qsTr("Off"))
-                                                    : qsTr("Safari extension is not available yet.")
+                                                    ? (!browserRow.enabled
+                                                        ? qsTr("Off")
+                                                        : browserRow.connected
+                                                            ? qsTr("Connected — extension responded to GenyDL.")
+                                                            : browserRow.ready
+                                                                ? qsTr("Not connected — install or reload the browser extension.")
+                                                                : qsTr("Connection setup failed."))
+                                                    : qsTr("Safari extension is not built or installed yet.")
                                             }
                                         }
 
@@ -3811,19 +3820,53 @@ ApplicationWindow {
                                             wrapMode: Text.WordWrap
                                             font.pixelSize: Typography.t4
                                             color: Colors.textMuted
-                                            text: browserRow.browserInstalled
-                                                ? qsTr("Installed the extension? Open your browser's extensions page to enable it.")
-                                                : qsTr("Browser not detected on this computer.")
+                                            text: !browserRow.browserInstalled
+                                                ? qsTr("Browser not detected on this computer.")
+                                                : browserRow.connected
+                                                    ? qsTr("Ready. Right-click a link and choose Download with GenyDL.")
+                                                    : browserRow.storeInstallAvailable
+                                                        ? qsTr("Install GenyDL from the official browser store and accept the browser permission prompt.")
+                                                        : browserRow.code === "firefox"
+                                                            ? qsTr("Development setup: load manifest.json as a temporary add-on in Firefox.")
+                                                            : qsTr("Development setup: enable Developer mode, then Load unpacked using the GenyDL extension folder.")
                                         }
 
                                         Controls.Button {
-                                            text: qsTr("Open extensions")
+                                            text: qsTr("Extension files")
+                                            visible: !browserRow.connected
+                                                && !browserRow.storeInstallAvailable
+                                            enabled: browserRow.extensionFilesAvailable
+                                            onClicked: {
+                                                if (!browserIntegration.revealExtensionFiles(browserRow.code))
+                                                    appRoot.appendNotification(
+                                                        qsTr("Browser setup"),
+                                                        qsTr("Extension files are missing from this development build."),
+                                                        "warning")
+                                            }
+                                        }
+
+                                        Controls.Button {
+                                            text: qsTr("Install from official store")
+                                            visible: !browserRow.connected && browserRow.storeInstallAvailable
+                                            enabled: browserRow.browserInstalled
+                                            onClicked: {
+                                                if (!browserIntegration.openStoreListing(browserRow.code))
+                                                    appRoot.appendNotification(
+                                                        qsTr("Browser setup"),
+                                                        qsTr("Could not open this browser's official extension store."),
+                                                        "warning")
+                                            }
+                                        }
+
+                                        Controls.Button {
+                                            text: qsTr("Browser extension settings")
+                                            visible: !browserRow.connected && !browserRow.storeInstallAvailable
                                             enabled: browserRow.browserInstalled
                                             onClicked: {
                                                 if (!browserIntegration.openBrowserExtensions(browserRow.code))
                                                     appRoot.appendNotification(
                                                         qsTr("Browser setup"),
-                                                        qsTr("Could not open this browser."),
+                                                        qsTr("Could not open the extensions manager. Open it manually from your browser menu."),
                                                         "warning")
                                             }
                                         }
@@ -3836,7 +3879,7 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             wrapMode: Text.WordWrap
                             color: Colors.textMuted
-                            text: qsTr("Note: This development version has no public store listing yet. Browser installation still needs one confirmation in the browser; no extension ID or system path needs to be entered in GenyDL.")
+                            text: qsTr("Enabling a browser registers its local connection, not the extension itself. Where a verified store listing exists, use Install from official store. Otherwise this development build offers temporary extension files for testing.")
                         }
 
                         Item { Layout.fillHeight: true }

@@ -46,11 +46,13 @@ void respond(bool ok, const QString& message, const QString& requestId = {})
 }
 
 bool sendToApplication(const QByteArray& json, bool waitForUser,
-                       const QString& expectedRequestId)
+                       const QString& expectedRequestId, bool allowLaunch)
 {
     QLocalSocket socket;
     socket.connectToServer(endpoint());
     if (!socket.waitForConnected(350)) {
+        // Heartbeats must not launch GenyDL whenever the browser opens.
+        if (!allowLaunch) return false;
         QString executable = QCoreApplication::applicationDirPath() + QStringLiteral("/GenyDL");
 #ifdef Q_OS_WIN
         executable += QStringLiteral(".exe");
@@ -127,15 +129,18 @@ int main(int argc, char** argv)
     const int version = request.value(QStringLiteral("protocolVersion")).toInt(1);
     if (!document.isObject()
         || (type != QStringLiteral("download.prompt")
-            && type != QStringLiteral("download.request"))
-        || !request.value(QStringLiteral("url")).isString()
+            && type != QStringLiteral("download.request")
+            && type != QStringLiteral("integration.ping"))
+        || (type != QStringLiteral("integration.ping")
+            && !request.value(QStringLiteral("url")).isString())
         || (version != 1 && version != 2)
         || (version == 2 && requestId.isEmpty())) {
         respond(false, QStringLiteral("invalid request"), requestId);
         return 1;
     }
     const bool accepted = sendToApplication(
-        data, type == QStringLiteral("download.prompt"), requestId);
+        data, type == QStringLiteral("download.prompt"), requestId,
+        type != QStringLiteral("integration.ping"));
     respond(accepted, accepted ? QStringLiteral("GenyDL accepted download")
                               : QStringLiteral("not accepted; keep browser download"), requestId);
     return 0;

@@ -15,5 +15,7 @@ public:
     Q_INVOKABLE QVariantList statuses() const;
     Q_INVOKABLE bool setEnabled(const QString& browser, bool enabled);
     Q_INVOKABLE bool openBrowserExtensions(const QString& browser) const;
+    Q_INVOKABLE bool revealExtensionFiles(const QString& browser) const;
+    Q_INVOKABLE bool openStoreListing(const QString& browser) const;
     Q_INVOKABLE void repairNativeHosts();
 };

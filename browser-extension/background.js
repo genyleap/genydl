@@ -46,7 +46,7 @@ function newRequestId() {
   return String(Date.now()) + "-" + Math.random().toString(36).slice(2);
 }
 
-function nativeHandoff(url, filename, type) {
+function nativeHandoff(url, filename, type, browserCode = "") {
   return new Promise((resolve, reject) => {
     let port;
     try { port = EXT.runtime.connectNative(HOST); }
@@ -77,7 +77,8 @@ function nativeHandoff(url, filename, type) {
     try {
       port.postMessage({
         protocolVersion: PROTOCOL_VERSION, requestId, type,
-        url, ...(filename ? {filename} : {})
+        ...(url ? {url} : {}), ...(filename ? {filename} : {}),
+        ...(browserCode ? {browser: browserCode} : {})
       });
     } catch (error) { finish(error); }
   });
@@ -179,7 +180,49 @@ function registerMenu() {
     id: MENU_ID, title: "Download with GenyDL", contexts: ["link"]
   }, () => { void EXT.runtime.lastError; });
 }
-if (EXT.runtime?.onInstalled) EXT.runtime.onInstalled.addListener(registerMenu);
-if (EXT.runtime?.onStartup) EXT.runtime.onStartup.addListener(registerMenu);
+async function browserCode() {
+  if (typeof globalThis.browser !== "undefined"
+      && typeof globalThis.browser.runtime.getBrowserInfo === "function")
+    return "firefox";
+  const nav = globalThis.navigator;
+  try {
+    if (await nav?.brave?.isBrave?.()) return "brave";
+  } catch { /* detection can be disabled by browser settings */ }
+  const ua = nav?.userAgent || "";
+  if (ua.includes("Edg/")) return "edge";
+  if (ua.includes("Vivaldi/")) return "vivaldi";
+  const brands = nav?.userAgentData?.brands || [];
+  if (brands.some(b => b.brand === "Microsoft Edge")) return "edge";
+  if (brands.some(b => b.brand === "Google Chrome")) return "chrome";
+  if (brands.some(b => b.brand === "Chromium")) return "chromium";
+  // Some worker contexts expose only the legacy UA string.
+  if (ua.includes("Chrome/")) return "chrome";
+  return "chromium";
+}
+
+async function reportConnection() {
+  // A verified round trip is the only basis for the desktop's
+  // 'Connected' label. It does not grant download permissions.
+  try {
+    await nativeHandoff(null, "", "integration.ping", await browserCode());
+  } catch { /* GenyDL may not be running; retry using a browser alarm */ }
+}
+
+function scheduleHeartbeat() {
+  if (EXT.alarms?.create) EXT.alarms.create("genydl-heartbeat", {periodInMinutes: 1});
+  void reportConnection();
+}
+
+if (EXT.runtime?.onInstalled) EXT.runtime.onInstalled.addListener(() => {
+  registerMenu();
+  scheduleHeartbeat();
+});
+if (EXT.runtime?.onStartup) EXT.runtime.onStartup.addListener(() => {
+  registerMenu();
+  scheduleHeartbeat();
+});
+if (EXT.alarms?.onAlarm) EXT.alarms.onAlarm.addListener(alarm => {
+  if (alarm.name === "genydl-heartbeat") void reportConnection();
+});
 if (EXT.contextMenus?.onClicked)
   EXT.contextMenus.onClicked.addListener(info => { offerContextLink(info).catch(console.warn); });

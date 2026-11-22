@@ -2,11 +2,12 @@
   "manifest_version": 3,
   "name": "Download with GenyDL",
   "description": "User-controlled downloads with the GenyDL desktop application.",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzp5UN8vtyUxoR7VpNRrlDA1D6l+Bb7qvk5JtjLxuzKQkJZqJRkcxDH/Wxo7d8Uk6Vqx7U9SJ/wUheEBkltgCvXT0iDBLgPON3X9Fxx3wnjAmaYL3FD15lYUAZnN99HWj6NrWd3010ocgFH82lwk+cov6IFUCoFzWQpgWjgNejPeZCNCDJDt8YCdpXawxLt3DkqgG7NWV7naewwKIB63hcgrdelsMgSs2py647AZ1Q8REovkIjzDiDkrCpGb6li91PlNjTabZtl+/Md6CpKuw9ktBpn+BK7T/b3wohY6XSgMWpF1HrCdFyDc7pgtZvR3zEh4KC+a1lJf1/saAg/eB2QIDAQAB",
   "icons": {"128": "icon128.png"},
   "permissions": [
-    "nativeMessaging", "storage", "contextMenus"
+    "nativeMessaging", "storage", "contextMenus",
+    "alarms"
   ],
   "optional_permissions": ["downloads"],
   "background": {

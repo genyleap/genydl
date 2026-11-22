@@ -2,6 +2,8 @@
 #include "browser_socket.h"
 
 #include <QCoreApplication>
+#include <QDateTime>
+#include <QSettings>
 #include <QCryptographicHash>
 #include <QDir>
 #include <QEvent>
@@ -322,6 +324,37 @@ void BrowserActivation::onConnection()
             };
             if (!validRequest) {
                 reject(QStringLiteral("invalid protocol or request ID"));
+                return;
+            }
+            if (type == QStringLiteral("integration.ping")) {
+                const QString browser = message.value(QStringLiteral("browser")).toString();
+                static const QSet<QString> allowedBrowsers{
+                    QStringLiteral("firefox"), QStringLiteral("chrome"),
+                    QStringLiteral("edge"), QStringLiteral("brave"),
+                    QStringLiteral("chromium"), QStringLiteral("vivaldi")
+                };
+                if (version != 2 || !allowedBrowsers.contains(browser)) {
+                    reject(QStringLiteral("invalid browser handshake"));
+                    return;
+                }
+                QSettings settings;
+                const bool enabled = settings.value(
+                    QStringLiteral("browserIntegration/enabled/") + browser,
+                    browser == QStringLiteral("firefox")).toBool();
+                if (!enabled) {
+                    reject(QStringLiteral("browser integration disabled"));
+                    return;
+                }
+                settings.setValue(
+                    QStringLiteral("browserIntegration/lastSeen/") + browser,
+                    QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs));
+                settings.sync();
+                const bool ok = settings.status() == QSettings::NoError;
+                client->write(encodeReply(ok, ok
+                    ? QStringLiteral("GenyDL integration active")
+                    : QStringLiteral("could not record browser connection"), requestId));
+                client->flush();
+                client->disconnectFromServer();
                 return;
             }
             if (type == QStringLiteral("download.prompt")) {

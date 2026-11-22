@@ -14,15 +14,16 @@ async function scenario({
   mode, scope, url = "https://example.org/dl.zip",
   finalUrl, filename, mime = "application/zip", contextLink = false,
   deferred = false, approve = true, failPause = false,
-  nativeDisconnect = false, failErase = false, expected = {},
+  nativeDisconnect = false, failErase = false, startupHeartbeat = false,
+  expected = {},
 }) {
-  let onDownload, onMenu, reply, failNative;
+  let onDownload, onMenu, onStartup, reply, failNative;
   const calls = {pause: [], resume: [], cancel: [], erase: [], native: []};
   let lastError = null;
   const runtime = {
     get lastError() { return lastError; },
     onInstalled: {addListener() {}},
-    onStartup: {addListener() {}},
+    onStartup: {addListener(fn) {onStartup = fn;}},
     connectNative(host) {
       assert.equal(host, "com.genyleap.genydl");
       let onMessage, onDisconnect;
@@ -69,6 +70,10 @@ async function scenario({
       create(_opts, cb) {cb();},
       onClicked: {addListener(fn) {onMenu = fn;}}
     },
+    alarms: {
+      create() {},
+      onAlarm: {addListener() {}}
+    },
     storage: {local: {get(_defaults, cb) {
       cb({mode, captureScope: scope || "recognized", excludedHosts: []});
     }}}
@@ -77,7 +82,10 @@ async function scenario({
     chrome, console: {warn() {}, debug() {}}, URL, Set, Promise, String, Error,
     Date, Math, decodeURIComponent, setTimeout, clearTimeout, queueMicrotask
   });
-  if (contextLink)
+  if (startupHeartbeat) {
+    assert.equal(typeof onStartup, "function");
+    onStartup();
+  } else if (contextLink)
     onMenu({menuItemId: "genydl-download", linkUrl: url});
   else
     onDownload({id: 42, state: "in_progress", url, finalUrl, filename, mime});
@@ -97,8 +105,13 @@ async function scenario({
   }
   if (calls.native.length) {
     const message = calls.native[0];
-    assert.equal(message.type, mode === "always" && !contextLink
-      ? "download.request" : "download.prompt");
+    assert.equal(message.type, startupHeartbeat ? "integration.ping"
+      : mode === "always" && !contextLink
+        ? "download.request" : "download.prompt");
+    if (startupHeartbeat) {
+      assert.equal(message.browser, "chromium");
+      assert.equal(message.url, undefined);
+    }
     assert.equal(message.protocolVersion, 2);
     assert.ok(message.requestId, "request ID present");
     if (expected.filename !== undefined)
@@ -139,6 +152,8 @@ async function scenario({
     expected: {native: 1, pause: 1, cancel: 1}});
   await scenario({mode: "always", url: "file:///etc/passwd",
     expected: {native: 0, pause: 0, cancel: 0}});
+  await scenario({mode: "manual", startupHeartbeat: true,
+    expected: {native: 1, pause: 0, cancel: 0}});
   await scenario({mode: "manual", contextLink: true,
     expected: {native: 1, pause: 0, cancel: 0}});
   await scenario({mode: "off", contextLink: true,

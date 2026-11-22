@@ -3,6 +3,8 @@
 #include <QJsonObject>
 #include <QCoreApplication>
 #include <QProcess>
+#include <QSettings>
+#include <QDateTime>
 #include <QTimer>
 #include <QFileInfo>
 #include <QLocalSocket>
@@ -72,6 +74,61 @@ private slots:
         QVERIFY(!response.value(QStringLiteral("ok")).toBool());
         QCOMPARE(accepted, 0);
     }
+    void integrationHeartbeatRequiresPermission()
+    {
+        const QString enabledKey = QStringLiteral("browserIntegration/enabled/firefox");
+        const QString seenKey = QStringLiteral("browserIntegration/lastSeen/firefox");
+        QSettings settings;
+        const bool hadEnabled = settings.contains(enabledKey);
+        const QVariant previousEnabled = settings.value(enabledKey);
+        const bool hadSeen = settings.contains(seenKey);
+        const QVariant previousSeen = settings.value(seenKey);
+        struct Restore {
+            QString e, s;
+            bool he, hs;
+            QVariant pe, ps;
+            ~Restore() {
+                QSettings settings;
+                if (he) settings.setValue(e, pe); else settings.remove(e);
+                if (hs) settings.setValue(s, ps); else settings.remove(s);
+                settings.sync();
+            }
+        } restore{enabledKey, seenKey, hadEnabled, hadSeen, previousEnabled, previousSeen};
+
+        BrowserActivation activation([](const QUrl&, const QString&) { return false; });
+        QVERIFY(activation.start({}));
+        const QByteArray request = QJsonDocument(QJsonObject{
+            {QStringLiteral("protocolVersion"), 2},
+            {QStringLiteral("type"), QStringLiteral("integration.ping")},
+            {QStringLiteral("requestId"), QStringLiteral("hello-firefox-test")},
+            {QStringLiteral("browser"), QStringLiteral("firefox")}
+        }).toJson(QJsonDocument::Compact) + '\n';
+
+        auto ping = [&](bool expected) {
+            QLocalSocket client;
+            client.connectToServer(BrowserActivation::socketName());
+            QVERIFY(client.waitForConnected(1500));
+            QCOMPARE(client.write(request), request.size());
+            QVERIFY(client.waitForBytesWritten(1500));
+            QTRY_VERIFY_WITH_TIMEOUT(client.bytesAvailable() > 0, 2500);
+            const QJsonObject reply = QJsonDocument::fromJson(client.readAll().trimmed()).object();
+            QCOMPARE(reply.value(QStringLiteral("ok")).toBool(), expected);
+            QCOMPARE(reply.value(QStringLiteral("requestId")).toString(),
+                     QStringLiteral("hello-firefox-test"));
+        };
+        settings.setValue(enabledKey, true);
+        settings.sync();
+        ping(true);
+        settings.sync();
+        const QDateTime received = QDateTime::fromString(
+            settings.value(seenKey).toString(), Qt::ISODateWithMs);
+        QVERIFY(received.isValid());
+        QVERIFY(qAbs(received.secsTo(QDateTime::currentDateTimeUtc())) < 10);
+        settings.setValue(enabledKey, false);
+        settings.sync();
+        ping(false);
+    }
+
     void nativeHostEndToEnd() {
         QString received;
         QString receivedFilename;

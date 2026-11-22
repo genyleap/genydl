@@ -19,6 +19,9 @@ assert.equal(chrome.background.service_worker, "background.js");
 assert.deepEqual(firefox.background.scripts, ["background.js"]);
 assert.equal(firefox.browser_specific_settings.gecko.id,
   "download-links@genydl.genyleap.com");
+assert.ok(firefox.browser_specific_settings.gecko.data_collection_permissions.required
+  .includes("browsingActivity"),
+  "New Firefox releases must disclose URL transfer to the local desktop app");
 for (const manifest of [chrome, firefox]) {
   assert.ok(manifest.permissions.includes("nativeMessaging"));
   assert.ok(manifest.permissions.includes("contextMenus"));

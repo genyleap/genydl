@@ -645,6 +645,15 @@ set(GENYDL_BRAVE_EXTENSION_ID "" CACHE STRING
     "Brave-specific extension ID (otherwise Chrome ID is used)")
 set(GENYDL_VIVALDI_EXTENSION_ID "" CACHE STRING
     "Vivaldi-specific extension ID (otherwise Chrome ID is used)")
+# Only set after a real, publicly resolvable store listing is approved.
+# Empty values intentionally hide the end-user installation button.
+set(GENYDL_CHROME_STORE_URL "" CACHE STRING "Verified Chrome Web Store listing URL")
+set(GENYDL_FIREFOX_STORE_URL "" CACHE STRING "Verified Mozilla AMO listing URL")
+set(GENYDL_EDGE_STORE_URL "" CACHE STRING "Verified Microsoft Edge Add-ons listing URL")
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/core/browser_store_config.h.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/browser_store_config.h"
+    @ONLY)
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/src/core/browser_config.h.in"
     "${CMAKE_CURRENT_BINARY_DIR}/browser_config.h"

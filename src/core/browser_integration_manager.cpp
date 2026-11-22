@@ -1,7 +1,11 @@
 #include "browser_integration_manager.h"
 #include "browser_host_registration.h"
+#include "browser_store_config.h"
 
 #include <QCoreApplication>
+#include <QDateTime>
+#include <QDesktopServices>
+#include <QUrl>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -44,6 +48,32 @@ const BrowserInfo* browserInfo(const QString& code)
         if (code == QString::fromLatin1(browser.code)) return &browser;
     }
     return nullptr;
+}
+
+QUrl verifiedStoreUrl(const QString& browser)
+{
+    QString raw;
+    QString expectedHost;
+    if (browser == QStringLiteral("firefox")) {
+        raw = QString::fromLatin1(GENYDL_FIREFOX_STORE_URL);
+        expectedHost = QStringLiteral("addons.mozilla.org");
+    } else if (browser == QStringLiteral("edge")) {
+        raw = QString::fromLatin1(GENYDL_EDGE_STORE_URL);
+        expectedHost = QStringLiteral("microsoftedge.microsoft.com");
+    } else {
+        raw = QString::fromLatin1(GENYDL_CHROME_STORE_URL);
+        expectedHost = QStringLiteral("chromewebstore.google.com");
+    }
+    const QUrl url(raw);
+    if (url.scheme() != QStringLiteral("https")
+        || url.host() != expectedHost || !url.userInfo().isEmpty()
+        || !url.path().contains(QStringLiteral("/detail/"))
+            && browser != QStringLiteral("firefox"))
+        return {};
+    if (browser == QStringLiteral("firefox")
+        && !url.path().contains(QStringLiteral("/firefox/addon/")))
+        return {};
+    return url;
 }
 
 QString manifestPath(const BrowserInfo& browser)
@@ -125,6 +155,23 @@ QString browserExecutable(const BrowserInfo& browser)
 #endif
 }
 
+QString developmentExtensionFolder(const QString& code)
+{
+    const QString name = code == QStringLiteral("firefox")
+        ? QStringLiteral("firefox") : QStringLiteral("chromium");
+    QDir current(QCoreApplication::applicationDirPath());
+    // Covers <build>/bin/GenyDL.app/Contents/MacOS as well as <build>/bin
+    // while avoiding a hard-coded source checkout or user home directory.
+    for (int depth = 0; depth < 7; ++depth) {
+        const QString candidate = current.filePath(
+            QStringLiteral("browser-extensions/") + name);
+        if (QFileInfo::exists(QDir(candidate).filePath(QStringLiteral("manifest.json"))))
+            return candidate;
+        if (!current.cdUp()) break;
+    }
+    return {};
+}
+
 bool isManifestReady(const QString& path, const QString& nativeExecutable,
                      const QString& code)
 {
@@ -162,19 +209,32 @@ QVariantList BrowserIntegrationManager::statuses() const
             code == QStringLiteral("firefox")).toBool();
         const bool ready = isManifestReady(manifestPath(browser), nativeBinary, code);
         const bool installed = !browserExecutable(browser).isEmpty();
+        const QDateTime lastSeen = QDateTime::fromString(settings.value(
+            QStringLiteral("browserIntegration/lastSeen/") + code).toString(),
+            Qt::ISODateWithMs);
+        const bool connected = enabled && ready && lastSeen.isValid()
+            && lastSeen.secsTo(QDateTime::currentDateTimeUtc()) >= 0
+            && lastSeen.secsTo(QDateTime::currentDateTimeUtc()) < 150;
         QString status;
         if (!enabled)
             status = QStringLiteral("Off — downloads stay in the browser");
         else if (!ready)
-            status = QStringLiteral("Connection setup incomplete — try again");
+            status = QStringLiteral("Native connection not configured");
+        else if (connected)
+            status = QStringLiteral("Connected — extension replied");
         else
-            status = QStringLiteral("Ready in GenyDL — browser extension not verified");
+            status = QStringLiteral("Not connected — extension not responding");
         result.append(QVariantMap{
             {QStringLiteral("code"), code},
             {QStringLiteral("name"), QString::fromLatin1(browser.label)},
             {QStringLiteral("enabled"), enabled},
             {QStringLiteral("ready"), ready},
+            {QStringLiteral("connected"), connected},
+            {QStringLiteral("storeInstallAvailable"),
+                verifiedStoreUrl(code).isValid()},
             {QStringLiteral("browserInstalled"), installed},
+            {QStringLiteral("extensionFilesAvailable"),
+                !developmentExtensionFolder(code).isEmpty()},
             {QStringLiteral("supported"), true},
             {QStringLiteral("statusText"), status}
         });
@@ -200,6 +260,7 @@ bool BrowserIntegrationManager::setEnabled(const QString& code, bool enabled)
     QSettings settings;
     const QString key = QStringLiteral("browserIntegration/enabled/") + code;
     settings.setValue(key, enabled);
+    if (!enabled) settings.remove(QStringLiteral("browserIntegration/lastSeen/") + code);
     settings.sync();
     if (settings.status() != QSettings::NoError) return false;
     registerBrowserNativeHosts();
@@ -226,6 +287,30 @@ bool BrowserIntegrationManager::openBrowserExtensions(const QString& code) const
 #else
     return QProcess::startDetached(executable, {page});
 #endif
+}
+
+bool BrowserIntegrationManager::openStoreListing(const QString& code) const
+{
+    const BrowserInfo* browser = browserInfo(code);
+    if (!browser) return false;
+    const QUrl url = verifiedStoreUrl(code);
+    if (!url.isValid()) return false;
+    const QString executable = browserExecutable(*browser);
+    if (executable.isEmpty()) return false;
+#ifdef Q_OS_MACOS
+    return QProcess::startDetached(QStringLiteral("/usr/bin/open"),
+        {QStringLiteral("-a"), executable, url.toString()});
+#else
+    return QProcess::startDetached(executable, {url.toString()});
+#endif
+}
+
+bool BrowserIntegrationManager::revealExtensionFiles(const QString& code) const
+{
+    if (!browserInfo(code)) return false;
+    const QString folder = developmentExtensionFolder(code);
+    if (folder.isEmpty()) return false;
+    return QDesktopServices::openUrl(QUrl::fromLocalFile(folder));
 }
 
 void BrowserIntegrationManager::repairNativeHosts()

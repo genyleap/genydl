@@ -149,11 +149,28 @@ The browser registration system does not use wildcards. Brave and Vivaldi
 can reuse the Chrome Store ID if they install that version of the extension.
 Firefox has a separate `allowed_extensions` entry.
 
-The **Browsers** panel says *Allowed by GenyDL* when the relevant bridge
-is enabled and installed. It deliberately does not say *Connected* because
-browser extension installation, enablement and permission state cannot yet
-be verified from the desktop. A live extension-to-native diagnostic handshake
-and store install links remain future work.
+The **Browsers** panel now distinguishes these states:
+- **Off** — no GenyDL native-host registration for that browser.
+- **Not connected** — registration exists, but there has been no recent
+  confirmed handshake from the extension.
+- **Connected** — the extension successfully sent an `integration.ping`
+  request through the native host to the running GenyDL app recently.
+
+A heartbeat is sent on extension startup/install and via a one-minute browser
+alarm. GenyDL checks a timestamp within 150 seconds and refreshes the panel
+every 12 seconds. No heartbeat will automatically launch the desktop app.
+
+The **Install from official store** button is displayed **only after** the
+distributor provides a verified, browser-specific listing URL. Until then,
+development builds can show the extension's files and browser settings, with
+honest labels. The app never fabricates or guesses a store URL. Set these
+CMake cache parameters only after the corresponding store item exists:
+`GENYDL_CHROME_STORE_URL`, `GENYDL_FIREFOX_STORE_URL`, and
+`GENYDL_EDGE_STORE_URL`. The URL host and path are checked before use.
+
+See `docs/browser-store-publication.md` for the actual Chrome/AMO/Edge
+submission process, data disclosures, developer accounts, and how to prepare
+the final consumer one-click install UX.
 
 ## macOS Safari status
 
@@ -185,8 +202,9 @@ On macOS, additionally verify cold-start handoff, Manual right-click,
 permission denial, Ask/Add, Ask/Cancel, Always, 3+ concurrent requests,
 repeated file names, backgrounding, and host disconnection.
 
-**Not done:** signed Safari Web Extension, store publication and verified
-one-click store install links, automatic browser extension installation
-(outside enterprise policy), live extension-enable/health handshake,
-Windows runtime tests, sandboxed Linux host access. Do not market these
-as completed until each platform has been tested.
+**Not done:** signed Safari Web Extension, actual store submissions and
+verified store URLs, automatic extension installation without user approval,
+Windows/macOS runtime signoff, sandboxed Linux host access. Heartbeats now
+verify a recent live native connection; they do not validate all extension
+permissions, download capture policies or browser-store approval. Do not
+market unsupported platforms as complete.
