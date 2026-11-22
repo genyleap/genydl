@@ -77,15 +77,33 @@ bool BrowserActivation::isSafeHttpUrl(const QUrl& url)
     return true;
 }
 
+QString BrowserActivation::safeFilename(const QString& raw)
+{
+    // The browser may give an absolute local download path. Never honor its
+    // directories: only the leaf filename can affect the GenyDL destination.
+    QString normalized = raw.trimmed();
+    normalized.replace(QLatin1Char('\\'), QLatin1Char('/'));
+    const QString leaf = normalized.mid(normalized.lastIndexOf(QLatin1Char('/')) + 1).trimmed();
+    if (leaf.isEmpty() || leaf == QStringLiteral(".") || leaf == QStringLiteral("..")
+        || leaf.endsWith(QLatin1Char('.')) || leaf.toUtf8().size() > 240)
+        return {};
+    for (const QChar c : leaf) {
+        if (!c.isPrint() || QStringLiteral("<>:\"|?*").contains(c))
+            return {};
+    }
+    return leaf;
+}
+
 bool BrowserActivation::submitUrl(const QString& raw)
 {
     return deliver(raw);
 }
 
-bool BrowserActivation::deliver(const QString& raw)
+bool BrowserActivation::deliver(const QString& raw, const QString& filename)
 {
     const QUrl url = parseDownloadUrl(raw);
-    return isSafeHttpUrl(url) && m_downloadHandler && m_downloadHandler(url);
+    return isSafeHttpUrl(url) && m_downloadHandler
+        && m_downloadHandler(url, safeFilename(filename));
 }
 
 bool BrowserActivation::deliverToRunningInstance(const QStringList& arguments)
@@ -168,7 +186,9 @@ void BrowserActivation::onConnection()
             const QJsonObject message = document.object();
             const bool validType = message.value(QStringLiteral("type")).toString()
                 == QStringLiteral("download.request");
-            const bool accepted = validType && deliver(message.value(QStringLiteral("url")).toString());
+            const bool accepted = validType && deliver(
+                message.value(QStringLiteral("url")).toString(),
+                message.value(QStringLiteral("filename")).toString());
             client->write(encodeReply(accepted, accepted ? QStringLiteral("accepted")
                                                          : QStringLiteral("invalid or rejected request")));
             client->flush();

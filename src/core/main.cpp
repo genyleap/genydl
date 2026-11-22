@@ -174,12 +174,16 @@ auto main(int argc, char *argv[]) -> int
     // Only the first instance owns the user-scoped local socket; secondary
     // activations hand over their URL and exit.
     QSet<QString> reservedBrowserPaths;
-    BrowserActivation browserActivation([&](const QUrl& url) -> bool {
+    BrowserActivation browserActivation([&](const QUrl& url, const QString& filename) -> bool {
         if (!BrowserActivation::isSafeHttpUrl(url) || downloadsRoot.isEmpty())
             return false;
-        const QString destination = manager.resolveDownloadPath(
+        QString destination = manager.resolveDownloadPath(
             url.toString(QUrl::FullyEncoded), QString(), downloadsRoot);
         if (destination.isEmpty()) return false;
+        if (!filename.isEmpty()) {
+            // The receiver already stripped every untrusted path component.
+            destination = QFileInfo(destination).dir().filePath(filename);
+        }
         QFileInfo file(destination);
         const QString suffix = file.completeSuffix();
         const QString base = suffix.isEmpty() ? file.fileName()

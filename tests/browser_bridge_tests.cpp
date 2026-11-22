@@ -37,9 +37,22 @@ private slots:
         QVERIFY(BrowserActivation::isSafeHttpUrl(
             QUrl(QStringLiteral("https://example.org/file.dmg"))));
     }
+    void filenameHintsAreBasenamesOnly() {
+        QCOMPARE(BrowserActivation::safeFilename(
+            QStringLiteral("/Users/example/Downloads/genydl-main.zip")),
+            QStringLiteral("genydl-main.zip"));
+        QCOMPARE(BrowserActivation::safeFilename(
+            QStringLiteral("C:\\Users\\example\\Downloads\\app.dmg")),
+            QStringLiteral("app.dmg"));
+        QCOMPARE(BrowserActivation::safeFilename(QStringLiteral("../../escape.zip")),
+            QStringLiteral("escape.zip"));
+        QCOMPARE(BrowserActivation::safeFilename(QStringLiteral("..")), QString());
+        QCOMPARE(BrowserActivation::safeFilename(QStringLiteral("bad\nname.zip")), QString());
+        QCOMPARE(BrowserActivation::safeFilename(QStringLiteral("bad:name.zip")), QString());
+    }
     void rejectedRequestNeverAcknowledged() {
         int accepted = 0;
-        BrowserActivation activation([&](const QUrl&) { ++accepted; return true; });
+        BrowserActivation activation([&](const QUrl&, const QString&) { ++accepted; return true; });
         QVERIFY(activation.start({}));
         QLocalSocket socket;
         socket.connectToServer(BrowserActivation::socketName());
@@ -57,8 +70,10 @@ private slots:
     }
     void nativeHostEndToEnd() {
         QString received;
-        BrowserActivation activation([&](const QUrl& url) {
+        QString receivedFilename;
+        BrowserActivation activation([&](const QUrl& url, const QString& filename) {
             received = url.toString();
+            receivedFilename = filename;
             return true;
         });
         QVERIFY(activation.start({}));
@@ -71,7 +86,8 @@ private slots:
         QVERIFY(process.waitForStarted(3000));
         const QByteArray payload = QJsonDocument(QJsonObject{
             {QStringLiteral("type"), QStringLiteral("download.request")},
-            {QStringLiteral("url"), QStringLiteral("https://example.org/from-native.dmg")}
+            {QStringLiteral("url"), QStringLiteral("https://example.org/from-native.dmg")},
+            {QStringLiteral("filename"), QStringLiteral("/Users/example/Downloads/final.dmg")}
         }).toJson(QJsonDocument::Compact);
         const quint32 size = static_cast<quint32>(payload.size());
         QByteArray frame;
@@ -94,10 +110,11 @@ private slots:
         const QJsonObject response = QJsonDocument::fromJson(output.mid(4)).object();
         QVERIFY(response.value(QStringLiteral("ok")).toBool());
         QCOMPARE(received, QStringLiteral("https://example.org/from-native.dmg"));
+        QCOMPARE(receivedFilename, QStringLiteral("final.dmg"));
     }
     void nativeHandoffAndAck() {
         QString received;
-        BrowserActivation activation([&](const QUrl& url) {
+        BrowserActivation activation([&](const QUrl& url, const QString&) {
             received = url.toString();
             return true;
         });

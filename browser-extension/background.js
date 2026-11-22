@@ -24,8 +24,9 @@ function excluded(hostname, excludedHosts) {
   });
 }
 
-function sendNative(url) {
+function sendNative(url, filename = "") {
   const message = {type: "download.request", url};
+  if (filename) message.filename = filename;
   if (typeof globalThis.browser !== "undefined")
     return globalThis.browser.runtime.sendNativeMessage(NATIVE_HOST, message);
   return new Promise((resolve, reject) => {
@@ -35,6 +36,20 @@ function sendNative(url) {
       else resolve(response);
     });
   });
+}
+
+// Browser download metadata may contain the real filename even when the
+// redirected final URL has no extension (e.g. GitHub codeload/.../main).
+function filenameHint(item) {
+  const provided = String(item.filename || "").replace(/\\/g, "/").split("/").pop().trim();
+  if (provided && FILE_EXTENSION.test(provided)) return provided;
+  const original = checkUrl(item.url);
+  if (original) {
+    let name = original.pathname.split("/").pop() || "";
+    try { name = decodeURIComponent(name); } catch { /* Keep encoded form. */ }
+    if (FILE_EXTENSION.test(name)) return name;
+  }
+  return provided;
 }
 
 function cancelDownload(id) {
@@ -65,12 +80,18 @@ async function capture(item) {
   if (excluded(url.hostname.toLowerCase(), config.excludedHosts || [])) return;
   // Smart mode does not claim to intercept arbitrary POST/blob/streaming flows.
   const mime = String(item.mime || "").toLowerCase();
-  const directLink = FILE_EXTENSION.test(url.pathname) || mime === "application/octet-stream";
+  const filename = filenameHint(item);
+  const original = checkUrl(item.url);
+  const directLink = FILE_EXTENSION.test(url.pathname)
+    || (original && FILE_EXTENSION.test(original.pathname))
+    || FILE_EXTENSION.test(filename)
+    || ["application/octet-stream", "application/zip",
+        "application/x-zip-compressed"].includes(mime);
   if (config.mode === "smart" && !directLink) return;
 
   activeRequests.add(item.id);
   try {
-    const ack = await sendNative(url.href);
+    const ack = await sendNative(url.href, filename);
     if (ack && ack.ok === true) {
       // Browser cancellation is deliberately after the GenyDL enqueue ACK.
       // If cancellation fails, the browser keeps its own download.

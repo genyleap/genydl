@@ -10,7 +10,7 @@
 class BrowserActivation final : public QObject
 {
 public:
-    using DownloadHandler = std::function<bool(const QUrl&)>;
+    using DownloadHandler = std::function<bool(const QUrl&, const QString&)>;
     explicit BrowserActivation(DownloadHandler handler, QObject* parent = nullptr);
 
     // Returns false when an already running instance accepted the activation.
@@ -19,13 +19,15 @@ public:
     bool submitUrl(const QString& value);
     static QUrl parseDownloadUrl(const QString& raw);
     static bool isSafeHttpUrl(const QUrl& url);
+    // Browser-provided filenames are hints; discard all directory components.
+    static QString safeFilename(const QString& raw);
 
 protected:
     bool eventFilter(QObject* object, QEvent* event) override;
 
 private:
     bool deliverToRunningInstance(const QStringList& arguments);
-    bool deliver(const QString& url);
+    bool deliver(const QString& url, const QString& filename = {});
     void onConnection();
 
     DownloadHandler m_downloadHandler;

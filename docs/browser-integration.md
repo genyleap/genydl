@@ -13,7 +13,10 @@ or rejects a request, the browser download stays in the browser.
   (inside `GenyDL.app/Contents/MacOS` on macOS).
 - `BrowserActivation` — current-user local socket, validates HTTP(S) URLs,
   forwards activations to the existing app instance, enqueues downloads without
-  forcing a GUI window to the foreground.
+  forcing a GUI window to the foreground. Browser download handoffs include an
+  optional filename hint; the receiver discards any browser-provided directory
+  path and uses only a validated basename. This preserves names such as
+  `genydl-main.zip` when GitHub redirects to an extensionless codeload URL.
 - `genydl://download/?url=<encoded HTTP(S) URL>` — supported as manual/fallback
   protocol on macOS and Windows; Linux .desktop declares the scheme.
 
