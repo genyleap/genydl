@@ -9,8 +9,8 @@ silently install browser extensions or grant permissions.
 | Browser | Desktop platforms | Native host | Context menu | Optional interception |
 | --- | --- | --- | --- | --- |
 | Firefox | macOS, Windows, Linux | Implemented | Implemented | Implemented; request Downloads permission |
-| Chrome / Chromium | macOS, Windows, Linux | Implemented | Implemented | Implemented; requires matching extension ID |
-| Edge / Brave / Vivaldi | macOS, Windows, Linux | Registration code exists | Shared Chromium extension | Requires browser-specific testing and matching IDs |
+| Chrome / Chromium | macOS, Windows, Linux | Implemented | Implemented | Fixed developer extension ID; store builds require published ID |
+| Edge / Brave / Vivaldi | macOS, Windows, Linux | Registration code exists | Shared Chromium extension | Fixed developer ID; browser-specific runtime tests pending |
 | Safari | macOS only | **Not implemented** | Only legacy macOS Services | **Not implemented** |
 
 The table describes code availability, not a claim of real-world testing on
@@ -109,15 +109,28 @@ directory `<build>/browser-extensions/chromium`. The Chromium package
 `GenyDL-Chromium-extension.zip` uses a separate, valid MV3 background
 service-worker declaration.
 
-**Native host permissions:** the native host JSON is installed into the
-current user's browser registry/configuration. On Windows this uses HKCU
-registry keys; on macOS/Linux the conventional user profile folders.
-In GenyDL, open **Configuration → Browser Integration** to review the
-manifest status and click **Repair native hosts**. For Chrome-derived
-browsers enter the browser's exact 32-character extension ID (a–p) into
-the matching row and click **Register ID**. This updates the local user
-configuration and writes an origin-restricted native messaging manifest;
-it does **not** install the extension.
+**User-facing setup:** open **Configuration → Browsers** and turn on
+**Use** beside the desired browser. The desktop registers the appropriate
+native messaging descriptor automatically and removes it when switched off.
+There is **no extension ID field, registry path, or terminal step** in the
+user-facing interface. Firefox remains enabled by default when upgrading
+existing installations; Chrome-family browsers are opt-in.
+
+The Chromium developer package now includes a fixed public `manifest.key`
+and therefore uses the stable unpacked extension ID
+`dhmfclimdfgeemdecnghagiodcmiafdb`. This ID is registered by GenyDL without
+copy/paste. The public key is not a secret and does not authenticate the
+extension; browser-provided Native Messaging origin checks still apply.
+Official store builds can specify their own published extension IDs at
+compile time. This avoids trusting arbitrary IDs supplied by websites.
+
+**Important:** switching on a browser enables only GenyDL's native bridge.
+It does not silently install or enable an extension. The browser's add-on
+installation and permission prompts remain controlled by the browser.
+**Open extensions** opens the selected browser's extension manager.
+The test version has no verified public store listing yet; installation
+of the development extension is a one-time manual step until publication.
+Never label a browser `Connected` simply because its native host exists.
 
 On Windows, Brave and Vivaldi use the Chrome native-host registry location.
 GenyDL therefore writes a shared Chrome manifest containing the explicitly
@@ -136,10 +149,11 @@ The browser registration system does not use wildcards. Brave and Vivaldi
 can reuse the Chrome Store ID if they install that version of the extension.
 Firefox has a separate `allowed_extensions` entry.
 
-The **Browsers** panel intentionally says *Native host registered* rather
-than *Connected*, because filesystem presence does not prove that the
-extension was installed, permitted or successfully handshook. A live
-extension-to-native diagnostic handshake and store install links are planned.
+The **Browsers** panel says *Allowed by GenyDL* when the relevant bridge
+is enabled and installed. It deliberately does not say *Connected* because
+browser extension installation, enablement and permission state cannot yet
+be verified from the desktop. A live extension-to-native diagnostic handshake
+and store install links remain future work.
 
 ## macOS Safari status
 
@@ -162,13 +176,17 @@ cmake --build <build> --target GenyDL GenyDLNativeHost genydl_browser_bridge_tes
 ctest --test-dir <build> --output-on-failure
 node tests/browser-extension-smoke.cjs
 node tests/browser-options-smoke.cjs
+node tests/browser-setup-smoke.cjs
+# Linux-only isolated native-host toggle regression:
+python3 tests/browser-toggle-linux-smoke.py
 ```
 
 On macOS, additionally verify cold-start handoff, Manual right-click,
 permission denial, Ask/Add, Ask/Cancel, Always, 3+ concurrent requests,
 repeated file names, backgrounding, and host disconnection.
 
-**Not done:** signed Safari Web Extension, store publication, automated
-browser extension installation (outside enterprise policy), per-browser
-capability-based setup links, Windows runtime tests, sandboxed Linux host
-access. Do not market these as completed until each platform has been tested.
+**Not done:** signed Safari Web Extension, store publication and verified
+one-click store install links, automatic browser extension installation
+(outside enterprise policy), live extension-enable/health handshake,
+Windows runtime tests, sandboxed Linux host access. Do not market these
+as completed until each platform has been tested.

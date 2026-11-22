@@ -2899,7 +2899,11 @@ ApplicationWindow {
                 id: configurationTabs
                 Layout.fillWidth: true
                 currentIndex: appRoot.configurationTabIndex
-                onCurrentIndexChanged: appRoot.configurationTabIndex = currentIndex
+                onCurrentIndexChanged: {
+                    appRoot.configurationTabIndex = currentIndex
+                    if (currentIndex === 5)
+                        appRoot.browserHostRows = browserIntegration.statuses()
+                }
 
                 Controls.TabButton { text: qsTr("General") }
                 Controls.TabButton { text: qsTr("Queues") }
@@ -3715,7 +3719,7 @@ ApplicationWindow {
                         spacing: 12
 
                         Controls.GroupBox {
-                            title: qsTr("Browser integration setup")
+                            title: qsTr("Download with GenyDL")
                             Layout.fillWidth: true
                             implicitHeight: browserSetupLayout.implicitHeight
                                 + topPadding + bottomPadding
@@ -3723,32 +3727,18 @@ ApplicationWindow {
                             ColumnLayout {
                                 id: browserSetupLayout
                                 width: parent.width
-                                spacing: 10
+                                spacing: 8
 
                                 Controls.Label {
                                     Layout.fillWidth: true
                                     wrapMode: Text.WordWrap
-                                    text: qsTr("GenyDL can register and repair the native messaging host without administrator privileges. Installing the extension and granting its permissions still require your confirmation in each browser.")
+                                    text: qsTr("Choose which browsers can send downloads to GenyDL. Turn a switch on or off at any time.")
                                 }
                                 Controls.Label {
                                     Layout.fillWidth: true
-                                    wrapMode: Text.WordWrap
                                     color: Colors.textMuted
-                                    text: qsTr("Registered means the host manifest points to this copy of GenyDL. It does not confirm that the browser extension is installed or enabled.")
-                                }
-                                RowLayout {
-                                    Controls.Button {
-                                        text: qsTr("Repair native hosts")
-                                        onClicked: {
-                                            browserIntegration.repairNativeHosts()
-                                            appRoot.browserHostRows = browserIntegration.statuses()
-                                        }
-                                    }
-                                    Controls.Button {
-                                        text: qsTr("Refresh")
-                                        onClicked: appRoot.browserHostRows = browserIntegration.statuses()
-                                    }
-                                    Item { Layout.fillWidth: true }
+                                    wrapMode: Text.WordWrap
+                                    text: qsTr("The browser extension must also be installed and allowed by that browser. Downloads remain manual by default. Automatic capture is an optional setting inside the extension.")
                                 }
                             }
                         }
@@ -3758,7 +3748,7 @@ ApplicationWindow {
                             delegate: Controls.GroupBox {
                                 required property var modelData
                                 readonly property var browserRow: modelData
-                                title: browserRow.name
+                                title: ""
                                 Layout.fillWidth: true
                                 implicitHeight: browserEntryLayout.implicitHeight
                                     + topPadding + bottomPadding
@@ -3768,47 +3758,85 @@ ApplicationWindow {
                                     width: parent.width
                                     spacing: 8
 
-                                    Controls.Label {
-                                        Layout.fillWidth: true
-                                        wrapMode: Text.WordWrap
-                                        text: browserRow.statusText
-                                        color: browserRow.hostRegistered
-                                            ? Colors.textPrimary : Colors.textMuted
-                                    }
-                                    Controls.Label {
-                                        Layout.fillWidth: true
-                                        wrapMode: Text.WrapAnywhere
-                                        font.pixelSize: Typography.t4
-                                        color: Colors.textMuted
-                                        text: browserRow.manifestPath
-                                    }
                                     RowLayout {
                                         Layout.fillWidth: true
-                                        visible: browserRow.code !== "firefox"
-                                            && browserRow.code !== "safari"
-                                        Controls.TextField {
-                                            id: browserExtensionIdInput
+                                        spacing: 12
+
+                                        ColumnLayout {
                                             Layout.fillWidth: true
-                                            text: browserRow.savedExtensionId
-                                            placeholderText: qsTr("32-character extension ID")
-                                            validator: RegularExpressionValidator {
-                                                regularExpression: /^[a-p]{32}$/
+                                            spacing: 4
+                                            Controls.Label {
+                                                Layout.fillWidth: true
+                                                font.bold: true
+                                                text: browserRow.name
+                                            }
+                                            Controls.Label {
+                                                Layout.fillWidth: true
+                                                wrapMode: Text.WordWrap
+                                                color: Colors.textMuted
+                                                text: browserRow.supported
+                                                    ? (browserRow.enabled
+                                                        ? (browserRow.ready
+                                                            ? qsTr("Allowed by GenyDL. Confirm the extension is enabled in your browser.")
+                                                            : qsTr("Could not enable the connection."))
+                                                        : qsTr("Off"))
+                                                    : qsTr("Safari extension is not available yet.")
                                             }
                                         }
+
+                                        Controls.Switch {
+                                            text: qsTr("Use")
+                                            enabled: browserRow.supported
+                                            checked: browserRow.enabled
+                                            onToggled: {
+                                                const wanted = checked
+                                                const ok = browserIntegration.setEnabled(browserRow.code, wanted)
+                                                appRoot.browserHostRows = browserIntegration.statuses()
+                                                if (!ok)
+                                                    appRoot.appendNotification(
+                                                        qsTr("Browser setup"),
+                                                        qsTr("Could not update the connection. Check that GenyDL Native Host is installed."),
+                                                        "warning")
+                                            }
+                                        }
+                                    }
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        visible: browserRow.supported && browserRow.enabled
+                                        spacing: 8
+
+                                        Controls.Label {
+                                            Layout.fillWidth: true
+                                            wrapMode: Text.WordWrap
+                                            font.pixelSize: Typography.t4
+                                            color: Colors.textMuted
+                                            text: browserRow.browserInstalled
+                                                ? qsTr("Installed the extension? Open your browser's extensions page to enable it.")
+                                                : qsTr("Browser not detected on this computer.")
+                                        }
+
                                         Controls.Button {
-                                            text: qsTr("Register ID")
-                                            enabled: browserExtensionIdInput.text.length === 32
+                                            text: qsTr("Open extensions")
+                                            enabled: browserRow.browserInstalled
                                             onClicked: {
-                                                if (browserIntegration.registerExtensionId(
-                                                        browserRow.code,
-                                                        browserExtensionIdInput.text)) {
-                                                    appRoot.browserHostRows = browserIntegration.statuses()
-                                                }
+                                                if (!browserIntegration.openBrowserExtensions(browserRow.code))
+                                                    appRoot.appendNotification(
+                                                        qsTr("Browser setup"),
+                                                        qsTr("Could not open this browser."),
+                                                        "warning")
                                             }
                                         }
                                     }
                                 }
                             }
+                        }
+
+                        Controls.Label {
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            color: Colors.textMuted
+                            text: qsTr("Note: This development version has no public store listing yet. Browser installation still needs one confirmation in the browser; no extension ID or system path needs to be entered in GenyDL.")
                         }
 
                         Item { Layout.fillHeight: true }

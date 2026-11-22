@@ -3,17 +3,17 @@
 #include <QObject>
 #include <QVariantList>
 
-// Explicit user-controlled native host setup. Host registration never
-// installs an extension, changes browser policies, or grants site permissions.
+// Browser integration is controlled per browser by the user. Turning a
+// browser on configures GenyDL's side of the link; only the browser can
+// install/enable the extension and grant download-management permission.
 class BrowserIntegrationManager final : public QObject
 {
     Q_OBJECT
 public:
     explicit BrowserIntegrationManager(QObject* parent = nullptr);
 
-    // "Registered" means the manifest points to this GenyDL build, NOT that
-    // the extension is installed or that browser permission was granted.
     Q_INVOKABLE QVariantList statuses() const;
-    Q_INVOKABLE bool registerExtensionId(const QString& browser, const QString& id);
+    Q_INVOKABLE bool setEnabled(const QString& browser, bool enabled);
+    Q_INVOKABLE bool openBrowserExtensions(const QString& browser) const;
     Q_INVOKABLE void repairNativeHosts();
 };

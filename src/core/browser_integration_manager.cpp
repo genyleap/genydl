@@ -8,40 +8,42 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QProcess>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QStringList>
 #include <QVariantMap>
 
 namespace {
 struct BrowserInfo {
     const char* code;
     const char* label;
+    const char* macName;
     const char* macFolder;
     const char* linuxFolder;
+    const char* extensionPage;
 };
 
-const BrowserInfo kBrowsers[] = {
-    {"firefox", "Firefox", "Mozilla", ".mozilla"},
-    {"chrome", "Google Chrome", "Google/Chrome", ".config/google-chrome"},
-    {"edge", "Microsoft Edge", "Microsoft Edge", ".config/microsoft-edge"},
-    {"brave", "Brave", "BraveSoftware/Brave-Browser", ".config/BraveSoftware/Brave-Browser"},
-    {"chromium", "Chromium", "Chromium", ".config/chromium"},
-    {"vivaldi", "Vivaldi", "Vivaldi", ".config/vivaldi"},
+constexpr BrowserInfo kBrowsers[] = {
+    {"firefox", "Firefox", "Firefox", "Mozilla", ".mozilla", "about:addons"},
+    {"chrome", "Google Chrome", "Google Chrome", "Google/Chrome",
+     ".config/google-chrome", "chrome://extensions"},
+    {"edge", "Microsoft Edge", "Microsoft Edge", "Microsoft Edge",
+     ".config/microsoft-edge", "edge://extensions"},
+    {"brave", "Brave", "Brave Browser", "BraveSoftware/Brave-Browser",
+     ".config/BraveSoftware/Brave-Browser", "brave://extensions"},
+    {"chromium", "Chromium", "Chromium", "Chromium",
+     ".config/chromium", "chrome://extensions"},
+    {"vivaldi", "Vivaldi", "Vivaldi", "Vivaldi",
+     ".config/vivaldi", "vivaldi://extensions"},
 };
 
-bool knownBrowser(const QString& code)
+const BrowserInfo* browserInfo(const QString& code)
 {
-    for (const BrowserInfo& info : kBrowsers)
-        if (code == QLatin1StringView(info.code)) return true;
-    return false;
-}
-
-bool validId(const QString& id)
-{
-    if (id.size() != 32) return false;
-    for (QChar c : id)
-        if (c < QLatin1Char('a') || c > QLatin1Char('p')) return false;
-    return true;
+    for (const BrowserInfo& browser : kBrowsers) {
+        if (code == QString::fromLatin1(browser.code)) return &browser;
+    }
+    return nullptr;
 }
 
 QString manifestPath(const BrowserInfo& browser)
@@ -50,99 +52,180 @@ QString manifestPath(const BrowserInfo& browser)
 #ifdef Q_OS_WIN
     const QString base = QStandardPaths::writableLocation(
         QStandardPaths::AppLocalDataLocation);
-    QString manifestPrefix = QString::fromLatin1(browser.code);
-    // Windows Brave and Vivaldi use the Google Chrome registry host entry.
-    if (manifestPrefix == QStringLiteral("brave")
-        || manifestPrefix == QStringLiteral("vivaldi"))
-        manifestPrefix = QStringLiteral("chrome");
+    QString prefix = QString::fromLatin1(browser.code);
+    if (prefix == QStringLiteral("brave") || prefix == QStringLiteral("vivaldi"))
+        prefix = QStringLiteral("chrome");
     return QDir(base).filePath(QStringLiteral("NativeMessagingHosts/")
-        + manifestPrefix + QLatin1Char('-') + filename);
+                              + prefix + QLatin1Char('-') + filename);
 #elif defined(Q_OS_MACOS)
-    const QString base = QDir::homePath() + QStringLiteral("/Library/Application Support/");
-    return base + QString::fromLatin1(browser.macFolder)
+    return QDir::homePath() + QStringLiteral("/Library/Application Support/")
+        + QString::fromLatin1(browser.macFolder)
         + QStringLiteral("/NativeMessagingHosts/") + filename;
 #else
-    const QString root = QDir::homePath();
-    if (QLatin1StringView(browser.code) == QLatin1StringView("firefox"))
-        return root + QStringLiteral("/.mozilla/native-messaging-hosts/") + filename;
-    return root + QLatin1Char('/') + QString::fromLatin1(browser.linuxFolder)
+    if (QString::fromLatin1(browser.code) == QStringLiteral("firefox"))
+        return QDir::homePath() + QStringLiteral("/.mozilla/native-messaging-hosts/") + filename;
+    return QDir::homePath() + QLatin1Char('/')
+        + QString::fromLatin1(browser.linuxFolder)
         + QStringLiteral("/NativeMessagingHosts/") + filename;
 #endif
 }
+
+QStringList linuxNames(const QString& code)
+{
+    if (code == QStringLiteral("firefox")) return {QStringLiteral("firefox")};
+    if (code == QStringLiteral("chrome"))
+        return {QStringLiteral("google-chrome-stable"), QStringLiteral("google-chrome")};
+    if (code == QStringLiteral("edge"))
+        return {QStringLiteral("microsoft-edge-stable"), QStringLiteral("microsoft-edge")};
+    if (code == QStringLiteral("brave"))
+        return {QStringLiteral("brave-browser"), QStringLiteral("brave")};
+    if (code == QStringLiteral("chromium"))
+        return {QStringLiteral("chromium"), QStringLiteral("chromium-browser")};
+    if (code == QStringLiteral("vivaldi"))
+        return {QStringLiteral("vivaldi-stable"), QStringLiteral("vivaldi")};
+    return {};
 }
 
-BrowserIntegrationManager::BrowserIntegrationManager(QObject* parent)
-    : QObject(parent)
+QString browserExecutable(const BrowserInfo& browser)
 {
+    const QString code = QString::fromLatin1(browser.code);
+#ifdef Q_OS_MACOS
+    const QString bundle = QString::fromLatin1(browser.macName) + QStringLiteral(".app");
+    for (const QString& base : {QStringLiteral("/Applications"),
+                                QDir::homePath() + QStringLiteral("/Applications")}) {
+        if (QFileInfo::exists(QDir(base).filePath(bundle)))
+            return QString::fromLatin1(browser.macName);
+    }
+    return {};
+#elif defined(Q_OS_WIN)
+    QString rel;
+    if (code == QStringLiteral("firefox")) rel = QStringLiteral("Mozilla Firefox/firefox.exe");
+    if (code == QStringLiteral("chrome")) rel = QStringLiteral("Google/Chrome/Application/chrome.exe");
+    if (code == QStringLiteral("edge")) rel = QStringLiteral("Microsoft/Edge/Application/msedge.exe");
+    if (code == QStringLiteral("brave")) rel = QStringLiteral("BraveSoftware/Brave-Browser/Application/brave.exe");
+    if (code == QStringLiteral("chromium")) rel = QStringLiteral("Chromium/Application/chrome.exe");
+    if (code == QStringLiteral("vivaldi")) rel = QStringLiteral("Vivaldi/Application/vivaldi.exe");
+    for (const QString& base : {qEnvironmentVariable("LOCALAPPDATA"),
+                                qEnvironmentVariable("PROGRAMFILES"),
+                                qEnvironmentVariable("PROGRAMFILES(X86)")}) {
+        const QString candidate = QDir(base).filePath(rel);
+        if (!base.isEmpty() && QFileInfo::exists(candidate)) return candidate;
+    }
+    for (const QString& name : linuxNames(code)) {
+        const QString executable = QStandardPaths::findExecutable(name + QStringLiteral(".exe"));
+        if (!executable.isEmpty()) return executable;
+    }
+    return {};
+#else
+    for (const QString& name : linuxNames(code)) {
+        const QString executable = QStandardPaths::findExecutable(name);
+        if (!executable.isEmpty()) return executable;
+    }
+    return {};
+#endif
 }
+
+bool isManifestReady(const QString& path, const QString& nativeExecutable,
+                     const QString& code)
+{
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly)) return false;
+    const QJsonObject obj = QJsonDocument::fromJson(f.readAll()).object();
+    if (!QFileInfo::exists(nativeExecutable)
+        || obj.value(QStringLiteral("name")).toString()
+            != QStringLiteral("com.genyleap.genydl")
+        || obj.value(QStringLiteral("path")).toString() != nativeExecutable)
+        return false;
+    if (code == QStringLiteral("firefox"))
+        return obj.value(QStringLiteral("allowed_extensions")).toArray().contains(
+            QStringLiteral("download-links@genydl.genyleap.com"));
+    return obj.value(QStringLiteral("allowed_origins")).toArray().contains(
+        QStringLiteral("chrome-extension://dhmfclimdfgeemdecnghagiodcmiafdb/"));
+}
+}
+
+BrowserIntegrationManager::BrowserIntegrationManager(QObject* parent) : QObject(parent) {}
 
 QVariantList BrowserIntegrationManager::statuses() const
 {
     QVariantList result;
-    QString executable = QCoreApplication::applicationDirPath()
+    QString nativeBinary = QCoreApplication::applicationDirPath()
         + QStringLiteral("/GenyDLNativeHost");
 #ifdef Q_OS_WIN
-    executable += QStringLiteral(".exe");
+    nativeBinary += QStringLiteral(".exe");
 #endif
-    const bool nativePresent = QFileInfo::exists(executable);
     QSettings settings;
-
     for (const BrowserInfo& browser : kBrowsers) {
         const QString code = QString::fromLatin1(browser.code);
-        const QString path = manifestPath(browser);
-        QFile file(path);
-        QJsonObject manifest;
-        if (file.open(QIODevice::ReadOnly))
-            manifest = QJsonDocument::fromJson(file.readAll()).object();
-        const bool registered = nativePresent
-            && manifest.value(QStringLiteral("path")).toString() == executable
-            && manifest.value(QStringLiteral("name")).toString()
-                == QStringLiteral("com.genyleap.genydl");
-
-        const QString savedId = settings.value(
-            QStringLiteral("browserIntegration/extensionIds/") + code)
-            .toStringList().value(0);
-        QVariantMap row{
+        const bool enabled = settings.value(
+            QStringLiteral("browserIntegration/enabled/") + code,
+            code == QStringLiteral("firefox")).toBool();
+        const bool ready = isManifestReady(manifestPath(browser), nativeBinary, code);
+        const bool installed = !browserExecutable(browser).isEmpty();
+        QString status;
+        if (!enabled)
+            status = QStringLiteral("Off — downloads stay in the browser");
+        else if (!ready)
+            status = QStringLiteral("Connection setup incomplete — try again");
+        else
+            status = QStringLiteral("Ready in GenyDL — browser extension not verified");
+        result.append(QVariantMap{
             {QStringLiteral("code"), code},
             {QStringLiteral("name"), QString::fromLatin1(browser.label)},
-            {QStringLiteral("hostRegistered"), registered},
-            {QStringLiteral("nativeExecutablePresent"), nativePresent},
-            {QStringLiteral("manifestPath"), path},
-            {QStringLiteral("savedExtensionId"), savedId},
-            {QStringLiteral("statusText"), registered
-                ? QStringLiteral("Native host registered — extension permission not verified")
-                : QStringLiteral("Native host not configured")}
-        };
-        result.append(row);
+            {QStringLiteral("enabled"), enabled},
+            {QStringLiteral("ready"), ready},
+            {QStringLiteral("browserInstalled"), installed},
+            {QStringLiteral("supported"), true},
+            {QStringLiteral("statusText"), status}
+        });
     }
 #ifdef Q_OS_MACOS
     result.append(QVariantMap{
         {QStringLiteral("code"), QStringLiteral("safari")},
         {QStringLiteral("name"), QStringLiteral("Safari")},
-        {QStringLiteral("hostRegistered"), false},
-        {QStringLiteral("nativeExecutablePresent"), nativePresent},
-        {QStringLiteral("manifestPath"), QString()},
-        {QStringLiteral("savedExtensionId"), QString()},
+        {QStringLiteral("enabled"), false},
+        {QStringLiteral("ready"), false},
+        {QStringLiteral("browserInstalled"), true},
+        {QStringLiteral("supported"), false},
         {QStringLiteral("statusText"),
-            QStringLiteral("Manual Services only; signed Safari Web Extension pending")}
+         QStringLiteral("Coming later — signed Safari extension not available")}
     });
 #endif
     return result;
 }
 
-bool BrowserIntegrationManager::registerExtensionId(const QString& browser,
-                                                     const QString& rawId)
+bool BrowserIntegrationManager::setEnabled(const QString& code, bool enabled)
 {
-    if (browser == QStringLiteral("firefox") || !knownBrowser(browser)) return false;
-    const QString id = rawId.trimmed().toLower();
-    if (!validId(id)) return false;
+    if (!browserInfo(code)) return false;
     QSettings settings;
-    settings.setValue(QStringLiteral("browserIntegration/extensionIds/") + browser,
-                      QStringList{id});
+    const QString key = QStringLiteral("browserIntegration/enabled/") + code;
+    settings.setValue(key, enabled);
     settings.sync();
     if (settings.status() != QSettings::NoError) return false;
     registerBrowserNativeHosts();
-    return true;
+    if (!enabled) return true;
+    const BrowserInfo* browser = browserInfo(code);
+    QString nativeBinary = QCoreApplication::applicationDirPath()
+        + QStringLiteral("/GenyDLNativeHost");
+#ifdef Q_OS_WIN
+    nativeBinary += QStringLiteral(".exe");
+#endif
+    return isManifestReady(manifestPath(*browser), nativeBinary, code);
+}
+
+bool BrowserIntegrationManager::openBrowserExtensions(const QString& code) const
+{
+    const BrowserInfo* browser = browserInfo(code);
+    if (!browser) return false;
+    const QString executable = browserExecutable(*browser);
+    if (executable.isEmpty()) return false;
+    const QString page = QString::fromLatin1(browser->extensionPage);
+#ifdef Q_OS_MACOS
+    return QProcess::startDetached(QStringLiteral("/usr/bin/open"),
+        {QStringLiteral("-a"), executable, page});
+#else
+    return QProcess::startDetached(executable, {page});
+#endif
 }
 
 void BrowserIntegrationManager::repairNativeHosts()
