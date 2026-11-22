@@ -555,6 +555,49 @@ set(GENYDL_MODULE_IFS
     src/services/update_client.cppm
 )
 
+# Qt < 6.13 AUTOGEN rejects Q_OBJECT in .cppm module interface units,
+# although the moc executable itself can parse those sources. Generate the
+# included .moc files explicitly for all such interfaces and skip AUTOMOC
+# on the module units. This keeps C++ module scanning and Qt 6.12 compatible.
+set(GENYDL_QOBJECT_MODULE_IFS
+    src/core/language_manager.cppm
+    src/core/appcontroller.cppm
+    src/core/downloadertask.cppm
+    src/core/torrenttask.cppm
+    src/core/downloadmanager.cppm
+    src/core/downloadmodel.cppm
+    src/services/torrent_session.cppm
+    src/services/gateway_service.cppm
+    src/services/github_release_service.cppm
+    src/services/release_center_service.cppm
+    src/services/update_client.cppm
+)
+
+if(Qt6Core_VERSION VERSION_LESS "6.13.0")
+    set(GENYDL_LEGACY_MODULE_MOC_DIR
+        "${CMAKE_CURRENT_BINARY_DIR}/genydl_module_moc")
+    set(GENYDL_LEGACY_MODULE_MOC_OUTPUTS)
+    foreach(genydl_module IN LISTS GENYDL_QOBJECT_MODULE_IFS)
+        set_source_files_properties("${genydl_module}" PROPERTIES SKIP_AUTOMOC ON)
+        get_filename_component(genydl_module_name "${genydl_module}" NAME_WE)
+        set(genydl_moc_output
+            "${GENYDL_LEGACY_MODULE_MOC_DIR}/${genydl_module_name}.moc")
+        add_custom_command(
+            OUTPUT "${genydl_moc_output}"
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${GENYDL_LEGACY_MODULE_MOC_DIR}"
+            COMMAND $<TARGET_FILE:Qt6::moc>
+                -o "${genydl_moc_output}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/${genydl_module}"
+            DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${genydl_module}" Qt6::moc
+            COMMENT "Generate Qt 6.12 compatible moc for ${genydl_module}"
+            VERBATIM
+        )
+        list(APPEND GENYDL_LEGACY_MODULE_MOC_OUTPUTS "${genydl_moc_output}")
+    endforeach()
+    add_custom_target(genydl_legacy_module_moc
+        DEPENDS ${GENYDL_LEGACY_MODULE_MOC_OUTPUTS})
+endif()
+
 set(GENYDL_IMPL_SOURCES
     src/ui/tray_icon_provider.cpp
     src/core/language_manager.cpp
@@ -584,6 +627,11 @@ qt_add_executable(${APP_NAME}
     src/core/browser_host_registration.h
     src/core/browser_host_registration.cpp
 )
+
+if(TARGET genydl_legacy_module_moc)
+    add_dependencies(${APP_NAME} genydl_legacy_module_moc)
+    target_include_directories(${APP_NAME} PRIVATE "${GENYDL_LEGACY_MODULE_MOC_DIR}")
+endif()
 
 set(GENYDL_CHROMIUM_EXTENSION_ID "" CACHE STRING
     "32-character published Chrome/Edge extension ID for native messaging")
@@ -979,6 +1027,11 @@ if(GENYDL_BUILD_TESTS)
     qt_add_executable(genydl_backend_tests
         tests/backend_tests.cpp
     )
+    if(TARGET genydl_legacy_module_moc)
+        add_dependencies(genydl_backend_tests genydl_legacy_module_moc)
+        target_include_directories(genydl_backend_tests PRIVATE
+            "${GENYDL_LEGACY_MODULE_MOC_DIR}")
+    endif()
 
     target_sources(genydl_backend_tests
         PUBLIC

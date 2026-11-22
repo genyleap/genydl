@@ -1,6 +1,5 @@
 module;
 #include <QCoreApplication>
-#include <QCollator>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -16,6 +15,49 @@ module genydl.services.github_release_service;
 namespace {
 
 constexpr int kRequestTimeoutMs = 30000;
+
+// QCollator::setNumericMode() depends on the platform collation backend.
+// On some Linux Qt builds the flag is ignored, making "file10" sort before
+// "file2". Compare decimal runs explicitly for consistent release asset order.
+int compareNaturalAssetNames(const QString& lhs, const QString& rhs)
+{
+    qsizetype left = 0;
+    qsizetype right = 0;
+    while (left < lhs.size() && right < rhs.size()) {
+        if (lhs.at(left).isDigit() && rhs.at(right).isDigit()) {
+            const qsizetype leftStart = left;
+            const qsizetype rightStart = right;
+            while (left < lhs.size() && lhs.at(left).isDigit()) ++left;
+            while (right < rhs.size() && rhs.at(right).isDigit()) ++right;
+
+            qsizetype leftSignificant = leftStart;
+            qsizetype rightSignificant = rightStart;
+            while (leftSignificant < left && lhs.at(leftSignificant).digitValue() == 0)
+                ++leftSignificant;
+            while (rightSignificant < right && rhs.at(rightSignificant).digitValue() == 0)
+                ++rightSignificant;
+
+            const qsizetype leftLength = left - leftSignificant;
+            const qsizetype rightLength = right - rightSignificant;
+            if (leftLength != rightLength) return leftLength < rightLength ? -1 : 1;
+            for (qsizetype n = 0; n < leftLength; ++n) {
+                const int a = lhs.at(leftSignificant + n).digitValue();
+                const int b = rhs.at(rightSignificant + n).digitValue();
+                if (a != b) return a < b ? -1 : 1;
+            }
+            continue;
+        }
+
+        const ushort a = lhs.at(left).toCaseFolded().unicode();
+        const ushort b = rhs.at(right).toCaseFolded().unicode();
+        if (a != b) return a < b ? -1 : 1;
+        ++left;
+        ++right;
+    }
+
+    if (left == lhs.size() && right == rhs.size()) return 0;
+    return left == lhs.size() ? -1 : 1;
+}
 
 QString jsonString(const QJsonObject& object, const QString& key)
 {
@@ -418,11 +460,9 @@ std::optional<ReleaseInfo> parseReleaseJson(const QByteArray& data, QString* err
         }
     }
 
-    QCollator collator;
-    collator.setNumericMode(true);
-    collator.setCaseSensitivity(Qt::CaseInsensitive);
-    std::sort(release.assets.begin(), release.assets.end(), [&collator](const ReleaseAsset& lhs, const ReleaseAsset& rhs) {
-        return collator.compare(lhs.name, rhs.name) < 0;
+    std::stable_sort(release.assets.begin(), release.assets.end(),
+                     [](const ReleaseAsset& lhs, const ReleaseAsset& rhs) {
+        return compareNaturalAssetNames(lhs.name, rhs.name) < 0;
     });
 
     return release;
