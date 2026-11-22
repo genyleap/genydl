@@ -210,6 +210,16 @@ auto main(int argc, char *argv[]) -> int
     if (!browserActivation.start(app.arguments().mid(1)))
         return 0;
 
+    // Only an explicit user confirmation from the Add Download dialog resolves
+    // browser-originated prompts; opening a prompt never starts a transfer.
+    engine.rootContext()->setContextProperty("browserActivation", &browserActivation);
+#ifdef Q_OS_MACOS
+    QObject::connect(&browserActivation, &BrowserActivation::promptRequested,
+                     &app, [](const QString&, const QString&) {
+        activateMacGenyDL();
+    });
+#endif
+
     engine.rootContext()->setContextProperty("documentsFolder", downloadsRoot);
     engine.rootContext()->setContextProperty("faFontPath", fontPath);
 

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Download with GenyDL",
   "description": "Hand off supported browser downloads to the GenyDL desktop application.",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "icons": {"128": "icon128.png"},
   "permissions": [
     "downloads",

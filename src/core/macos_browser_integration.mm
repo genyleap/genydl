@@ -23,6 +23,11 @@
 }
 @end
 
+void activateMacGenyDL()
+{
+    [NSApp activateIgnoringOtherApps:YES];
+}
+
 void registerMacBrowserService(BrowserActivation* receiver)
 {
     if (!receiver) return;

@@ -1,6 +1,7 @@
-/* GenyDL WebExtension — Chrome, Edge, Firefox; Safari where supported.
- * A download is cancelled ONLY after the native host acknowledges acceptance.
- * Keep browser downloads intact when the desktop app or host is unavailable.
+/* GenyDL WebExtension — Chrome, Edge, Firefox.
+ * Pause a browser download while the user reviews the GenyDL Add dialog.
+ * Cancel and erase the browser history entry ONLY after explicit user approval.
+ * On rejection or native communication failure, resume the browser download.
  */
 const EXT = globalThis.browser ?? globalThis.chrome;
 const NATIVE_HOST = "com.genyleap.genydl";
@@ -25,7 +26,7 @@ function excluded(hostname, excludedHosts) {
 }
 
 function sendNative(url, filename = "") {
-  const message = {type: "download.request", url};
+  const message = {type: "download.prompt", url};
   if (filename) message.filename = filename;
   if (typeof globalThis.browser !== "undefined")
     return globalThis.browser.runtime.sendNativeMessage(NATIVE_HOST, message);
@@ -52,15 +53,25 @@ function filenameHint(item) {
   return provided;
 }
 
-function cancelDownload(id) {
+// Firefox exposes Promise-based downloads methods. Chromium callback APIs
+// are normalized to Promises for a single fail-open transfer state machine.
+function downloadAction(method, argument) {
   if (typeof globalThis.browser !== "undefined")
-    return globalThis.browser.downloads.cancel(id);
-  return new Promise((resolve, reject) =>
-    EXT.downloads.cancel(id, () => {
+    return globalThis.browser.downloads[method](argument);
+  return new Promise((resolve, reject) => {
+    EXT.downloads[method](argument, value => {
       const error = EXT.runtime.lastError;
       if (error) reject(new Error(error.message));
-      else resolve();
-    }));
+      else resolve(value);
+    });
+  });
+}
+
+async function resumeBrowserDownload(id) {
+  try { await downloadAction("resume", id); }
+  catch (err) {
+    console.warn("GenyDL could not resume browser download", String(err));
+  }
 }
 
 async function settings() {
@@ -90,16 +101,28 @@ async function capture(item) {
   if (config.mode === "smart" && !directLink) return;
 
   activeRequests.add(item.id);
+  let paused = false;
+  let cancelled = false;
   try {
+    // Do not ask GenyDL to take over a transfer that cannot be paused:
+    // it might already be complete or cannot safely be interrupted.
+    await downloadAction("pause", item.id);
+    paused = true;
+
+    // This response is held open by the native host until the desktop
+    // user presses Add or dismisses the dialog (or the request times out).
     const ack = await sendNative(url.href, filename);
-    if (ack && ack.ok === true) {
-      // Browser cancellation is deliberately after the GenyDL enqueue ACK.
-      // If cancellation fails, the browser keeps its own download.
-      await cancelDownload(item.id);
-    }
+    if (!ack || ack.ok !== true) return;
+
+    await downloadAction("cancel", item.id);
+    cancelled = true;
+    paused = false;
+    // Erase just this cancelled record; never clear other download history.
+    await downloadAction("erase", {id: item.id});
   } catch (err) {
-    console.debug("GenyDL native handoff unavailable; browser download kept", String(err));
+    console.warn("GenyDL download handoff incomplete", String(err));
   } finally {
+    if (paused && !cancelled) await resumeBrowserDownload(item.id);
     activeRequests.delete(item.id);
   }
 }
@@ -123,10 +146,11 @@ if (EXT.contextMenus?.onClicked) {
     const url = checkUrl(info.linkUrl);
     if (!url) return;
     try {
-      const ack = await sendNative(url.href);
-      if (ack?.ok === true) return;
-    } catch { /* Explicit user action may use the protocol fallback. */ }
-    const external = "genydl://download/?url=" + encodeURIComponent(url.href);
-    if (EXT.tabs?.create) EXT.tabs.create({url: external});
+      // Context-menu handoffs show the same review dialog, but there is no
+      // existing browser download to pause, cancel or erase.
+      await sendNative(url.href);
+    } catch (err) {
+      console.warn("GenyDL is unavailable; no browser download was modified", String(err));
+    }
   });
 }

@@ -94,6 +94,19 @@ QString BrowserActivation::safeFilename(const QString& raw)
     return leaf;
 }
 
+void BrowserActivation::finishPrompt(bool accepted)
+{
+    if (!m_pendingPromptSocket) return;
+    QPointer<QLocalSocket> client = m_pendingPromptSocket;
+    m_pendingPromptSocket.clear();
+    if (!client) return;
+    client->write(encodeReply(accepted,
+        accepted ? QStringLiteral("user accepted")
+                 : QStringLiteral("user declined")));
+    client->flush();
+    client->disconnectFromServer();
+}
+
 bool BrowserActivation::submitUrl(const QString& raw)
 {
     return deliver(raw);
@@ -173,6 +186,7 @@ void BrowserActivation::onConnection()
         client->setParent(this);
         auto buffer = std::make_shared<QByteArray>();
         connect(client, &QLocalSocket::readyRead, this, [this, client, buffer] {
+            if (m_pendingPromptSocket == client) return;
             *buffer += client->readAll();
             if (buffer->size() > kMaxRequestBytes) {
                 client->write(encodeReply(false, QStringLiteral("request too large")));
@@ -184,16 +198,38 @@ void BrowserActivation::onConnection()
             if (end < 0) return;
             const QJsonDocument document = QJsonDocument::fromJson(buffer->left(end));
             const QJsonObject message = document.object();
-            const bool validType = message.value(QStringLiteral("type")).toString()
-                == QStringLiteral("download.request");
-            const bool accepted = validType && deliver(
-                message.value(QStringLiteral("url")).toString(),
+            const QString type = message.value(QStringLiteral("type")).toString();
+            const QString rawUrl = message.value(QStringLiteral("url")).toString();
+            const QString filename = safeFilename(
                 message.value(QStringLiteral("filename")).toString());
+            if (type == QStringLiteral("download.prompt")) {
+                const QUrl url = parseDownloadUrl(rawUrl);
+                if (!isSafeHttpUrl(url) || m_pendingPromptSocket) {
+                    client->write(encodeReply(false,
+                        QStringLiteral("invalid URL or another prompt is active")));
+                    client->flush();
+                    client->disconnectFromServer();
+                    return;
+                }
+                m_pendingPromptSocket = client;
+                // The native host keeps this socket open while the user
+                // chooses. No download and no success ACK occurs yet.
+                emit promptRequested(url.toString(QUrl::FullyEncoded), filename);
+                return;
+            }
+            const bool accepted = type == QStringLiteral("download.request")
+                && deliver(rawUrl, filename);
             client->write(encodeReply(accepted, accepted ? QStringLiteral("accepted")
                                                          : QStringLiteral("invalid or rejected request")));
             client->flush();
             client->disconnectFromServer();
         });
-        connect(client, &QLocalSocket::disconnected, client, &QObject::deleteLater);
+        connect(client, &QLocalSocket::disconnected, this, [this, client] {
+            if (m_pendingPromptSocket == client) {
+                m_pendingPromptSocket.clear();
+                emit promptAborted();
+            }
+            client->deleteLater();
+        });
     }
 }

@@ -94,6 +94,8 @@ ApplicationWindow {
     property string categoryFilter: "All"
     property string sourceFilter: "All"
     property string searchText: ""
+    // An intercepted browser download is never added before explicit approval.
+    property bool browserPromptActive: false
 
     property int sortIndex: 0
     property bool sortAscending: true
@@ -407,6 +409,35 @@ ApplicationWindow {
         if (t.length > 0)
             addDialogUrlField.text = t
     }
+    function openBrowserDownloadPrompt(url, filename) {
+        // Avoid overwriting a dialog the user was already editing.
+        if (addUrlPopup.visible) {
+            browserActivation.finishPrompt(false)
+            return
+        }
+        appRoot.openAddUrlDialog()
+        browserPromptActive = true
+        addDialogUrlField.text = url
+        addDialogFilenameField.text = filename || ""
+        if (appRoot.visibility === Window.Minimized)
+            appRoot.visibility = Window.Windowed
+        appRoot.show()
+        appRoot.raise()
+        appRoot.requestActivate()
+        addDialogUrlField.forceActiveFocus()
+    }
+
+    Connections {
+        target: browserActivation
+        function onPromptRequested(url, filename) {
+            appRoot.openBrowserDownloadPrompt(url, filename)
+        }
+        function onPromptAborted() {
+            if (appRoot.browserPromptActive)
+                addUrlPopup.close()
+        }
+    }
+
     function isTorrentLikeInput() { return Utils.isTorrentLikeInput.apply(this, arguments) }
     function loadQueueEditor() { return Utils.loadQueueEditor.apply(this, arguments) }
     function applyQueueEditor() { return Utils.applyQueueEditor.apply(this, arguments) }
@@ -2235,6 +2266,22 @@ ApplicationWindow {
                     }
                 }
 
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 10
+                    visible: appRoot.browserPromptActive
+
+                    Controls.Label {
+                        text: qsTr("Save as")
+                        Layout.preferredWidth: 108
+                    }
+                    Controls.TextField {
+                        id: addDialogFilenameField
+                        Layout.fillWidth: true
+                        placeholderText: qsTr("File name (editable)")
+                    }
+                }
+
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 15
@@ -2368,8 +2415,48 @@ ApplicationWindow {
             }
 
         }
+        onClosed: {
+            if (appRoot.browserPromptActive) {
+                appRoot.browserPromptActive = false
+                browserActivation.finishPrompt(false)
+            }
+        }
         onAccepted: {
             addDialogErrorLabel.text = ""
+            if (appRoot.browserPromptActive) {
+                const before = downloadManager.taskCount()
+                const output = addDialogFilenameField.text.trim().length > 0
+                    ? appRoot.downloadPathForAsset(
+                          addDialogPathField.text, addDialogFilenameField.text.trim())
+                    : addDialogPathField.text
+                const added = appRoot.submitDownload(
+                    addDialogUrlField.text,
+                    output,
+                    addDialogQueueCombo.currentValue,
+                    addDialogCategoryCombo.currentValue,
+                    addDialogPausedSwitch.checked,
+                    addDialogSegmentsSpin.value,
+                    addDialogAdaptiveSwitch.checked)
+                if (!added || downloadManager.taskCount() <= before) {
+                    browserActivation.finishPrompt(false)
+                    return
+                }
+                appRoot.addDefaultOutputPath = addDialogPathField.text.trim()
+                appRoot.addDefaultQueue = addDialogQueueCombo.currentValue
+                appRoot.addDefaultCategory = addDialogCategoryCombo.currentValue
+                appRoot.addDefaultSegments = addDialogSegmentsSpin.value
+                appRoot.addDefaultAdaptive = addDialogAdaptiveSwitch.checked
+                appRoot.addDefaultStartPaused = addDialogPausedSwitch.checked
+                browserActivation.finishPrompt(true)
+                appRoot.browserPromptActive = false
+                // Make the new task visible even if an older category, queue
+                // or status filter was saved (e.g. Videos during a ZIP transfer).
+                appRoot.setStatusScope("All")
+                appRoot.searchText = ""
+                appRoot.pageIndex = 0
+                addUrlPopup.close()
+                return
+            }
             if (appRoot.isTorrentLikeInput(addDialogUrlField.text)) {
                 if (!torrentSession.available) {
                     addDialogErrorLabel.text = qsTr("BitTorrent support is not available in this build.")

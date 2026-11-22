@@ -40,7 +40,7 @@ void respond(bool ok, const QString& message)
     std::cout.flush();
 }
 
-bool sendToApplication(const QByteArray& json)
+bool sendToApplication(const QByteArray& json, bool waitForUser)
 {
     QLocalSocket socket;
     socket.connectToServer(endpoint());
@@ -62,7 +62,10 @@ bool sendToApplication(const QByteArray& json)
     const QByteArray packet = json + '\n';
     if (socket.write(packet) != packet.size() || !socket.waitForBytesWritten(1500))
         return false;
-    if (!socket.waitForReadyRead(2500)) return false;
+    // Browser-originated prompts keep the native host pending until the user
+    // accepts or dismisses the desktop dialog. Failure returns control to
+    // the browser, which resumes its paused transfer.
+    if (!socket.waitForReadyRead(waitForUser ? 180000 : 2500)) return false;
     const QJsonDocument reply = QJsonDocument::fromJson(socket.readAll().trimmed());
     return reply.isObject() && reply.object().value(QStringLiteral("ok")).toBool();
 }
@@ -94,12 +97,16 @@ int main(int argc, char** argv)
     }
     const QJsonDocument document = QJsonDocument::fromJson(data);
     const QJsonObject request = document.object();
+    const QString type = request.value(QStringLiteral("type")).toString();
     if (!document.isObject()
-        || request.value(QStringLiteral("type")).toString() != QStringLiteral("download.request")
+        || (type != QStringLiteral("download.prompt")
+            && type != QStringLiteral("download.request"))
         || !request.value(QStringLiteral("url")).isString()) {
         respond(false, QStringLiteral("invalid request"));
         return 1;
     }
-    respond(sendToApplication(data), QStringLiteral("forwarded to GenyDL if accepted"));
+    const bool accepted = sendToApplication(data, type == QStringLiteral("download.prompt"));
+    respond(accepted, accepted ? QStringLiteral("user accepted GenyDL download")
+                              : QStringLiteral("not accepted; keep browser download"));
     return 0;
 }

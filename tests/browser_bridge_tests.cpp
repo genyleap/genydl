@@ -3,6 +3,7 @@
 #include <QJsonObject>
 #include <QCoreApplication>
 #include <QProcess>
+#include <QTimer>
 #include <QFileInfo>
 #include <QLocalSocket>
 #include <QUrl>
@@ -112,6 +113,124 @@ private slots:
         QCOMPARE(received, QStringLiteral("https://example.org/from-native.dmg"));
         QCOMPARE(receivedFilename, QStringLiteral("final.dmg"));
     }
+    void nativePromptRequiresApproval() {
+        int automaticAdds = 0;
+        bool prompted = false;
+        BrowserActivation activation([&](const QUrl&, const QString&) {
+            ++automaticAdds;
+            return true;
+        });
+        QVERIFY(activation.start({}));
+        connect(&activation, &BrowserActivation::promptRequested,
+                &activation, [&](const QString& url, const QString& filename) {
+            prompted = true;
+            QCOMPARE(url, QStringLiteral("https://example.org/archive"));
+            QCOMPARE(filename, QStringLiteral("example.zip"));
+            QCOMPARE(automaticAdds, 0);
+            QTimer::singleShot(50, &activation,
+                               [&] { activation.finishPrompt(true); });
+        });
+
+        QLocalSocket socket;
+        socket.connectToServer(BrowserActivation::socketName());
+        QVERIFY(socket.waitForConnected(1500));
+        const QByteArray message = QJsonDocument(QJsonObject{
+            {QStringLiteral("type"), QStringLiteral("download.prompt")},
+            {QStringLiteral("url"), QStringLiteral("https://example.org/archive")},
+            {QStringLiteral("filename"), QStringLiteral("/tmp/example.zip")}
+        }).toJson(QJsonDocument::Compact) + '\n';
+        socket.write(message);
+        QVERIFY(socket.waitForBytesWritten(1500));
+        QTRY_VERIFY_WITH_TIMEOUT(prompted, 1000);
+        QCOMPARE(automaticAdds, 0);
+        QTRY_VERIFY_WITH_TIMEOUT(socket.bytesAvailable() > 0, 3000);
+        const auto response = QJsonDocument::fromJson(socket.readAll().trimmed()).object();
+        QVERIFY(response.value(QStringLiteral("ok")).toBool());
+        QCOMPARE(automaticAdds, 0);
+    }
+    void nativePromptDeclineDoesNotAdd() {
+        int automaticAdds = 0;
+        BrowserActivation activation([&](const QUrl&, const QString&) {
+            ++automaticAdds;
+            return true;
+        });
+        QVERIFY(activation.start({}));
+        connect(&activation, &BrowserActivation::promptRequested,
+                &activation, [&] (const QString&, const QString&) {
+            QTimer::singleShot(0, &activation,
+                               [&] { activation.finishPrompt(false); });
+        });
+        QLocalSocket socket;
+        socket.connectToServer(BrowserActivation::socketName());
+        QVERIFY(socket.waitForConnected(1500));
+        const QByteArray message = QJsonDocument(QJsonObject{
+            {QStringLiteral("type"), QStringLiteral("download.prompt")},
+            {QStringLiteral("url"), QStringLiteral("https://example.org/archive")}
+        }).toJson(QJsonDocument::Compact) + '\n';
+        socket.write(message);
+        QVERIFY(socket.waitForBytesWritten(1500));
+        QTRY_VERIFY_WITH_TIMEOUT(socket.bytesAvailable() > 0, 3000);
+        const auto response = QJsonDocument::fromJson(socket.readAll().trimmed()).object();
+        QVERIFY(!response.value(QStringLiteral("ok")).toBool());
+        QCOMPARE(automaticAdds, 0);
+    }
+    void nativeHostPromptEndToEnd() {
+        int autoAdds = 0;
+        bool prompted = false;
+        BrowserActivation activation([&](const QUrl&, const QString&) {
+            ++autoAdds;
+            return true;
+        });
+        QVERIFY(activation.start({}));
+        connect(&activation, &BrowserActivation::promptRequested,
+                &activation, [&](const QString& url, const QString& filename) {
+            prompted = true;
+            QCOMPARE(url, QStringLiteral("https://example.org/final-file"));
+            QCOMPARE(filename, QStringLiteral("suggested.zip"));
+        });
+
+        const QString host = QCoreApplication::applicationDirPath()
+            + QStringLiteral("/bin/GenyDLNativeHost");
+        QVERIFY2(QFileInfo::exists(host), qPrintable(host));
+        QProcess process;
+        process.start(host);
+        QVERIFY(process.waitForStarted(3000));
+
+        const QByteArray payload = QJsonDocument(QJsonObject{
+            {QStringLiteral("type"), QStringLiteral("download.prompt")},
+            {QStringLiteral("url"), QStringLiteral("https://example.org/final-file")},
+            {QStringLiteral("filename"), QStringLiteral("suggested.zip")}
+        }).toJson(QJsonDocument::Compact);
+        const quint32 size = static_cast<quint32>(payload.size());
+        QByteArray framed;
+        framed.append(static_cast<char>(size & 255));
+        framed.append(static_cast<char>((size >> 8) & 255));
+        framed.append(static_cast<char>((size >> 16) & 255));
+        framed.append(static_cast<char>((size >> 24) & 255));
+        framed += payload;
+        QCOMPARE(process.write(framed), framed.size());
+        process.closeWriteChannel();
+
+        QTRY_VERIFY_WITH_TIMEOUT(prompted, 3000);
+        QCOMPARE(autoAdds, 0);
+        QCOMPARE(process.state(), QProcess::Running);
+        QCOMPARE(process.bytesAvailable(), qint64(0));
+        // Only a simulated GUI Add may complete the native host request.
+        activation.finishPrompt(true);
+        QTRY_VERIFY_WITH_TIMEOUT(process.state() == QProcess::NotRunning, 3000);
+        const QByteArray output = process.readAllStandardOutput();
+        QVERIFY(output.size() >= 4);
+        const quint32 length =
+            static_cast<quint8>(output[0])
+            | (static_cast<quint32>(static_cast<quint8>(output[1])) << 8)
+            | (static_cast<quint32>(static_cast<quint8>(output[2])) << 16)
+            | (static_cast<quint32>(static_cast<quint8>(output[3])) << 24);
+        QCOMPARE(static_cast<quint32>(output.size() - 4), length);
+        QVERIFY(QJsonDocument::fromJson(output.mid(4)).object()
+                .value(QStringLiteral("ok")).toBool());
+        QCOMPARE(autoAdds, 0);
+    }
+
     void nativeHandoffAndAck() {
         QString received;
         BrowserActivation activation([&](const QUrl& url, const QString&) {
