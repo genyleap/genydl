@@ -1,0 +1,3 @@
+WriteRegStr HKCU "Software\Classes\genydl" "" "URL:GenyDL Download Protocol"
+WriteRegStr HKCU "Software\Classes\genydl" "URL Protocol" ""
+WriteRegStr HKCU "Software\Classes\genydl\shell\open\command" "" "$\"$INSTDIR\@GENYDL_FINAL_OUTPUT_NAME@.exe$\" $\"%1$\""

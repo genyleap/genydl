@@ -30,9 +30,7 @@ module;
 #include <QString>
 #include <QStringList>
 
-#ifndef Q_MOC_RUN
 export module genydl.utils.ipfs_resolver;
-#endif
 
 #ifdef Q_MOC_RUN
 #define GENYDL_MODULE_EXPORT

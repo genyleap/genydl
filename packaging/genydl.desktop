@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=GenyDL
+Comment=Fast cross-platform download manager
+Exec=GenyDL %u
+Icon=genydl
+Terminal=false
+Categories=Network;Utility;
+MimeType=x-scheme-handler/genydl;
+StartupNotify=true

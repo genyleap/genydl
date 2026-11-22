@@ -40,6 +40,7 @@ module;
 
 #ifndef Q_MOC_RUN
 #  include <QtCore/qtmochelpers.h>
+#endif
 export module genydl.core.downloadmanager;
 import genydl.core.downloadertask;
 import genydl.core.downloadmodel;
@@ -47,7 +48,6 @@ import genydl.core.torrenttask;
 import genydl.services.power_monitor;
 import genydl.services.torrent_session;
 import genydl.services.gateway_service;
-#endif
 
 #ifdef Q_MOC_RUN
 #define GENYDL_MODULE_EXPORT
@@ -1130,6 +1130,7 @@ private:
      * @param options Optional extras map.
      * @return Created task instance or null.
      */
+    QString availableDownloadPath(const QString& desiredPath) const;
     DownloaderTask* addDownloadInternal(const QString &urlStr, const QString &filePath, const QString &queueName, const QString &category, bool startPaused, const QVariantMap* options);
 
     /**

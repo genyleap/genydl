@@ -579,7 +579,63 @@ qt_add_executable(${APP_NAME}
     WIN32
     MACOSX_BUNDLE
     src/core/main.cpp
+    src/core/browser_activation.h
+    src/core/browser_activation.cpp
+    src/core/browser_host_registration.h
+    src/core/browser_host_registration.cpp
 )
+
+set(GENYDL_CHROMIUM_EXTENSION_ID "" CACHE STRING
+    "32-character published Chrome/Edge extension ID for native messaging")
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/core/browser_config.h.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/browser_config.h"
+    @ONLY)
+target_include_directories(${APP_NAME} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+
+qt_add_executable(GenyDLNativeHost
+    src/core/native_messaging_host.cpp
+)
+target_link_libraries(GenyDLNativeHost PRIVATE Qt6::Core Qt6::Network)
+set_target_properties(GenyDLNativeHost PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+)
+add_dependencies(${APP_NAME} GenyDLNativeHost)
+
+if(APPLE)
+    add_custom_command(TARGET ${APP_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE:GenyDLNativeHost>"
+            "$<TARGET_BUNDLE_DIR:${APP_NAME}>/Contents/MacOS/GenyDLNativeHost"
+        COMMENT "Bundle browser native-messaging host" VERBATIM)
+else()
+    add_custom_command(TARGET ${APP_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE:GenyDLNativeHost>"
+            "$<TARGET_FILE_DIR:${APP_NAME}>/$<TARGET_FILE_NAME:GenyDLNativeHost>"
+        COMMENT "Install browser native-messaging host beside GenyDL" VERBATIM)
+endif()
+
+add_custom_target(browser-extension-zip
+    COMMAND ${CMAKE_COMMAND} -E tar cf
+        "${CMAKE_BINARY_DIR}/GenyDL-browser-extension.zip" --format=zip
+        "manifest.json" "background.js" "options.html" "options.js" "icon128.png"
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/browser-extension"
+    COMMENT "Package GenyDL WebExtension for browser store submission"
+    VERBATIM)
+
+
+if(WIN32)
+    target_link_libraries(${APP_NAME} PRIVATE advapi32)
+endif()
+
+if(APPLE)
+    enable_language(OBJCXX)
+    target_sources(${APP_NAME} PRIVATE
+        src/core/macos_browser_integration.h
+        src/core/macos_browser_integration.mm)
+    target_link_libraries(${APP_NAME} PRIVATE "-framework AppKit")
+endif()
 
 set_target_properties(${APP_NAME} PROPERTIES OUTPUT_NAME "${GENYDL_FINAL_OUTPUT_NAME}")
 
@@ -957,6 +1013,18 @@ if(GENYDL_BUILD_TESTS)
     )
 
     add_test(NAME genydl_backend_tests COMMAND genydl_backend_tests)
+
+    # Lightweight transport and URL validation tests (no QML/modules needed).
+    qt_add_executable(genydl_browser_bridge_tests
+        tests/browser_bridge_tests.cpp
+        src/core/browser_activation.h
+        src/core/browser_activation.cpp
+    )
+    target_include_directories(genydl_browser_bridge_tests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/core")
+    target_link_libraries(genydl_browser_bridge_tests PRIVATE
+        Qt6::Core Qt6::Gui Qt6::Network Qt6::Test)
+    add_test(NAME genydl_browser_bridge_tests COMMAND genydl_browser_bridge_tests)
 endif()
 
 # -----------------------------------------------------------------------------
@@ -1158,6 +1226,12 @@ install(TARGETS ${APP_NAME}
     LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
 )
 
+if(NOT APPLE)
+    install(TARGETS GenyDLNativeHost
+        CONFIGURATIONS Release RelWithDebInfo
+        RUNTIME DESTINATION "${GENYDL_RUNTIME_DEST}")
+endif()
+
 if(APPLE)
     install(TARGETS GenyDLUpdaterHelper
         CONFIGURATIONS Release RelWithDebInfo
@@ -1171,6 +1245,8 @@ else()
 endif()
 
 if(UNIX AND NOT APPLE)
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/packaging/genydl.desktop"
+        DESTINATION "share/applications")
     if(EXISTS "${GENYDL_LINUX_ICON_PNG}")
         install(FILES "${GENYDL_LINUX_ICON_PNG}"
             DESTINATION "share/icons/hicolor/512x512/apps"
@@ -1366,6 +1442,25 @@ elseif(APPLE)
 
 else()
     set(CPACK_GENERATOR "TGZ")
+endif()
+
+if(WIN32)
+    # Keep URL protocol integration separate from the installer command
+    # string to avoid CMake/NSIS double-escaping.
+    configure_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/properties/Windows/browser-protocol-install.nsh.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/browser-protocol-install.nsh" @ONLY)
+    configure_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/properties/Windows/browser-protocol-uninstall.nsh.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/browser-protocol-uninstall.nsh" @ONLY)
+    file(READ "${CMAKE_CURRENT_BINARY_DIR}/browser-protocol-install.nsh"
+        GENYDL_BROWSER_PROTOCOL_INSTALL_NSIS)
+    file(READ "${CMAKE_CURRENT_BINARY_DIR}/browser-protocol-uninstall.nsh"
+        GENYDL_BROWSER_PROTOCOL_UNINSTALL_NSIS)
+    string(APPEND CPACK_NSIS_EXTRA_INSTALL_COMMANDS
+        "\n${GENYDL_BROWSER_PROTOCOL_INSTALL_NSIS}")
+    string(APPEND CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS
+        "\n${GENYDL_BROWSER_PROTOCOL_UNINSTALL_NSIS}")
 endif()
 
 include(CPack)

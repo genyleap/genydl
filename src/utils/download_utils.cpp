@@ -235,28 +235,43 @@ QString extractChecksumFromText(const QString& text, const QString& fileName, co
     return extractChecksumCandidate(text, preferredLength);
 }
 
-QString uniqueFilePath(const QString& path)
+QString uniqueFilePath(const QString& path, const QStringList& reservedPaths)
 {
     const QString normalized = normalizeFilePath(path);
     if (normalized.isEmpty()) return normalized;
-    QFileInfo info(normalized);
-    const QString dirPath = info.absolutePath();
-    const QString base = info.completeBaseName();
-    const QString suffix = info.completeSuffix();
-    const auto existsCandidate = [](const QString& candidate) {
-        return QFile::exists(candidate) || QFile::exists(candidate + ".part");
+    const QFileInfo file(normalized);
+    const QString fileName = file.fileName();
+    const auto extensionStart = fileName.indexOf(u'.', 1);
+    const QString base = extensionStart < 0 ? fileName : fileName.left(extensionStart);
+    const QString extension = extensionStart < 0 ? QString() : fileName.mid(extensionStart);
+
+#if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
+    constexpr Qt::CaseSensitivity sensitivity = Qt::CaseInsensitive;
+#else
+    constexpr Qt::CaseSensitivity sensitivity = Qt::CaseSensitive;
+#endif
+    const auto existsCandidate = [&](const QString& candidate) {
+        const QFileInfo candidateInfo(candidate);
+        if (reservedPaths.contains(candidateInfo.absoluteFilePath(), sensitivity)
+            || candidateInfo.exists() || candidateInfo.isSymLink()
+            || QFileInfo::exists(candidate + QStringLiteral(".part")))
+            return true;
+        // A suspended multi-segment transfer may have only .partN files.
+        for (int i = 0; i < 32; ++i) {
+            if (QFileInfo::exists(candidate + QStringLiteral(".part") + QString::number(i)))
+                return true;
+        }
+        return false;
     };
     if (!existsCandidate(normalized)) return normalized;
 
-    QDir dir(dirPath);
+    QDir dir(file.absolutePath());
     for (int i = 1; i < 10000; ++i) {
-        const QString name = suffix.isEmpty()
-            ? QString("%1 (%2)").arg(base).arg(i)
-            : QString("%1 (%2).%3").arg(base).arg(i).arg(suffix);
-        const QString candidate = dir.filePath(name);
+        const QString candidate = dir.filePath(base + QStringLiteral(" (%1)").arg(i) + extension);
         if (!existsCandidate(candidate)) return candidate;
     }
-    return normalized;
+    // Never return an existing filename when all available slots are occupied.
+    return {};
 }
 
 bool fileExistsPath(const QString& path)

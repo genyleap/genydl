@@ -15,9 +15,7 @@
 module;
 #include <QIcon>
 
-#ifndef Q_MOC_RUN
 export module genydl.ui.tray_icon_provider;
-#endif
 
 #ifdef Q_MOC_RUN
 #define GENYDL_MODULE_EXPORT

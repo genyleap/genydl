@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>GenyDL Browser Integration</title>
+<style>
+:root{color-scheme:light dark;font-family:system-ui,-apple-system,sans-serif}
+body{max-width:540px;padding:24px;margin:auto;font-size:14px;line-height:1.5}
+label{display:block;margin:18px 0 6px;font-weight:600}
+select,textarea{width:100%;box-sizing:border-box;padding:9px;border-radius:7px}
+textarea{min-height:110px} .muted{color:gray;font-size:12px}
+#message{min-height:20px;margin-top:12px} h1{font-size:22px}
+</style></head>
+<body><h1>GenyDL browser integration</h1>
+<p>Downloads are cancelled in the browser only after GenyDL confirms that it queued them.</p>
+<label for="mode">Capture mode</label>
+<select id="mode">
+<option value="smart">Smart — recognized direct file downloads (recommended)</option>
+<option value="all">Automatic — all HTTP(S) browser downloads</option>
+<option value="manual">Manual — right-click only</option>
+<option value="off">Off — do not capture</option>
+</select>
+<label for="excluded">Excluded websites (one hostname per line)</label>
+<textarea id="excluded" placeholder="example.com"></textarea>
+<p class="muted">Authenticated or POST downloads may not work when transferred to a separate downloader. Use Smart mode unless you trust the source. Browser permissions and native-host registration must also be enabled.</p>
+<div id="message" role="status" aria-live="polite"></div>
+<script src="options.js"></script></body></html>

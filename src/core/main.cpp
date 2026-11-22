@@ -11,6 +11,13 @@
 #include <QFile>
 #include <QIcon>
 #include <QUrl>
+#include <QFileInfo>
+#include <QSet>
+#include "browser_activation.h"
+#include "browser_host_registration.h"
+#ifdef Q_OS_MACOS
+#include "macos_browser_integration.h"
+#endif
 
 import genydl.core.downloadmanager;
 import genydl.core.appcontroller;
@@ -162,6 +169,43 @@ auto main(int argc, char *argv[]) -> int
     if (!downloadsRoot.isEmpty()) {
         QDir().mkpath(downloadsRoot);
     }
+
+    // Accept downloads from a browser without stealing focus from the user.
+    // Only the first instance owns the user-scoped local socket; secondary
+    // activations hand over their URL and exit.
+    QSet<QString> reservedBrowserPaths;
+    BrowserActivation browserActivation([&](const QUrl& url) -> bool {
+        if (!BrowserActivation::isSafeHttpUrl(url) || downloadsRoot.isEmpty())
+            return false;
+        const QString destination = manager.resolveDownloadPath(
+            url.toString(QUrl::FullyEncoded), QString(), downloadsRoot);
+        if (destination.isEmpty()) return false;
+        QFileInfo file(destination);
+        const QString suffix = file.completeSuffix();
+        const QString base = suffix.isEmpty() ? file.fileName()
+            : file.fileName().left(file.fileName().size() - suffix.size() - 1);
+        const QString ext = suffix.isEmpty() ? QString() : QStringLiteral(".") + suffix;
+        QString uniquePath = destination;
+        int collision = 1;
+        while (reservedBrowserPaths.contains(uniquePath)
+               || QFileInfo::exists(uniquePath)
+               || QFileInfo::exists(uniquePath + QStringLiteral(".part"))
+               || QFileInfo::exists(uniquePath + QStringLiteral(".part0"))) {
+            uniquePath = file.dir().filePath(
+                base + QStringLiteral(" (%1)").arg(collision++) + ext);
+            if (collision > 10000) return false;
+        }
+        if (!QDir().mkpath(QFileInfo(uniquePath).absolutePath())) return false;
+        reservedBrowserPaths.insert(uniquePath);
+        const int before = manager.taskCount();
+        manager.addDownload(url.toString(QUrl::FullyEncoded), uniquePath);
+        const bool accepted = manager.taskCount() > before;
+        if (!accepted) reservedBrowserPaths.remove(uniquePath);
+        return accepted;
+    });
+    if (!browserActivation.start(app.arguments().mid(1)))
+        return 0;
+
     engine.rootContext()->setContextProperty("documentsFolder", downloadsRoot);
     engine.rootContext()->setContextProperty("faFontPath", fontPath);
 
@@ -190,6 +234,10 @@ auto main(int argc, char *argv[]) -> int
         return -1;
 
     appController.setMainWindow(engine.rootObjects().first());
+    registerBrowserNativeHosts();
+#ifdef Q_OS_MACOS
+    registerMacBrowserService(&browserActivation);
+#endif
 
     return app.exec();
 }

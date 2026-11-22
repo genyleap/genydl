@@ -30,6 +30,32 @@
     <string>public.app-category.productivity</string>
     <key>LSMinimumSystemVersion</key>
     <string>@GENYDL_MACOS_DEPLOYMENT_TARGET@</string>
+    <key>CFBundleURLTypes</key>
+    <array>
+      <dict>
+        <key>CFBundleURLName</key>
+        <string>com.genyleap.genydl.download</string>
+        <key>CFBundleURLSchemes</key>
+        <array><string>genydl</string></array>
+      </dict>
+    </array>
+    <key>NSServices</key>
+    <array>
+        <dict>
+            <key>NSMenuItem</key>
+            <dict><key>default</key><string>Download with GenyDL</string></dict>
+            <key>NSMessage</key>
+            <string>downloadLink</string>
+            <key>NSPortName</key>
+            <string>@APP_NAME@</string>
+            <key>NSSendTypes</key>
+            <array>
+                <string>public.url</string>
+                <string>public.utf8-plain-text</string>
+            </array>
+            <key>NSRequiredContext</key><dict/>
+        </dict>
+    </array>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSHumanReadableCopyright</key>

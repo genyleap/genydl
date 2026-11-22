@@ -24,9 +24,9 @@ module;
 
 #ifndef Q_MOC_RUN
 #  include <QtCore/qtmochelpers.h>
+#endif
 export module genydl.core.torrenttask;
 import genydl.services.torrent_session;
-#endif
 
 #ifdef Q_MOC_RUN
 #define GENYDL_MODULE_EXPORT

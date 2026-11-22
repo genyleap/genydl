@@ -1,6 +1,9 @@
 # Packaging Notes
 
-Browser integration will be reintroduced later.
+Experimental browser integration lives in `browser-extension/` and the native
+messaging bridge. See `docs/browser-integration.md` for supported browsers,
+release packaging requirements, and manual test instructions. Safari automatic
+interception is not yet available.
 
 ## Update Manifest
 

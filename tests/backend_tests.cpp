@@ -1,4 +1,6 @@
 #include <QtTest/QtTest>
+#include <QFile>
+#include <QTemporaryDir>
 
 import genydl.utils.version_utils;
 import genydl.utils.download_utils;
@@ -26,6 +28,7 @@ private slots:
     void extractChecksumFromText();
     void normalizeHost();
     void detectCategory();
+    void uniqueDownloadPaths();
     void parseGitHubReleaseTagUrl();
     void parseGitHubReleaseLatestUrl();
     void rejectNonGitHubReleaseUrl();
@@ -68,6 +71,21 @@ void BackendTests::compareVersions()
     QFETCH(QString, rhs);
     QFETCH(int, expected);
     QCOMPARE(utils::compareVersions(lhs, rhs), expected);
+}
+
+void BackendTests::uniqueDownloadPaths()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString desired = temp.filePath(QStringLiteral("archive.tar.gz"));
+    QCOMPARE(utils::uniqueFilePath(desired), desired);
+    QCOMPARE(utils::uniqueFilePath(desired, {desired}),
+             temp.filePath(QStringLiteral("archive (1).tar.gz")));
+    QFile segment(desired + QStringLiteral(".part0"));
+    QVERIFY(segment.open(QIODevice::WriteOnly));
+    segment.close();
+    QCOMPARE(utils::uniqueFilePath(desired),
+             temp.filePath(QStringLiteral("archive (1).tar.gz")));
 }
 
 void BackendTests::detectChecksumAlgo()

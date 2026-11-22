@@ -37,8 +37,8 @@ module;
 
 #ifndef Q_MOC_RUN
 #  include <QtCore/qtmochelpers.h>
-export module genydl.core.downloadertask;
 #endif
+export module genydl.core.downloadertask;
 
 #ifdef Q_MOC_RUN
 #define GENYDL_MODULE_EXPORT
