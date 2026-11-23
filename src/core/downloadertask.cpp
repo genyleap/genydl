@@ -1767,6 +1767,19 @@ void DownloaderTask::onSegmentFinished()
     if (m_state != State::Downloading)
         return;
 
+    // Keep the adaptive splitter active when no reconnection is pending.
+    // Splitting during a backoff period would increase pressure on a
+    // temporarily overloaded server.
+    bool reconnectPending = false;
+    for (const Segment& s : m_segmentsInfo) {
+        if (s.retryPending) {
+            reconnectPending = true;
+            break;
+        }
+    }
+    if (!m_anyError && !reconnectPending)
+        rebalanceSegments();
+
     // Only finalize after every request/reconnect has settled. Returning
     // forever on an incomplete, inactive segment strands the entire download.
     for (const Segment& s : m_segmentsInfo) {
