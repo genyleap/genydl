@@ -686,6 +686,9 @@ void DownloaderTask::start()
     if (m_state != State::Idle)
         return;
 
+    // Cancel retry callbacks from any earlier transfer generation.
+    ++m_transferGeneration;
+
     if (!m_pauseReason.isEmpty()) {
         m_pauseReason.clear();
         emit pauseReasonChanged();
@@ -710,6 +713,8 @@ void DownloaderTask::start()
     }
 
     const bool hasExistingFile = QFile::exists(m_filePath) && QFileInfo(m_filePath).size() > 0;
+    const bool hasSinglePartial = QFile::exists(m_singleTempPath)
+                               && QFileInfo(m_singleTempPath).size() > 0;
     bool hasPartialSegments = false;
     if (m_segments > 1) {
         for (int i = 0; i < m_segments; ++i) {
@@ -797,7 +802,7 @@ void DownloaderTask::start()
             m_totalSize = 0;
             m_useRange = true;
             m_effectiveSegments = 1;
-            startSingleStream(hasExistingFile);
+            startSingleStream(hasExistingFile || hasSinglePartial);
             return;
         }
         const QByteArray etag = headReply->rawHeader("ETag");
@@ -857,7 +862,7 @@ void DownloaderTask::start()
 
         if (!m_useRange || m_segments == 1) {
             m_effectiveSegments = 1;
-            startSingleStream(hasExistingFile);
+            startSingleStream(hasExistingFile || hasSinglePartial);
             return;
         }
 
@@ -867,7 +872,7 @@ void DownloaderTask::start()
         }
         if (segCount <= 1) {
             m_effectiveSegments = 1;
-            startSingleStream(hasExistingFile);
+            startSingleStream(hasExistingFile || hasSinglePartial);
             return;
         }
         m_effectiveSegments = segCount;
@@ -1021,17 +1026,29 @@ void DownloaderTask::startSingleStream(bool resume)
             m_serverSupportsRange = true;
             if (m_resumeSingle && existingSize > 0) {
                 const qint64 start = parseContentRangeStart(replyPtr->rawHeader("Content-Range"));
-                if (start >= 0 && start != existingSize) {
+                if (start != existingSize) {
+                    // Never append data from the wrong offset. Abort this reply
+                    // and issue a new GET from byte zero instead.
+                    QPointer<QNetworkReply> invalidReply = m_singleReply;
+                    m_singleReply = nullptr;
+                    if (invalidReply) {
+                        QObject::disconnect(invalidReply, nullptr, this, nullptr);
+                        invalidReply->abort();
+                        if (invalidReply) invalidReply->deleteLater();
+                    }
                     if (m_singleFile) {
                         m_singleFile->close();
-                        if (!m_singleFile->open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-                            qWarning() << "Cannot reopen output file for resume reset" << m_singleTempPath;
-                        }
+                        m_singleFile->deleteLater();
+                        m_singleFile = nullptr;
                     }
                     m_resumeSingle = false;
                     m_singleWritten = 0;
                     setResumeWarning(QStringLiteral("Resume mismatch; restarted"));
                     appendLog(QStringLiteral("Resume mismatch (Content-Range start mismatch); restarted"));
+                    QTimer::singleShot(0, this, [this] {
+                        if (m_state == State::Downloading) startSingleStream(false);
+                    });
+                    return;
                 }
             }
         } else if (status == 200) {
@@ -1175,27 +1192,46 @@ void DownloaderTask::startSingleStream(bool resume)
         if (m_state == State::Paused || m_state == State::Canceled)
             return;
 
-        if (m_useSingleTemp && !m_singleTempPath.isEmpty() && m_singleTempPath != m_filePath) {
-            if (QFile::exists(m_filePath)) {
-                QFile::remove(m_filePath);
-            }
-            if (!QFile::rename(m_singleTempPath, m_filePath)) {
-                m_anyError = true;
-            }
+        const int httpStatus = replyPtr->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        if (httpStatus >= 400) {
+            m_anyError = true;
+            recordError(QStringLiteral("network"),
+                        QStringLiteral("http_status"),
+                        QStringLiteral("HTTP status %1").arg(httpStatus),
+                        httpStatus);
         }
 
+        // A failed request must leave its .part file intact for Range resume.
+        // Validate the temporary file before publishing it as the final output.
         if (!m_anyError && m_totalSize > 0) {
-            const QFileInfo info(m_filePath);
-            if (info.exists() && info.size() != m_totalSize) {
+            const QFileInfo info(m_singleTempPath);
+            if (!info.exists() || info.size() != m_totalSize) {
                 m_anyError = true;
-                recordError(QStringLiteral("disk"),
+                recordError(QStringLiteral("network"),
                             QStringLiteral("final_size_mismatch"),
-                            QStringLiteral("Final file size mismatch (%1 != %2)")
-                                .arg(info.size())
+                            QStringLiteral("Incomplete download (%1 != %2)")
+                                .arg(info.exists() ? info.size() : 0)
                                 .arg(m_totalSize));
             }
         }
 
+        if (!m_anyError && m_useSingleTemp && !m_singleTempPath.isEmpty()
+                && m_singleTempPath != m_filePath) {
+            if (QFile::exists(m_filePath) && !QFile::remove(m_filePath)) {
+                m_anyError = true;
+                recordError(QStringLiteral("disk"),
+                            QStringLiteral("replace_failed"),
+                            QStringLiteral("Cannot replace existing output file"));
+            }
+            if (!m_anyError && !QFile::rename(m_singleTempPath, m_filePath)) {
+                m_anyError = true;
+                recordError(QStringLiteral("disk"),
+                            QStringLiteral("rename_failed"),
+                            QStringLiteral("Cannot finalize downloaded file"));
+            }
+        }
+
+        if (!m_anyError) clearErrorState();
         m_state = State::Finished;
         emit stateChanged();
         emit finished(!m_anyError);
@@ -1266,6 +1302,8 @@ void DownloaderTask::startSegment(Segment* segment)
     if (m_state != State::Downloading)
         return;
 
+    segment->retryPending = false;
+
     // open file for append if not opened
     if (!segment->file) {
         segment->file = new QFile(segment->tempFilePath);
@@ -1328,10 +1366,11 @@ void DownloaderTask::startSegment(Segment* segment)
         }
         if (status == 0) return; // not available yet
         if (status == 206) {
-            if (segment->downloaded > 0) {
+            // Check the Content-Range even for the very first request.
+            {
                 const qint64 expectedStart = segment->start + segment->downloaded;
                 const qint64 actualStart = parseContentRangeStart(replyPtr->rawHeader("Content-Range"));
-                if (actualStart >= 0 && actualStart != expectedStart) {
+                if (actualStart != expectedStart) {
                     qWarning() << "Content-Range mismatch, fallback to single stream";
                     m_useRange = false;
                     m_serverSupportsRange = false;
@@ -1413,8 +1452,13 @@ void DownloaderTask::startSegment(Segment* segment)
 #endif
 
     connect(reply, &QNetworkReply::readyRead, this, [this, segment, replyPtr]() mutable {
-        if (!replyPtr || replyPtr != segment->reply) return;
+        if (!replyPtr || replyPtr != segment->reply || m_state != State::Downloading) return;
         if (!replyPtr->isOpen() || replyPtr->bytesAvailable() <= 0) return;
+        const int status = replyPtr->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        if (status >= 400) {
+            replyPtr->readAll(); // Never write an HTTP error body into the part file.
+            return;
+        }
         QByteArray data = replyPtr->readAll();
         sampleNetworkRead(data.size());
         // append to segment buffer
@@ -1430,14 +1474,11 @@ void DownloaderTask::startSegment(Segment* segment)
             replyPtr->deleteLater();
             return;
         }
-        if (m_state == State::Downloading && segment->reply && segment->reply->error() != QNetworkReply::NoError) {
-            m_anyError = true;
-            recordError(QStringLiteral("network"),
-                        QStringLiteral("download_failed"),
-                        segment->reply->errorString(),
-                        segment->reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(),
-                        static_cast<int>(segment->reply->error()));
-        }
+        // Wait until buffered data is committed before deciding whether to
+        // reconnect. A closed socket must not poison an otherwise resumable task.
+        const auto replyError = replyPtr->error();
+        const int httpStatus = replyPtr->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const QString replyErrorText = replyPtr->errorString();
         // ensure buffer fully processed later
         if (!segment->processing && segment->buffer.size() > 0) processSegmentBuffer(segment);
 
@@ -1473,9 +1514,77 @@ void DownloaderTask::startSegment(Segment* segment)
             segment->reply = nullptr;
         }
 
-        if (m_state == State::Paused || m_state == State::Canceled)
+        if (m_state != State::Downloading)
             return;
 
+        const qint64 segmentSize = segment->end - segment->start + 1;
+        const bool complete = segment->downloaded == segmentSize;
+        const bool httpFailure = httpStatus >= 400;
+        if (complete && !httpFailure) {
+            // A socket can report a close after the entire validated byte
+            // range has arrived; the complete on-disk range is authoritative.
+            segment->retryCount = 0;
+            onSegmentFinished();
+            return;
+        }
+
+        const bool transientHttp = httpStatus == 408 || httpStatus == 429
+                                || httpStatus == 500 || httpStatus == 502
+                                || httpStatus == 503 || httpStatus == 504;
+        const bool transientNetwork = replyError == QNetworkReply::NoError
+                                   || replyError == QNetworkReply::RemoteHostClosedError
+                                   || replyError == QNetworkReply::TimeoutError
+                                   || replyError == QNetworkReply::TemporaryNetworkFailureError
+                                   || replyError == QNetworkReply::NetworkSessionFailedError
+                                   || replyError == QNetworkReply::ProxyTimeoutError
+                                   || replyError == QNetworkReply::ConnectionRefusedError
+                                   || replyError == QNetworkReply::UnknownNetworkError;
+        const bool retryable = (httpStatus == 0 || httpStatus == 200 || httpStatus == 206)
+                                   ? transientNetwork : transientHttp;
+        const int retryLimit = m_retryMax >= 0 ? qBound(0, m_retryMax, 8) : 5;
+
+        if (!m_anyError && segment->downloaded < segmentSize
+                && retryable && segment->retryCount < retryLimit) {
+            ++segment->retryCount;
+            segment->retryPending = true;
+            const int segmentIndex = static_cast<int>(segment - m_segmentsInfo.data());
+            const quint64 generation = m_transferGeneration;
+            const int delayMs = m_retryDelaySec >= 0
+                ? qBound(0, m_retryDelaySec, 30) * 1000
+                : qMin(8000, 600 * (1 << qMin(segment->retryCount - 1, 4)))
+                      + (segmentIndex % 4) * 250;
+            appendLog(QStringLiteral("Reconnecting segment %1 (%2/%3) in %4 ms")
+                          .arg(segmentIndex).arg(segment->retryCount).arg(retryLimit).arg(delayMs));
+            QTimer::singleShot(delayMs, this, [this, generation, segmentIndex]() {
+                if (m_transferGeneration != generation || m_state != State::Downloading)
+                    return;
+                if (segmentIndex < 0 || segmentIndex >= m_segmentsInfo.size())
+                    return;
+                Segment& pending = m_segmentsInfo[segmentIndex];
+                if (!pending.retryPending)
+                    return;
+                pending.retryPending = false;
+                if (m_anyError || pending.downloaded >= pending.end - pending.start + 1) {
+                    onSegmentFinished();
+                    return;
+                }
+                startSegment(&pending);
+            });
+            return;
+        }
+
+        if (!m_anyError) {
+            recordError(QStringLiteral("network"),
+                        httpFailure ? QStringLiteral("http_status") : QStringLiteral("segment_incomplete"),
+                        httpFailure
+                            ? QStringLiteral("HTTP status %1").arg(httpStatus)
+                            : QStringLiteral("Segment %1 incomplete (%2 of %3 bytes): %4")
+                                  .arg(segment->start).arg(segment->downloaded)
+                                  .arg(segmentSize).arg(replyErrorText),
+                        httpStatus,
+                        static_cast<int>(replyError));
+        }
+        m_anyError = true;
         onSegmentFinished();
     });
 }
@@ -1658,11 +1767,22 @@ void DownloaderTask::onSegmentFinished()
     if (m_state != State::Downloading)
         return;
 
-    rebalanceSegments();
-
+    // Only finalize after every request/reconnect has settled. Returning
+    // forever on an incomplete, inactive segment strands the entire download.
     for (const Segment& s : m_segmentsInfo) {
-        if (s.downloaded < (s.end - s.start + 1))
+        if (s.reply || s.retryPending)
             return;
+    }
+    if (!m_anyError) {
+        for (const Segment& s : m_segmentsInfo) {
+            if (s.downloaded != s.end - s.start + 1) {
+                m_anyError = true;
+                recordError(QStringLiteral("network"),
+                            QStringLiteral("segment_incomplete"),
+                            QStringLiteral("A segment ended before completing its byte range"));
+                break;
+            }
+        }
     }
 
     if (m_anyError) {
@@ -1688,6 +1808,7 @@ void DownloaderTask::onSegmentFinished()
         return;
     }
 
+    clearErrorState(); // Transient network errors were recovered.
     m_state = State::Finished;
     emit stateChanged();
     emit finished(true);
@@ -1757,6 +1878,8 @@ void DownloaderTask::pause()
 {
     if (m_state != State::Downloading)
         return;
+
+    ++m_transferGeneration;
 
     qDebug() << "Pause requested for" << m_filePath;
     appendLog(QStringLiteral("Paused"));
@@ -2261,7 +2384,9 @@ QString DownloaderTask::stateString() const
 
 void DownloaderTask::cleanup(bool emitFinished)
 {
+    ++m_transferGeneration;
     for (Segment& s : m_segmentsInfo) {
+        s.retryPending = false;
         if (s.reply) {
             QPointer<QNetworkReply> segReply = s.reply;
             s.reply = nullptr;
