@@ -37,8 +37,8 @@ module;
 
 #ifndef Q_MOC_RUN
 #  include <QtCore/qtmochelpers.h>
-#endif
 export module genydl.core.downloadertask;
+#endif
 
 #ifdef Q_MOC_RUN
 #define GENYDL_MODULE_EXPORT
@@ -800,6 +800,8 @@ private:
         QByteArray buffer;                  //!< Buffered incoming data.
         QFile* file = nullptr;              //!< Output file handle.
         bool processing = false;            //!< Buffer processing flag.
+        int retryCount = 0;                 //!< Consecutive attempts to reconnect this range.
+        bool retryPending = false;          //!< A retry timer is queued for this segment.
     };
 
 
@@ -818,6 +820,7 @@ private:
     bool m_useRange = true;                 //!< Whether range requests are enabled.
     bool m_anyError = false;                //!< Error flag.
     bool m_serverSupportsRange = true;      //!< Server range support flag.
+    quint64 m_transferGeneration = 0;       //!< Invalidates retry timers across pause/restart/fallback.
 
     QElapsedTimer m_speedTimer;             //!< Speed/ETA update timer.
     qint64 m_lastBytes = 0;                 //!< Bytes at last speed sample.
