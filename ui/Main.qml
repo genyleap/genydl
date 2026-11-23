@@ -396,6 +396,36 @@ ApplicationWindow {
     function promptRemoveRows() { return Utils.promptRemoveRows.apply(this, arguments) }
     function confirmRemovePending() { return Utils.confirmRemovePending.apply(this, arguments) }
     function executeRowAction() { return Utils.executeRowAction.apply(this, arguments) }
+    // ComboBox.currentValue is undefined while its dynamic model has no current
+    // selection. Never assign it directly to a typed QString QML property or
+    // pass it to a QString argument in the download manager.
+    function selectedAddQueue() {
+        const names = downloadManager.queueNames || []
+        const value = addDialogQueueCombo.currentValue
+        if (value !== undefined && value !== null) {
+            const selected = String(value)
+            if (names.indexOf(selected) >= 0)
+                return selected
+        }
+        if (names.indexOf(appRoot.addDefaultQueue) >= 0)
+            return appRoot.addDefaultQueue
+        const fallback = downloadManager.defaultQueueName()
+        if (names.indexOf(fallback) >= 0)
+            return String(fallback)
+        return names.length > 0 ? String(names[0]) : "General"
+    }
+    function selectedAddCategory() {
+        const names = downloadManager.categoryNames() || []
+        const value = addDialogCategoryCombo.currentValue
+        if (value !== undefined && value !== null) {
+            const selected = String(value)
+            if (names.indexOf(selected) >= 0)
+                return selected
+        }
+        if (names.indexOf(appRoot.addDefaultCategory) >= 0)
+            return appRoot.addDefaultCategory
+        return names.length > 0 ? String(names[0]) : "Auto"
+    }
     function submitDownload() { return Utils.submitDownload.apply(this, arguments) }
     function downloadPathForAsset() { return Utils.downloadPathForAsset.apply(this, arguments) }
     function submitGitHubReleaseAssets() { return Utils.submitGitHubReleaseAssets.apply(this, arguments) }
@@ -2444,8 +2474,8 @@ ApplicationWindow {
                 const added = appRoot.submitDownload(
                     addDialogUrlField.text,
                     output,
-                    addDialogQueueCombo.currentValue,
-                    addDialogCategoryCombo.currentValue,
+                    appRoot.selectedAddQueue(),
+                    appRoot.selectedAddCategory(),
                     addDialogPausedSwitch.checked,
                     addDialogSegmentsSpin.value,
                     addDialogAdaptiveSwitch.checked)
@@ -2454,8 +2484,8 @@ ApplicationWindow {
                     return
                 }
                 appRoot.addDefaultOutputPath = addDialogPathField.text.trim()
-                appRoot.addDefaultQueue = addDialogQueueCombo.currentValue
-                appRoot.addDefaultCategory = addDialogCategoryCombo.currentValue
+                appRoot.addDefaultQueue = appRoot.selectedAddQueue()
+                appRoot.addDefaultCategory = appRoot.selectedAddCategory()
                 appRoot.addDefaultSegments = addDialogSegmentsSpin.value
                 appRoot.addDefaultAdaptive = addDialogAdaptiveSwitch.checked
                 appRoot.addDefaultStartPaused = addDialogPausedSwitch.checked
@@ -2477,11 +2507,11 @@ ApplicationWindow {
                 downloadManager.addTorrentDownload(
                             addDialogUrlField.text.trim(),
                             addDialogPathField.text.trim(),
-                            addDialogQueueCombo.currentValue,
-                            addDialogCategoryCombo.currentValue,
+                            appRoot.selectedAddQueue(),
+                            appRoot.selectedAddCategory(),
                             addDialogPausedSwitch.checked)
                 appRoot.addDefaultOutputPath = addDialogPathField.text.trim()
-                appRoot.addDefaultQueue = addDialogQueueCombo.currentValue
+                appRoot.addDefaultQueue = appRoot.selectedAddQueue()
                 appRoot.addDefaultStartPaused = addDialogPausedSwitch.checked
                 addDialogUrlField.text = ""
                 addUrlPopup.close()
@@ -2489,8 +2519,8 @@ ApplicationWindow {
             }
             if (githubReleaseService.isReleaseUrl(addDialogUrlField.text)) {
                 appRoot.addDefaultOutputPath = addDialogPathField.text.trim()
-                appRoot.addDefaultQueue = addDialogQueueCombo.currentValue
-                appRoot.addDefaultCategory = addDialogCategoryCombo.currentValue
+                appRoot.addDefaultQueue = appRoot.selectedAddQueue()
+                appRoot.addDefaultCategory = appRoot.selectedAddCategory()
                 appRoot.addDefaultSegments = addDialogSegmentsSpin.value
                 appRoot.addDefaultAdaptive = addDialogAdaptiveSwitch.checked
                 appRoot.addDefaultStartPaused = addDialogPausedSwitch.checked
@@ -2510,8 +2540,8 @@ ApplicationWindow {
             const added = appRoot.submitDownload(
                             addDialogUrlField.text,
                             addDialogPathField.text,
-                            addDialogQueueCombo.currentValue,
-                            addDialogCategoryCombo.currentValue,
+                            appRoot.selectedAddQueue(),
+                            appRoot.selectedAddCategory(),
                             addDialogPausedSwitch.checked,
                             addDialogSegmentsSpin.value,
                             addDialogAdaptiveSwitch.checked
@@ -2521,8 +2551,8 @@ ApplicationWindow {
             }
 
             appRoot.addDefaultOutputPath = addDialogPathField.text.trim()
-            appRoot.addDefaultQueue = addDialogQueueCombo.currentValue
-            appRoot.addDefaultCategory = addDialogCategoryCombo.currentValue
+            appRoot.addDefaultQueue = appRoot.selectedAddQueue()
+            appRoot.addDefaultCategory = appRoot.selectedAddCategory()
             appRoot.addDefaultSegments = addDialogSegmentsSpin.value
             appRoot.addDefaultAdaptive = addDialogAdaptiveSwitch.checked
             appRoot.addDefaultStartPaused = addDialogPausedSwitch.checked
