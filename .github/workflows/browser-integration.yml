@@ -2,8 +2,16 @@ name: GenyDL browser integration smoke tests
 
 on:
   push:
-    branches:
-      - feat/firefox-chrome-focused-integration-20261126
+    branches: [main, master]
+    paths:
+      - "browser-extension/**"
+      - "src/core/browser_*.cpp"
+      - "src/core/browser_release_policy.h"
+      - "src/core/native_messaging_host.*"
+      - "tests/*browser*"
+      - "tests/firefox-extension-smoke.cjs"
+      - "CMakeLists.txt"
+      - ".github/workflows/browser-integration.yml"
   pull_request:
     paths:
       - "browser-extension/**"
@@ -13,6 +21,10 @@ on:
       - "tests/firefox-extension-smoke.cjs"
       - "CMakeLists.txt"
       - ".github/workflows/browser-integration.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read

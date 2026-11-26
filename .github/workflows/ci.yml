@@ -90,7 +90,6 @@ jobs:
       matrix: ${{ fromJSON(needs.plan.outputs.desktop_matrix) }}
 
     env:
-      SCCACHE_DIR: ${{ runner.temp }}/genydl-sccache
       SCCACHE_CACHE_SIZE: 256M
 
     steps:
@@ -143,6 +142,13 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: ${{ matrix.cmake_arch }}
+
+      - name: Initialize local compiler cache
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          mkdir -p "${RUNNER_TEMP}/genydl-sccache"
+          echo "SCCACHE_DIR=${RUNNER_TEMP}/genydl-sccache" >> "$GITHUB_ENV"
 
       # Cache compiler results, not the whole build directory / stale BMIs.
       - name: Restore bounded compiler cache
@@ -466,7 +472,6 @@ jobs:
     runs-on: ubuntu-22.04
 
     env:
-      SCCACHE_DIR: ${{ runner.temp }}/genydl-sccache
       SCCACHE_CACHE_SIZE: 256M
       QT_VERSION: "6.11.0"
       TARGET_ARCH: x86_64
@@ -518,7 +523,8 @@ jobs:
           echo "APPIMAGE_EXTRACT_AND_RUN=1" >> "$GITHUB_ENV"
 
       - name: Restore Linux x64 Qt SDK
-        uses: actions/cache@v4
+        id: qt-sdk-cache
+        uses: actions/cache/restore@v4
         continue-on-error: true
         with:
           path: ~/Qt/${{ env.QT_VERSION }}
@@ -552,6 +558,20 @@ jobs:
           echo "${QT_ROOT}/bin" >> "$GITHUB_PATH"
 
           echo "Qt x64 installed at: ${QT_ROOT}"
+
+      - name: Save Linux x64 Qt SDK immediately
+        if: steps.qt-sdk-cache.outputs.cache-hit != 'true' && steps.qt-sdk-cache.outputs.cache-primary-key != ''
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: ~/Qt/${{ env.QT_VERSION }}
+          key: ${{ steps.qt-sdk-cache.outputs.cache-primary-key }}
+
+      - name: Initialize local compiler cache
+        shell: bash
+        run: |
+          mkdir -p "${RUNNER_TEMP}/genydl-sccache"
+          echo "SCCACHE_DIR=${RUNNER_TEMP}/genydl-sccache" >> "$GITHUB_ENV"
 
       # Cache compiler results, not the whole build directory / stale BMIs.
       - name: Restore bounded compiler cache
@@ -768,7 +788,6 @@ jobs:
     runs-on: ubuntu-24.04-arm
 
     env:
-      SCCACHE_DIR: ${{ runner.temp }}/genydl-sccache
       SCCACHE_CACHE_SIZE: 256M
       QT_VERSION: "6.11.0"
       TARGET_ARCH: arm64
@@ -820,7 +839,8 @@ jobs:
           echo "APPIMAGE_EXTRACT_AND_RUN=1" >> "$GITHUB_ENV"
 
       - name: Restore Linux ARM64 Qt SDK
-        uses: actions/cache@v4
+        id: qt-sdk-cache
+        uses: actions/cache/restore@v4
         continue-on-error: true
         with:
           path: ~/Qt/${{ env.QT_VERSION }}
@@ -854,6 +874,20 @@ jobs:
           echo "${QT_ROOT}/bin" >> "$GITHUB_PATH"
 
           echo "Qt ARM64 installed at: ${QT_ROOT}"
+
+      - name: Save Linux ARM64 Qt SDK immediately
+        if: steps.qt-sdk-cache.outputs.cache-hit != 'true' && steps.qt-sdk-cache.outputs.cache-primary-key != ''
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: ~/Qt/${{ env.QT_VERSION }}
+          key: ${{ steps.qt-sdk-cache.outputs.cache-primary-key }}
+
+      - name: Initialize local compiler cache
+        shell: bash
+        run: |
+          mkdir -p "${RUNNER_TEMP}/genydl-sccache"
+          echo "SCCACHE_DIR=${RUNNER_TEMP}/genydl-sccache" >> "$GITHUB_ENV"
 
       # Cache compiler results, not the whole build directory / stale BMIs.
       - name: Restore bounded compiler cache
@@ -1063,7 +1097,7 @@ jobs:
 
   release:
     name: Publish GitHub Release
-    if: startsWith(github.ref, 'refs/tags/')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
     needs:
       - desktop
       - linux-x64
