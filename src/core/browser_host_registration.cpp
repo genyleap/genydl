@@ -1,4 +1,5 @@
 #include "browser_host_registration.h"
+#include "browser_release_policy.h"
 #include "browser_config.h"
 
 #include <QCoreApplication>
@@ -62,7 +63,7 @@ bool browserEnabled(const QString& browser)
     // browsers are opt-in through the desktop settings UI.
     // Keep all browser adapters in the registry for future releases, but
     // activate only the currently supported desktop integrations.
-    if (browser != QStringLiteral("firefox") && browser != QStringLiteral("chrome"))
+    if (!genydl::browser::availableInRelease(browser))
         return false;
     QSettings settings;
     return settings.value(QStringLiteral("browserIntegration/enabled/") + browser,
