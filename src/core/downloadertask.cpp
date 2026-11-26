@@ -1128,10 +1128,15 @@ void DownloaderTask::startSingleStream(bool resume)
 #endif
 
     connect(reply, &QNetworkReply::readyRead, this, [this, replyPtr]() mutable {
-        if (!replyPtr || replyPtr != m_singleReply) return;
+        if (!replyPtr || replyPtr != m_singleReply || m_state != State::Downloading) return;
         // Guard against a readyRead that fires while the socket is being torn
         // down (otherwise QSslSocket logs "device not open").
         if (!replyPtr->isOpen() || replyPtr->bytesAvailable() <= 0) return;
+        const int status = replyPtr->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        if (status >= 400) {
+            replyPtr->readAll(); // An HTTP error body is never resumable file data.
+            return;
+        }
         QByteArray data = replyPtr->readAll();
         sampleNetworkRead(data.size());
         // append to single buffer

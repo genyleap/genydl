@@ -7,20 +7,25 @@ from pathlib import Path
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import time
 
-app = Path("build-qt612/bin/GenyDL").resolve()
+app = Path(sys.argv[1] if len(sys.argv) > 1 else "build-qt612/bin/GenyDL").resolve()
 if not app.exists():
     raise SystemExit("Build GenyDL first")
 
 with tempfile.TemporaryDirectory(prefix="genydl-browser-toggle-") as scratch:
     home = Path(scratch)
+    runtime = home / "runtime"
+    runtime.mkdir(mode=0o700)
     env = os.environ.copy()
     env.update(
         HOME=str(home),
         XDG_CONFIG_HOME=str(home / ".config"),
         XDG_DATA_HOME=str(home / ".local/share"),
+        XDG_CACHE_HOME=str(home / ".cache"),
+        XDG_RUNTIME_DIR=str(runtime),
         QT_QPA_PLATFORM="offscreen",
         QT_QUICK_BACKEND="software",
     )
@@ -35,13 +40,16 @@ with tempfile.TemporaryDirectory(prefix="genydl-browser-toggle-") as scratch:
         )
         try:
             for _ in range(70):
-                if predicate():
-                    return
                 if process.poll() is not None:
                     raise AssertionError(
                         f"GenyDL exited with {process.returncode}: " +
                         (process.stdout.read() or b"").decode(errors="replace")[-2500:]
                     )
+                if predicate():
+                    time.sleep(.3)
+                    if process.poll() is None:
+                        return
+                    raise AssertionError(f"GenyDL exited after registering native hosts: {process.returncode}")
                 time.sleep(.15)
             raise AssertionError("Native host setup never reached desired state")
         finally:
@@ -54,7 +62,9 @@ with tempfile.TemporaryDirectory(prefix="genydl-browser-toggle-") as scratch:
 
     launch_and_check(lambda: firefox.is_file())
     assert not chrome.exists(), "Chromium must be opt-in by default"
-    assert json.loads(firefox.read_text())["allowed_extensions"] == [
+    firefox_manifest = json.loads(firefox.read_text())
+    assert Path(firefox_manifest["path"]).resolve() == app, "Firefox host must be the GUI executable"
+    assert firefox_manifest["allowed_extensions"] == [
         "download-links@genydl.genyleap.com"
     ]
     settings.parent.mkdir(parents=True, exist_ok=True)
@@ -64,6 +74,7 @@ with tempfile.TemporaryDirectory(prefix="genydl-browser-toggle-") as scratch:
     )
     launch_and_check(lambda: not firefox.exists() and chrome.exists())
     manifest = json.loads(chrome.read_text())
+    assert Path(manifest["path"]).resolve() == app, "Chrome host must be the GUI executable"
     assert "chrome-extension://dhmfclimdfgeemdecnghagiodcmiafdb/" in         manifest["allowed_origins"]
     settings.write_text(
         "[browserIntegration]\nenabled\\firefox=false\nenabled\\chrome=false\n"
