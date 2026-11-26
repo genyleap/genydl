@@ -16,6 +16,7 @@
 #include "browser_activation.h"
 #include "browser_host_registration.h"
 #include "browser_integration_manager.h"
+#include "native_messaging_host.h"
 #ifdef Q_OS_MACOS
 #include "macos_browser_integration.h"
 #endif
@@ -97,6 +98,12 @@ inline void configureGraphicsBackend()
 
 auto main(int argc, char *argv[]) -> int
 {
+    // Native Messaging is a headless mode of this very same executable.
+    // Test argv before QApplication/Quick are initialized: Firefox and
+    // Chrome use stdio to exchange binary length-prefixed JSON.
+    if (isNativeMessagingInvocation(argc, argv))
+        return runNativeMessagingHost(argc, argv);
+
 #ifdef Q_OS_MACOS
     // Native Cocoa context menus may ask AppKit to synthesize placeholder
     // images for otherwise icon-less actions. On macOS 26 this can enter the
