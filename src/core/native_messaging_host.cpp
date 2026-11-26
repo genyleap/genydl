@@ -120,8 +120,10 @@ bool isNativeMessagingInvocation(int argc, char* argv[])
 
     // Firefox passes its native manifest path followed by the add-on ID.
     // Requiring both avoids starting the headless host for a normal app open.
-    return argc >= 3 && argv[2]
-        && QFileInfo(first).fileName() == QStringLiteral("com.genyleap.genydl.json")
+    const QString manifestFile = QFileInfo(first).fileName();
+    const bool ownManifest = manifestFile == QStringLiteral("com.genyleap.genydl.json")
+        || manifestFile == QStringLiteral("firefox-com.genyleap.genydl.json");
+    return argc >= 3 && argv[2] && ownManifest
         && QString::fromLocal8Bit(argv[2])
             == QStringLiteral("download-links@genydl.genyleap.com");
 }
