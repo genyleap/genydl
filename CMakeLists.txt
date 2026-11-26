@@ -667,6 +667,22 @@ target_include_directories(${APP_NAME} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 # Native Messaging runs as an early, headless mode of the GenyDL executable.
 # The browser manifest's path points to the same binary; no second distributable
 # process or executable is needed.
+# Discard the obsolete standalone native-host executable from existing
+# development build folders. The browser now invokes the GenyDL binary itself.
+if(APPLE)
+    add_custom_command(TARGET ${APP_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E rm -f
+            "$<TARGET_BUNDLE_DIR:${APP_NAME}>/Contents/MacOS/GenyDLNativeHost"
+        COMMENT "Remove obsolete standalone native host from app bundle"
+        VERBATIM)
+else()
+    add_custom_command(TARGET ${APP_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E rm -f
+            "$<TARGET_FILE_DIR:${APP_NAME}>/GenyDLNativeHost$<TARGET_FILE_SUFFIX:${APP_NAME}>"
+        COMMENT "Remove obsolete standalone native host"
+        VERBATIM)
+endif()
+
 # The Firefox and Chrome Manifest V3 backgrounds have different
 # schemas. Build two browser-ready distributions from the same JS/CSS assets.
 set(GENYDL_BROWSER_STAGE "${CMAKE_BINARY_DIR}/browser-extensions")
