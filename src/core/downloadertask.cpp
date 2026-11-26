@@ -787,7 +787,7 @@ void DownloaderTask::start()
     });
 #endif
 
-		    connect(headReply, &QNetworkReply::finished, this, [this, headReply, hasExistingFile, hasPartialSegments]() {
+		    connect(headReply, &QNetworkReply::finished, this, [this, headReply, hasExistingFile, hasSinglePartial, hasPartialSegments]() {
 		        m_headReply = nullptr;
 		        if (m_state != State::Downloading) {
 		            headReply->deleteLater();
