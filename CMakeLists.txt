@@ -639,17 +639,12 @@ set(GENYDL_CHROMIUM_EXTENSION_ID "" CACHE STRING
     "Legacy shared Chromium extension ID (retained for compatibility)")
 set(GENYDL_CHROME_EXTENSION_ID "" CACHE STRING
     "Published Chrome Web Store extension ID")
-set(GENYDL_EDGE_EXTENSION_ID "" CACHE STRING
-    "Published Microsoft Edge Add-ons extension ID")
-set(GENYDL_BRAVE_EXTENSION_ID "" CACHE STRING
-    "Brave-specific extension ID (otherwise Chrome ID is used)")
-set(GENYDL_VIVALDI_EXTENSION_ID "" CACHE STRING
-    "Vivaldi-specific extension ID (otherwise Chrome ID is used)")
 # Only set after a real, publicly resolvable store listing is approved.
 # Empty values intentionally hide the end-user installation button.
 set(GENYDL_CHROME_STORE_URL "" CACHE STRING "Verified Chrome Web Store listing URL")
-set(GENYDL_FIREFOX_STORE_URL "" CACHE STRING "Verified Mozilla AMO listing URL")
-set(GENYDL_EDGE_STORE_URL "" CACHE STRING "Verified Microsoft Edge Add-ons listing URL")
+set(GENYDL_FIREFOX_STORE_URL
+    "https://addons.mozilla.org/en-US/firefox/addon/genydl-download-with-genydl/"
+    CACHE STRING "Approved Mozilla AMO listing URL")
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/src/core/browser_store_config.h.in"
     "${CMAKE_CURRENT_BINARY_DIR}/browser_store_config.h"
@@ -683,10 +678,10 @@ else()
         COMMENT "Install browser native-messaging host beside GenyDL" VERBATIM)
 endif()
 
-# The Firefox and Chromium Manifest V3 backgrounds have different
+# The Firefox and Chrome Manifest V3 backgrounds have different
 # schemas. Build two browser-ready distributions from the same JS/CSS assets.
 set(GENYDL_BROWSER_STAGE "${CMAKE_BINARY_DIR}/browser-extensions")
-foreach(genydl_browser IN ITEMS firefox chromium)
+foreach(genydl_browser IN ITEMS firefox chrome)
     file(MAKE_DIRECTORY "${GENYDL_BROWSER_STAGE}/${genydl_browser}")
     foreach(genydl_asset IN ITEMS background.js options.html options.js icon128.png)
         configure_file(
@@ -699,18 +694,18 @@ configure_file(
     "${GENYDL_BROWSER_STAGE}/firefox/manifest.json" COPYONLY)
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/browser-extension/manifest.chromium.json"
-    "${GENYDL_BROWSER_STAGE}/chromium/manifest.json" COPYONLY)
+    "${GENYDL_BROWSER_STAGE}/chrome/manifest.json" COPYONLY)
 
 add_custom_target(browser-extension-zip
     COMMAND ${CMAKE_COMMAND} -E chdir "${GENYDL_BROWSER_STAGE}/firefox"
         ${CMAKE_COMMAND} -E tar cf
         "${CMAKE_BINARY_DIR}/GenyDL-Firefox-extension.zip" --format=zip
         "manifest.json" "background.js" "options.html" "options.js" "icon128.png"
-    COMMAND ${CMAKE_COMMAND} -E chdir "${GENYDL_BROWSER_STAGE}/chromium"
+    COMMAND ${CMAKE_COMMAND} -E chdir "${GENYDL_BROWSER_STAGE}/chrome"
         ${CMAKE_COMMAND} -E tar cf
-        "${CMAKE_BINARY_DIR}/GenyDL-Chromium-extension.zip" --format=zip
+        "${CMAKE_BINARY_DIR}/GenyDL-Chrome-extension.zip" --format=zip
         "manifest.json" "background.js" "options.html" "options.js" "icon128.png"
-    COMMENT "Package separate Firefox and Chromium WebExtensions"
+    COMMENT "Package separate Firefox and Chrome WebExtensions"
     VERBATIM)
 
 
