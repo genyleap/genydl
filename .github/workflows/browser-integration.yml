@@ -1,0 +1,34 @@
+name: GenyDL browser integration smoke tests
+
+on:
+  push:
+    branches:
+      - feat/firefox-chrome-focused-integration-20261126
+  pull_request:
+    paths:
+      - "browser-extension/**"
+      - "src/core/browser_*.cpp"
+      - "src/core/native_messaging_host.*"
+      - "tests/*browser*"
+      - "tests/firefox-extension-smoke.cjs"
+      - "CMakeLists.txt"
+      - ".github/workflows/browser-integration.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  browser-extension-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Firefox and Chrome WebExtension regression tests
+        run: |
+          node tests/browser-extension-smoke.cjs
+          node tests/firefox-extension-smoke.cjs
+          node tests/browser-options-smoke.cjs
+          node tests/browser-setup-smoke.cjs
