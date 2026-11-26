@@ -1,6 +1,7 @@
 #include "browser_integration_manager.h"
 #include "browser_host_registration.h"
 #include "browser_store_config.h"
+#include "browser_config.h"
 
 #include <QCoreApplication>
 #include <QDateTime>
@@ -32,14 +33,6 @@ constexpr BrowserInfo kBrowsers[] = {
     {"firefox", "Firefox", "Firefox", "Mozilla", ".mozilla", "about:addons"},
     {"chrome", "Google Chrome", "Google Chrome", "Google/Chrome",
      ".config/google-chrome", "chrome://extensions"},
-    {"edge", "Microsoft Edge", "Microsoft Edge", "Microsoft Edge",
-     ".config/microsoft-edge", "edge://extensions"},
-    {"brave", "Brave", "Brave Browser", "BraveSoftware/Brave-Browser",
-     ".config/BraveSoftware/Brave-Browser", "brave://extensions"},
-    {"chromium", "Chromium", "Chromium", "Chromium",
-     ".config/chromium", "chrome://extensions"},
-    {"vivaldi", "Vivaldi", "Vivaldi", "Vivaldi",
-     ".config/vivaldi", "vivaldi://extensions"},
 };
 
 const BrowserInfo* browserInfo(const QString& code)
@@ -55,24 +48,29 @@ QUrl verifiedStoreUrl(const QString& browser)
     QString raw;
     QString expectedHost;
     if (browser == QStringLiteral("firefox")) {
-        raw = QString::fromLatin1(GENYDL_FIREFOX_STORE_URL);
+        raw = QString::fromLatin1(GENYDL_FIREFOX_STORE_URL).trimmed();
+        // Old CMake build directories can keep the former empty cached value.
+        // The user-provided Mozilla listing is now the canonical install URL.
+        if (raw.isEmpty())
+            raw = QStringLiteral(
+                "https://addons.mozilla.org/en-US/firefox/addon/genydl-download-with-genydl/");
         expectedHost = QStringLiteral("addons.mozilla.org");
-    } else if (browser == QStringLiteral("edge")) {
-        raw = QString::fromLatin1(GENYDL_EDGE_STORE_URL);
-        expectedHost = QStringLiteral("microsoftedge.microsoft.com");
-    } else {
-        raw = QString::fromLatin1(GENYDL_CHROME_STORE_URL);
+    } else if (browser == QStringLiteral("chrome")) {
+        raw = QString::fromLatin1(GENYDL_CHROME_STORE_URL).trimmed();
         expectedHost = QStringLiteral("chromewebstore.google.com");
+    } else {
+        return {};
     }
     const QUrl url(raw);
     if (url.scheme() != QStringLiteral("https")
-        || url.host() != expectedHost || !url.userInfo().isEmpty()
-        || !url.path().contains(QStringLiteral("/detail/"))
-            && browser != QStringLiteral("firefox"))
+        || url.host() != expectedHost || !url.userInfo().isEmpty())
         return {};
-    if (browser == QStringLiteral("firefox")
-        && !url.path().contains(QStringLiteral("/firefox/addon/")))
+    if (browser == QStringLiteral("firefox")) {
+        if (!url.path().contains(QStringLiteral("/firefox/addon/")))
+            return {};
+    } else if (!url.path().contains(QStringLiteral("/detail/"))) {
         return {};
+    }
     return url;
 }
 
@@ -83,8 +81,6 @@ QString manifestPath(const BrowserInfo& browser)
     const QString base = QStandardPaths::writableLocation(
         QStandardPaths::AppLocalDataLocation);
     QString prefix = QString::fromLatin1(browser.code);
-    if (prefix == QStringLiteral("brave") || prefix == QStringLiteral("vivaldi"))
-        prefix = QStringLiteral("chrome");
     return QDir(base).filePath(QStringLiteral("NativeMessagingHosts/")
                               + prefix + QLatin1Char('-') + filename);
 #elif defined(Q_OS_MACOS)
@@ -105,14 +101,6 @@ QStringList linuxNames(const QString& code)
     if (code == QStringLiteral("firefox")) return {QStringLiteral("firefox")};
     if (code == QStringLiteral("chrome"))
         return {QStringLiteral("google-chrome-stable"), QStringLiteral("google-chrome")};
-    if (code == QStringLiteral("edge"))
-        return {QStringLiteral("microsoft-edge-stable"), QStringLiteral("microsoft-edge")};
-    if (code == QStringLiteral("brave"))
-        return {QStringLiteral("brave-browser"), QStringLiteral("brave")};
-    if (code == QStringLiteral("chromium"))
-        return {QStringLiteral("chromium"), QStringLiteral("chromium-browser")};
-    if (code == QStringLiteral("vivaldi"))
-        return {QStringLiteral("vivaldi-stable"), QStringLiteral("vivaldi")};
     return {};
 }
 
@@ -131,10 +119,6 @@ QString browserExecutable(const BrowserInfo& browser)
     QString rel;
     if (code == QStringLiteral("firefox")) rel = QStringLiteral("Mozilla Firefox/firefox.exe");
     if (code == QStringLiteral("chrome")) rel = QStringLiteral("Google/Chrome/Application/chrome.exe");
-    if (code == QStringLiteral("edge")) rel = QStringLiteral("Microsoft/Edge/Application/msedge.exe");
-    if (code == QStringLiteral("brave")) rel = QStringLiteral("BraveSoftware/Brave-Browser/Application/brave.exe");
-    if (code == QStringLiteral("chromium")) rel = QStringLiteral("Chromium/Application/chrome.exe");
-    if (code == QStringLiteral("vivaldi")) rel = QStringLiteral("Vivaldi/Application/vivaldi.exe");
     for (const QString& base : {qEnvironmentVariable("LOCALAPPDATA"),
                                 qEnvironmentVariable("PROGRAMFILES"),
                                 qEnvironmentVariable("PROGRAMFILES(X86)")}) {
@@ -158,7 +142,7 @@ QString browserExecutable(const BrowserInfo& browser)
 QString developmentExtensionFolder(const QString& code)
 {
     const QString name = code == QStringLiteral("firefox")
-        ? QStringLiteral("firefox") : QStringLiteral("chromium");
+        ? QStringLiteral("firefox") : QStringLiteral("chrome");
     QDir current(QCoreApplication::applicationDirPath());
     // Covers <build>/bin/GenyDL.app/Contents/MacOS as well as <build>/bin
     // while avoiding a hard-coded source checkout or user home directory.
@@ -186,8 +170,12 @@ bool isManifestReady(const QString& path, const QString& nativeExecutable,
     if (code == QStringLiteral("firefox"))
         return obj.value(QStringLiteral("allowed_extensions")).toArray().contains(
             QStringLiteral("download-links@genydl.genyleap.com"));
-    return obj.value(QStringLiteral("allowed_origins")).toArray().contains(
-        QStringLiteral("chrome-extension://dhmfclimdfgeemdecnghagiodcmiafdb/"));
+    const QJsonArray origins = obj.value(QStringLiteral("allowed_origins")).toArray();
+    if (origins.contains(QStringLiteral("chrome-extension://dhmfclimdfgeemdecnghagiodcmiafdb/")))
+        return true; // Pinned unpacked Chrome build.
+    const QString publishedId = QString::fromLatin1(GENYDL_CHROME_EXTENSION_ID).trimmed();
+    return publishedId.size() == 32
+        && origins.contains(QStringLiteral("chrome-extension://") + publishedId + QLatin1Char('/'));
 }
 }
 
@@ -239,18 +227,6 @@ QVariantList BrowserIntegrationManager::statuses() const
             {QStringLiteral("statusText"), status}
         });
     }
-#ifdef Q_OS_MACOS
-    result.append(QVariantMap{
-        {QStringLiteral("code"), QStringLiteral("safari")},
-        {QStringLiteral("name"), QStringLiteral("Safari")},
-        {QStringLiteral("enabled"), false},
-        {QStringLiteral("ready"), false},
-        {QStringLiteral("browserInstalled"), true},
-        {QStringLiteral("supported"), false},
-        {QStringLiteral("statusText"),
-         QStringLiteral("Coming later — signed Safari extension not available")}
-    });
-#endif
     return result;
 }
 
