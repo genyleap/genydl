@@ -1,5 +1,6 @@
 #include "browser_integration_manager.h"
 #include "browser_host_registration.h"
+#include "browser_release_policy.h"
 #include "browser_store_config.h"
 #include "browser_config.h"
 
@@ -27,21 +28,20 @@ struct BrowserInfo {
     const char* macFolder;
     const char* linuxFolder;
     const char* extensionPage;
-    bool activeInRelease;
 };
 
 constexpr BrowserInfo kBrowsers[] = {
-    {"firefox", "Firefox", "Firefox", "Mozilla", ".mozilla", "about:addons", true},
+    {"firefox", "Firefox", "Firefox", "Mozilla", ".mozilla", "about:addons"},
     {"chrome", "Google Chrome", "Google Chrome", "Google/Chrome",
-     ".config/google-chrome", "chrome://extensions", true},
+     ".config/google-chrome", "chrome://extensions"},
     {"edge", "Microsoft Edge", "Microsoft Edge", "Microsoft Edge",
-     ".config/microsoft-edge", "edge://extensions", false},
+     ".config/microsoft-edge", "edge://extensions"},
     {"brave", "Brave", "Brave Browser", "BraveSoftware/Brave-Browser",
-     ".config/BraveSoftware/Brave-Browser", "brave://extensions", false},
+     ".config/BraveSoftware/Brave-Browser", "brave://extensions"},
     {"chromium", "Chromium", "Chromium", "Chromium",
-     ".config/chromium", "chrome://extensions", false},
+     ".config/chromium", "chrome://extensions"},
     {"vivaldi", "Vivaldi", "Vivaldi", "Vivaldi",
-     ".config/vivaldi", "vivaldi://extensions", false},
+     ".config/vivaldi", "vivaldi://extensions"},
 };
 
 const BrowserInfo* browserInfo(const QString& code)
@@ -213,8 +213,8 @@ QVariantList BrowserIntegrationManager::statuses() const
     QString nativeBinary = QCoreApplication::applicationFilePath();
     QSettings settings;
     for (const BrowserInfo& browser : kBrowsers) {
-        if (!browser.activeInRelease) continue;
         const QString code = QString::fromLatin1(browser.code);
+        if (!genydl::browser::availableInRelease(code)) continue;
         const bool enabled = settings.value(
             QStringLiteral("browserIntegration/enabled/") + code,
             code == QStringLiteral("firefox")).toBool();
@@ -256,7 +256,7 @@ QVariantList BrowserIntegrationManager::statuses() const
 bool BrowserIntegrationManager::setEnabled(const QString& code, bool enabled)
 {
     const BrowserInfo* browser = browserInfo(code);
-    if (!browser || !browser->activeInRelease) return false;
+    if (!browser || !genydl::browser::availableInRelease(code)) return false;
     QSettings settings;
     const QString key = QStringLiteral("browserIntegration/enabled/") + code;
     settings.setValue(key, enabled);
