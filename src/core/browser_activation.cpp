@@ -1,4 +1,5 @@
 #include "browser_activation.h"
+#include "browser_release_policy.h"
 #include "browser_socket.h"
 
 #include <QCoreApplication>
@@ -328,10 +329,13 @@ void BrowserActivation::onConnection()
             }
             if (type == QStringLiteral("integration.ping")) {
                 const QString browser = message.value(QStringLiteral("browser")).toString();
-                static const QSet<QString> allowedBrowsers{
-                    QStringLiteral("firefox"), QStringLiteral("chrome")
+                static const QSet<QString> knownBrowsers{
+                    QStringLiteral("firefox"), QStringLiteral("chrome"),
+                    QStringLiteral("edge"), QStringLiteral("brave"),
+                    QStringLiteral("chromium"), QStringLiteral("vivaldi")
                 };
-                if (version != 2 || !allowedBrowsers.contains(browser)) {
+                if (version != 2 || !knownBrowsers.contains(browser)
+                    || !genydl::browser::availableInRelease(browser)) {
                     reject(QStringLiteral("invalid browser handshake"));
                     return;
                 }
