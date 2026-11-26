@@ -125,11 +125,9 @@ struct BrowserTarget {
 
 void registerBrowserNativeHosts()
 {
-    QString hostBinary = QCoreApplication::applicationDirPath()
-        + QStringLiteral("/GenyDLNativeHost");
-#ifdef Q_OS_WIN
-    hostBinary += QStringLiteral(".exe");
-#endif
+    // The native host is not a second executable. Firefox and Chrome both
+    // launch the main GenyDL binary with their own Native Messaging arguments.
+    const QString hostBinary = QCoreApplication::applicationFilePath();
     if (!QFileInfo::exists(hostBinary)) return;
 
     const QString filename = QString::fromLatin1(kHostName) + QStringLiteral(".json");
