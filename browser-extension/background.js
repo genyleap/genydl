@@ -195,9 +195,10 @@ async function browserCode() {
   if (brands.some(b => b.brand === "Microsoft Edge")) return "edge";
   if (brands.some(b => b.brand === "Google Chrome")) return "chrome";
   if (brands.some(b => b.brand === "Chromium")) return "chromium";
-  // Some worker contexts expose only the legacy UA string.
+  // The currently shipped Chromium package targets Google Chrome.
+  // Future browser adapters can override this code when they ship.
   if (ua.includes("Chrome/")) return "chrome";
-  return "chromium";
+  return "chrome";
 }
 
 async function reportConnection() {
