@@ -139,11 +139,12 @@ private slots:
         });
         QVERIFY(activation.start({}));
 
-        const QString host = QCoreApplication::applicationDirPath()
-            + QStringLiteral("/bin/GenyDLNativeHost");
+        // The desktop binary itself handles Native Messaging; the browser
+        // supplies identifying command-line arguments before any GUI startup.
+        const QString host = QStringLiteral(GENYDL_NATIVE_TEST_EXECUTABLE);
         QVERIFY2(QFileInfo::exists(host), qPrintable(host));
         QProcess process;
-        process.start(host);
+        process.start(host, {QStringLiteral("chrome-extension://dhmfclimdfgeemdecnghagiodcmiafdb/")});
         QVERIFY(process.waitForStarted(3000));
         const QByteArray payload = QJsonDocument(QJsonObject{
             {QStringLiteral("type"), QStringLiteral("download.request")},
@@ -249,11 +250,13 @@ private slots:
             QCOMPARE(filename, QStringLiteral("suggested.zip"));
         });
 
-        const QString host = QCoreApplication::applicationDirPath()
-            + QStringLiteral("/bin/GenyDLNativeHost");
+        // The desktop binary itself handles Native Messaging; the browser
+        // supplies identifying command-line arguments before any GUI startup.
+        const QString host = QStringLiteral(GENYDL_NATIVE_TEST_EXECUTABLE);
         QVERIFY2(QFileInfo::exists(host), qPrintable(host));
         QProcess process;
-        process.start(host);
+        process.start(host, {QStringLiteral("/tmp/com.genyleap.genydl.json"),
+                             QStringLiteral("download-links@genydl.genyleap.com")});
         QVERIFY(process.waitForStarted(3000));
 
         const QByteArray payload = QJsonDocument(QJsonObject{
