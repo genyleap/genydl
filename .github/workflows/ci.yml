@@ -4,50 +4,94 @@ on:
   push:
     branches: [main, master]
     tags: ["v*"]
+  # Expensive native builds are opt-in on PRs, not triggered by each push.
   pull_request:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Native build target (all = six platforms)"
+        type: choice
+        required: true
+        default: windows-x64
+        options:
+          - windows-x64
+          - windows-arm64
+          - macos-arm64
+          - macos-x86_64
+          - linux-x64
+          - linux-arm64
+          - all
+
+# Supersede only a run for the same PR/ref and selected target.
+# Do not interrupt a different target or a tagged release.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event.label.name || inputs.target || 'all' }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   CMAKE_VERSION: "4.2.3"
 
 jobs:
+  plan:
+    name: Select requested build targets
+    if: github.event_name != 'pull_request' || startsWith(github.event.label.name, 'ci:')
+    runs-on: ubuntu-latest
+    outputs:
+      desktop_matrix: ${{ steps.select.outputs.desktop_matrix }}
+      has_desktop: ${{ steps.select.outputs.has_desktop }}
+      linux_x64: ${{ steps.select.outputs.linux_x64 }}
+      linux_arm64: ${{ steps.select.outputs.linux_arm64 }}
+    steps:
+      - name: Resolve selected platforms
+        id: select
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_LABEL: ${{ github.event.label.name }}
+          MANUAL_TARGET: ${{ inputs.target }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+
+          desktop = [{"target":"macos-arm64","artifact_name":"GenyDL-macos-arm64","os":"macos-14","qt_version":"6.11.0","qt_arch":"clang_64","target_arch":"arm64","macos_deployment_target":"15.1"},{"target":"macos-x86_64","artifact_name":"GenyDL-macos-x86_64","os":"macos-15-intel","qt_version":"6.11.0","qt_arch":"clang_64","target_arch":"x86_64","macos_deployment_target":"15.1"},{"target":"windows-x64","artifact_name":"GenyDL-windows-x64","os":"windows-2022","qt_version":"6.10.3","qt_arch":"win64_msvc2022_64","cmake_arch":"x64","target_arch":"x86_64"},{"target":"windows-arm64","artifact_name":"GenyDL-windows-arm64","os":"windows-11-arm","qt_version":"6.10.3","qt_arch":"win64_msvc2022_arm64","cmake_arch":"ARM64","target_arch":"arm64"}]
+          if os.environ["EVENT_NAME"] == "pull_request":
+              selected = os.environ["PR_LABEL"].removeprefix("ci:")
+          elif os.environ["EVENT_NAME"] == "workflow_dispatch":
+              selected = os.environ["MANUAL_TARGET"]
+          else:
+              selected = "all"
+
+          known = {"all", "linux-x64", "linux-arm64", *(x["target"] for x in desktop)}
+          if selected not in known:
+              raise SystemExit(f"Unknown CI target: {selected}")
+          enabled = lambda name: selected in ("all", name)
+          matrix = [x for x in desktop if enabled(x["target"])]
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+              print("desktop_matrix=" + json.dumps({"include": matrix}, separators=(",", ":")), file=out)
+              print("has_desktop=" + str(bool(matrix)).lower(), file=out)
+              print("linux_x64=" + str(enabled("linux-x64")).lower(), file=out)
+              print("linux_arm64=" + str(enabled("linux-arm64")).lower(), file=out)
+          print(f"Selected: {selected}; desktop jobs: {len(matrix)}")
+          PY
+
   desktop:
     name: Build ${{ matrix.artifact_name }}
+    needs: plan
+    if: needs.plan.outputs.has_desktop == 'true'
     runs-on: ${{ matrix.os }}
 
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - artifact_name: GenyDL-macos-arm64
-            os: macos-14
-            qt_version: "6.11.0"
-            qt_arch: clang_64
-            target_arch: arm64
-            macos_deployment_target: "15.1"
+      matrix: ${{ fromJSON(needs.plan.outputs.desktop_matrix) }}
 
-          - artifact_name: GenyDL-macos-x86_64
-            os: macos-15-intel
-            qt_version: "6.11.0"
-            qt_arch: clang_64
-            target_arch: x86_64
-            macos_deployment_target: "15.1"
-
-          - artifact_name: GenyDL-windows-x64
-            os: windows-2022
-            qt_version: "6.10.3"
-            qt_arch: win64_msvc2022_64
-            cmake_arch: x64
-            target_arch: x86_64
-
-          - artifact_name: GenyDL-windows-arm64
-            os: windows-11-arm
-            qt_version: "6.10.3"
-            qt_arch: win64_msvc2022_arm64
-            cmake_arch: ARM64
-            target_arch: arm64
+    env:
+      SCCACHE_DIR: ${{ runner.temp }}/genydl-sccache
+      SCCACHE_CACHE_SIZE: 256M
 
     steps:
       - name: Checkout
@@ -100,6 +144,28 @@ jobs:
         with:
           arch: ${{ matrix.cmake_arch }}
 
+      # Cache compiler results, not the whole build directory / stale BMIs.
+      - name: Restore bounded compiler cache
+        id: compiler-cache
+        if: runner.os == 'macOS'
+        uses: actions/cache/restore@v4
+        continue-on-error: true
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: genydl-sccache-v1-${{ matrix.artifact_name }}-qt-${{ matrix.qt_version }}-${{ github.sha }}
+          restore-keys: |
+            genydl-sccache-v1-${{ matrix.artifact_name }}-qt-${{ matrix.qt_version }}-
+
+      - name: Set up sccache for Clang
+        id: sccache
+        if: runner.os == 'macOS'
+        uses: mozilla-actions/sccache-action@v0.0.11
+        continue-on-error: true
+        with:
+          version: "v0.16.0"
+        env:
+          SCCACHE_GHA_ENABLED: "false"
+
       - name: Configure macOS
         if: runner.os == 'macOS'
         shell: bash
@@ -112,6 +178,7 @@ jobs:
             -DQt6_DIR="${QT_ROOT_DIR}/lib/cmake/Qt6" \
             -DCMAKE_C_COMPILER="${CC}" \
             -DCMAKE_CXX_COMPILER="${CXX}" \
+            -DCMAKE_CXX_COMPILER_LAUNCHER="${{ steps.sccache.outcome == 'success' && 'sccache' || '' }}" \
             -DCMAKE_CXX_STANDARD=23 \
             -DCMAKE_CXX_STANDARD_REQUIRED=ON \
             -DCMAKE_CXX_SCAN_FOR_MODULES=ON \
@@ -151,6 +218,15 @@ jobs:
 
       - name: Build
         run: cmake --build build --config Release --parallel
+
+      # Save immediately after compilation, even if packaging later fails.
+      - name: Save compiler cache
+        if: ${{ runner.os == 'macOS' && !cancelled() && steps.sccache.outcome == 'success' && steps.compiler-cache.outputs.cache-hit != 'true' && steps.compiler-cache.outputs.cache-primary-key != '' }}
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: ${{ steps.compiler-cache.outputs.cache-primary-key }}
 
       - name: Verify macOS deployment target
         if: runner.os == 'macOS'
@@ -385,9 +461,13 @@ jobs:
 
   linux-x64:
     name: Build GenyDL-linux-x86_64
+    needs: plan
+    if: needs.plan.outputs.linux_x64 == 'true'
     runs-on: ubuntu-22.04
 
     env:
+      SCCACHE_DIR: ${{ runner.temp }}/genydl-sccache
+      SCCACHE_CACHE_SIZE: 256M
       QT_VERSION: "6.11.0"
       TARGET_ARCH: x86_64
       APPIMAGE_ARCH: x86_64
@@ -437,21 +517,28 @@ jobs:
           echo "CLANG_SCAN_DEPS=/usr/bin/clang-scan-deps-20" >> "$GITHUB_ENV"
           echo "APPIMAGE_EXTRACT_AND_RUN=1" >> "$GITHUB_ENV"
 
+      - name: Restore Linux x64 Qt SDK
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: ~/Qt/${{ env.QT_VERSION }}
+          key: genydl-qt-linux-x64-${{ env.QT_VERSION }}-v1
+
       - name: Install Qt Linux x64
         shell: bash
         run: |
           set -euo pipefail
 
-          python3 -m pip install --user --upgrade pip
-          python3 -m pip install --user aqtinstall
-
-          export PATH="${HOME}/.local/bin:${PATH}"
-
-          aqt list-qt linux desktop || true
-
-          aqt install-qt linux desktop "${QT_VERSION}" linux_gcc_64 -O "${HOME}/Qt"
-
-          QT_CONFIG="$(find "${HOME}/Qt" -type f -path "*/lib/cmake/Qt6/Qt6Config.cmake" | head -n 1)"
+          QT_CONFIG="$(find "${HOME}/Qt/${QT_VERSION}" -type f -path "*/lib/cmake/Qt6/Qt6Config.cmake" -print -quit 2>/dev/null || true)"
+          if [[ -z "${QT_CONFIG}" || ! -f "${QT_CONFIG}" ]]; then
+            python3 -m pip install --user --upgrade pip
+            python3 -m pip install --user aqtinstall
+            export PATH="${HOME}/.local/bin:${PATH}"
+            aqt install-qt linux desktop "${QT_VERSION}" linux_gcc_64 -O "${HOME}/Qt"
+            QT_CONFIG="$(find "${HOME}/Qt/${QT_VERSION}" -type f -path "*/lib/cmake/Qt6/Qt6Config.cmake" -print -quit)"
+          else
+            echo "Using cached Qt SDK at ${QT_CONFIG}"
+          fi
 
           if [[ -z "${QT_CONFIG}" || ! -f "${QT_CONFIG}" ]]; then
             echo "Qt x64 install failed."
@@ -466,6 +553,26 @@ jobs:
 
           echo "Qt x64 installed at: ${QT_ROOT}"
 
+      # Cache compiler results, not the whole build directory / stale BMIs.
+      - name: Restore bounded compiler cache
+        id: compiler-cache
+        uses: actions/cache/restore@v4
+        continue-on-error: true
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: genydl-sccache-v1-linux-x64-qt-${{ env.QT_VERSION }}-${{ github.sha }}
+          restore-keys: |
+            genydl-sccache-v1-linux-x64-qt-${{ env.QT_VERSION }}-
+
+      - name: Set up sccache for Clang
+        id: sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
+        continue-on-error: true
+        with:
+          version: "v0.16.0"
+        env:
+          SCCACHE_GHA_ENABLED: "false"
+
       - name: Configure Linux x64
         shell: bash
         run: |
@@ -477,6 +584,7 @@ jobs:
             -DQt6_DIR="${QT_ROOT_DIR}/lib/cmake/Qt6" \
             -DCMAKE_C_COMPILER="${CC}" \
             -DCMAKE_CXX_COMPILER="${CXX}" \
+            -DCMAKE_CXX_COMPILER_LAUNCHER="${{ steps.sccache.outcome == 'success' && 'sccache' || '' }}" \
             -DCMAKE_CXX_STANDARD=23 \
             -DCMAKE_CXX_STANDARD_REQUIRED=ON \
             -DCMAKE_CXX_COMPILER_CLANG_SCAN_DEPS="${CLANG_SCAN_DEPS}" \
@@ -492,6 +600,15 @@ jobs:
         run: |
           set -euo pipefail
           cmake --build build --config Release --parallel
+
+      # Save immediately after compilation, even if packaging later fails.
+      - name: Save compiler cache
+        if: ${{ !cancelled() && steps.sccache.outcome == 'success' && steps.compiler-cache.outputs.cache-hit != 'true' && steps.compiler-cache.outputs.cache-primary-key != '' }}
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: ${{ steps.compiler-cache.outputs.cache-primary-key }}
 
       - name: Create Linux x64 AppImage
         shell: bash
@@ -646,9 +763,13 @@ jobs:
 
   linux-arm64:
     name: Build GenyDL-linux-arm64
+    needs: plan
+    if: needs.plan.outputs.linux_arm64 == 'true'
     runs-on: ubuntu-24.04-arm
 
     env:
+      SCCACHE_DIR: ${{ runner.temp }}/genydl-sccache
+      SCCACHE_CACHE_SIZE: 256M
       QT_VERSION: "6.11.0"
       TARGET_ARCH: arm64
       APPIMAGE_ARCH: aarch64
@@ -698,21 +819,28 @@ jobs:
           echo "CLANG_SCAN_DEPS=/usr/bin/clang-scan-deps-20" >> "$GITHUB_ENV"
           echo "APPIMAGE_EXTRACT_AND_RUN=1" >> "$GITHUB_ENV"
 
+      - name: Restore Linux ARM64 Qt SDK
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: ~/Qt/${{ env.QT_VERSION }}
+          key: genydl-qt-linux-arm64-${{ env.QT_VERSION }}-v1
+
       - name: Install Qt Linux ARM64
         shell: bash
         run: |
           set -euo pipefail
 
-          python3 -m pip install --user --upgrade pip
-          python3 -m pip install --user aqtinstall
-
-          export PATH="${HOME}/.local/bin:${PATH}"
-
-          aqt list-qt linux_arm64 desktop || true
-
-          aqt install-qt linux_arm64 desktop "${QT_VERSION}" linux_gcc_arm64 -O "${HOME}/Qt"
-
-          QT_CONFIG="$(find "${HOME}/Qt" -type f -path "*/lib/cmake/Qt6/Qt6Config.cmake" | head -n 1)"
+          QT_CONFIG="$(find "${HOME}/Qt/${QT_VERSION}" -type f -path "*/lib/cmake/Qt6/Qt6Config.cmake" -print -quit 2>/dev/null || true)"
+          if [[ -z "${QT_CONFIG}" || ! -f "${QT_CONFIG}" ]]; then
+            python3 -m pip install --user --upgrade pip
+            python3 -m pip install --user aqtinstall
+            export PATH="${HOME}/.local/bin:${PATH}"
+            aqt install-qt linux_arm64 desktop "${QT_VERSION}" linux_gcc_arm64 -O "${HOME}/Qt"
+            QT_CONFIG="$(find "${HOME}/Qt/${QT_VERSION}" -type f -path "*/lib/cmake/Qt6/Qt6Config.cmake" -print -quit)"
+          else
+            echo "Using cached Qt SDK at ${QT_CONFIG}"
+          fi
 
           if [[ -z "${QT_CONFIG}" || ! -f "${QT_CONFIG}" ]]; then
             echo "Qt ARM64 install failed."
@@ -727,6 +855,26 @@ jobs:
 
           echo "Qt ARM64 installed at: ${QT_ROOT}"
 
+      # Cache compiler results, not the whole build directory / stale BMIs.
+      - name: Restore bounded compiler cache
+        id: compiler-cache
+        uses: actions/cache/restore@v4
+        continue-on-error: true
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: genydl-sccache-v1-linux-arm64-qt-${{ env.QT_VERSION }}-${{ github.sha }}
+          restore-keys: |
+            genydl-sccache-v1-linux-arm64-qt-${{ env.QT_VERSION }}-
+
+      - name: Set up sccache for Clang
+        id: sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
+        continue-on-error: true
+        with:
+          version: "v0.16.0"
+        env:
+          SCCACHE_GHA_ENABLED: "false"
+
       - name: Configure Linux ARM64
         shell: bash
         run: |
@@ -738,6 +886,7 @@ jobs:
             -DQt6_DIR="${QT_ROOT_DIR}/lib/cmake/Qt6" \
             -DCMAKE_C_COMPILER="${CC}" \
             -DCMAKE_CXX_COMPILER="${CXX}" \
+            -DCMAKE_CXX_COMPILER_LAUNCHER="${{ steps.sccache.outcome == 'success' && 'sccache' || '' }}" \
             -DCMAKE_CXX_STANDARD=23 \
             -DCMAKE_CXX_STANDARD_REQUIRED=ON \
             -DCMAKE_CXX_COMPILER_CLANG_SCAN_DEPS="${CLANG_SCAN_DEPS}" \
@@ -753,6 +902,15 @@ jobs:
         run: |
           set -euo pipefail
           cmake --build build --config Release --parallel
+
+      # Save immediately after compilation, even if packaging later fails.
+      - name: Save compiler cache
+        if: ${{ !cancelled() && steps.sccache.outcome == 'success' && steps.compiler-cache.outputs.cache-hit != 'true' && steps.compiler-cache.outputs.cache-primary-key != '' }}
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: ${{ steps.compiler-cache.outputs.cache-primary-key }}
 
       - name: Create Linux ARM64 AppImage
         shell: bash
