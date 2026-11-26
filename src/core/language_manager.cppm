@@ -62,4 +62,6 @@ private:
     QTranslator* m_translator = nullptr;
 };
 
+#ifndef GENYDL_LANGUAGE_MOC_IN_IMPL
 #include "language_manager.moc"
+#endif
