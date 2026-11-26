@@ -628,6 +628,8 @@ qt_add_executable(${APP_NAME}
     src/core/browser_host_registration.cpp
     src/core/browser_integration_manager.h
     src/core/browser_integration_manager.cpp
+    src/core/native_messaging_host.h
+    src/core/native_messaging_host.cpp
 )
 
 if(TARGET genydl_legacy_module_moc)
@@ -639,12 +641,19 @@ set(GENYDL_CHROMIUM_EXTENSION_ID "" CACHE STRING
     "Legacy shared Chromium extension ID (retained for compatibility)")
 set(GENYDL_CHROME_EXTENSION_ID "" CACHE STRING
     "Published Chrome Web Store extension ID")
+set(GENYDL_EDGE_EXTENSION_ID "" CACHE STRING
+    "Reserved for future Microsoft Edge support")
+set(GENYDL_BRAVE_EXTENSION_ID "" CACHE STRING
+    "Reserved for future Brave support")
+set(GENYDL_VIVALDI_EXTENSION_ID "" CACHE STRING
+    "Reserved for future Vivaldi support")
 # Only set after a real, publicly resolvable store listing is approved.
 # Empty values intentionally hide the end-user installation button.
 set(GENYDL_CHROME_STORE_URL "" CACHE STRING "Verified Chrome Web Store listing URL")
 set(GENYDL_FIREFOX_STORE_URL
     "https://addons.mozilla.org/en-US/firefox/addon/genydl-download-with-genydl/"
     CACHE STRING "Approved Mozilla AMO listing URL")
+set(GENYDL_EDGE_STORE_URL "" CACHE STRING "Reserved for future Edge Store listing")
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/src/core/browser_store_config.h.in"
     "${CMAKE_CURRENT_BINARY_DIR}/browser_store_config.h"
@@ -655,29 +664,9 @@ configure_file(
     @ONLY)
 target_include_directories(${APP_NAME} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 
-qt_add_executable(GenyDLNativeHost
-    src/core/native_messaging_host.cpp
-)
-target_link_libraries(GenyDLNativeHost PRIVATE Qt6::Core Qt6::Network)
-set_target_properties(GenyDLNativeHost PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
-)
-add_dependencies(${APP_NAME} GenyDLNativeHost)
-
-if(APPLE)
-    add_custom_command(TARGET ${APP_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "$<TARGET_FILE:GenyDLNativeHost>"
-            "$<TARGET_BUNDLE_DIR:${APP_NAME}>/Contents/MacOS/GenyDLNativeHost"
-        COMMENT "Bundle browser native-messaging host" VERBATIM)
-else()
-    add_custom_command(TARGET ${APP_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "$<TARGET_FILE:GenyDLNativeHost>"
-            "$<TARGET_FILE_DIR:${APP_NAME}>/$<TARGET_FILE_NAME:GenyDLNativeHost>"
-        COMMENT "Install browser native-messaging host beside GenyDL" VERBATIM)
-endif()
-
+# Native Messaging runs as an early, headless mode of the GenyDL executable.
+# The browser manifest's path points to the same binary; no second distributable
+# process or executable is needed.
 # The Firefox and Chrome Manifest V3 backgrounds have different
 # schemas. Build two browser-ready distributions from the same JS/CSS assets.
 set(GENYDL_BROWSER_STAGE "${CMAKE_BINARY_DIR}/browser-extensions")
@@ -1113,6 +1102,9 @@ if(GENYDL_BUILD_TESTS)
         "${CMAKE_CURRENT_SOURCE_DIR}/src/core")
     target_link_libraries(genydl_browser_bridge_tests PRIVATE
         Qt6::Core Qt6::Gui Qt6::Network Qt6::Test)
+    target_compile_definitions(genydl_browser_bridge_tests PRIVATE
+        GENYDL_NATIVE_TEST_EXECUTABLE="$<TARGET_FILE:${APP_NAME}>")
+    add_dependencies(genydl_browser_bridge_tests ${APP_NAME})
     add_test(NAME genydl_browser_bridge_tests COMMAND genydl_browser_bridge_tests)
 endif()
 
@@ -1314,12 +1306,6 @@ install(TARGETS ${APP_NAME}
     RUNTIME DESTINATION "${GENYDL_RUNTIME_DEST}"
     LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
 )
-
-if(NOT APPLE)
-    install(TARGETS GenyDLNativeHost
-        CONFIGURATIONS Release RelWithDebInfo
-        RUNTIME DESTINATION "${GENYDL_RUNTIME_DEST}")
-endif()
 
 if(APPLE)
     install(TARGETS GenyDLUpdaterHelper
