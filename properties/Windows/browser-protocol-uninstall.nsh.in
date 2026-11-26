@@ -1,0 +1,1 @@
+DeleteRegKey HKCU "Software\Classes\genydl"

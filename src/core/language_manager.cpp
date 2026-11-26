@@ -7,6 +7,13 @@ module;
 #include <QSettings>
 #include <QTranslator>
 #include <iterator>
+#ifdef GENYDL_LANGUAGE_MOC_IN_IMPL
+#include <QObject>
+#include <QString>
+#include <QVariantList>
+#include <QtCore/qtmochelpers.h>
+#include <memory>
+#endif
 
 module genydl.core.language_manager;
 
@@ -308,3 +315,9 @@ bool LanguageManager::applyLanguage(bool persist)
     }
     return true;
 }
+
+#ifdef GENYDL_LANGUAGE_MOC_IN_IMPL
+// Keep generated meta-object definitions in this named module, outside the
+// exported interface. Qt's generated moc is still built from the same class.
+#include "language_manager.moc"
+#endif

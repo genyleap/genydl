@@ -23,9 +23,7 @@
 
 module;
 
-#ifndef Q_MOC_RUN
 export module genydl.services.power_monitor;
-#endif
 
 #ifdef Q_MOC_RUN
 #define GENYDL_MODULE_EXPORT

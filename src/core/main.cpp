@@ -11,6 +11,15 @@
 #include <QFile>
 #include <QIcon>
 #include <QUrl>
+#include <QFileInfo>
+#include <QSet>
+#include "browser_activation.h"
+#include "browser_host_registration.h"
+#include "browser_integration_manager.h"
+#include "native_messaging_host.h"
+#ifdef Q_OS_MACOS
+#include "macos_browser_integration.h"
+#endif
 
 import genydl.core.downloadmanager;
 import genydl.core.appcontroller;
@@ -89,6 +98,12 @@ inline void configureGraphicsBackend()
 
 auto main(int argc, char *argv[]) -> int
 {
+    // Native Messaging is a headless mode of this very same executable.
+    // Test argv before QApplication/Quick are initialized: Firefox and
+    // Chrome use stdio to exchange binary length-prefixed JSON.
+    if (isNativeMessagingInvocation(argc, argv))
+        return runNativeMessagingHost(argc, argv);
+
 #ifdef Q_OS_MACOS
     // Native Cocoa context menus may ask AppKit to synthesize placeholder
     // images for otherwise icon-less actions. On macOS 26 this can enter the
@@ -116,6 +131,7 @@ auto main(int argc, char *argv[]) -> int
     // Create DownloadManager instance
     DownloadManager manager(&torrentSession, &gatewayService);
     UpdateClient updateClient;
+    BrowserIntegrationManager browserIntegration;
     GitHubReleaseService githubReleaseService;
     GitHubReleaseTrackerService releaseCenterService;
     AppController appController(&manager);
@@ -148,6 +164,7 @@ auto main(int argc, char *argv[]) -> int
 
     // Expose the manager to QML
     engine.rootContext()->setContextProperty("downloadManager", &manager);
+    engine.rootContext()->setContextProperty("browserIntegration", &browserIntegration);
     engine.rootContext()->setContextProperty("torrentSession", &torrentSession);
     engine.rootContext()->setContextProperty("gatewayService", &gatewayService);
     engine.rootContext()->setContextProperty("updateClient", &updateClient);
@@ -162,6 +179,58 @@ auto main(int argc, char *argv[]) -> int
     if (!downloadsRoot.isEmpty()) {
         QDir().mkpath(downloadsRoot);
     }
+
+    // Accept downloads from a browser without stealing focus from the user.
+    // Only the first instance owns the user-scoped local socket; secondary
+    // activations hand over their URL and exit.
+    QSet<QString> reservedBrowserPaths;
+    BrowserActivation browserActivation([&](const QUrl& url, const QString& filename) -> bool {
+        if (!BrowserActivation::isSafeHttpUrl(url) || downloadsRoot.isEmpty())
+            return false;
+        QString destination = manager.resolveDownloadPath(
+            url.toString(QUrl::FullyEncoded), QString(), downloadsRoot);
+        if (destination.isEmpty()) return false;
+        if (!filename.isEmpty()) {
+            // The receiver already stripped every untrusted path component.
+            destination = QFileInfo(destination).dir().filePath(filename);
+        }
+        QFileInfo file(destination);
+        const QString suffix = file.completeSuffix();
+        const QString base = suffix.isEmpty() ? file.fileName()
+            : file.fileName().left(file.fileName().size() - suffix.size() - 1);
+        const QString ext = suffix.isEmpty() ? QString() : QStringLiteral(".") + suffix;
+        QString uniquePath = destination;
+        int collision = 1;
+        while (reservedBrowserPaths.contains(uniquePath)
+               || QFileInfo::exists(uniquePath)
+               || QFileInfo::exists(uniquePath + QStringLiteral(".part"))
+               || QFileInfo::exists(uniquePath + QStringLiteral(".part0"))) {
+            uniquePath = file.dir().filePath(
+                base + QStringLiteral(" (%1)").arg(collision++) + ext);
+            if (collision > 10000) return false;
+        }
+        if (!QDir().mkpath(QFileInfo(uniquePath).absolutePath())) return false;
+        reservedBrowserPaths.insert(uniquePath);
+        const int before = manager.taskCount();
+        manager.addDownload(url.toString(QUrl::FullyEncoded), uniquePath);
+        const bool accepted = manager.taskCount() > before;
+        if (!accepted) reservedBrowserPaths.remove(uniquePath);
+        return accepted;
+    });
+    browserActivation.setFrontendReady(false);
+    if (!browserActivation.start(app.arguments().mid(1)))
+        return 0;
+
+    // Only an explicit user confirmation from the Add Download dialog resolves
+    // browser-originated prompts; opening a prompt never starts a transfer.
+    engine.rootContext()->setContextProperty("browserActivation", &browserActivation);
+#ifdef Q_OS_MACOS
+    QObject::connect(&browserActivation, &BrowserActivation::promptRequested,
+                     &app, [](const QString&, const QString&) {
+        activateMacGenyDL();
+    });
+#endif
+
     engine.rootContext()->setContextProperty("documentsFolder", downloadsRoot);
     engine.rootContext()->setContextProperty("faFontPath", fontPath);
 
@@ -190,6 +259,11 @@ auto main(int argc, char *argv[]) -> int
         return -1;
 
     appController.setMainWindow(engine.rootObjects().first());
+    browserActivation.setFrontendReady(true);
+    registerBrowserNativeHosts();
+#ifdef Q_OS_MACOS
+    registerMacBrowserService(&browserActivation);
+#endif
 
     return app.exec();
 }

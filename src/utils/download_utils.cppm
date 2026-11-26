@@ -18,11 +18,10 @@
 module;
 #include <QUrl>
 #include <QString>
+#include <QStringList>
 #include <QtGlobal>
 
-#ifndef Q_MOC_RUN
 export module genydl.utils.download_utils;
-#endif
 
 #ifdef Q_MOC_RUN
 #define GENYDL_MODULE_EXPORT
@@ -157,7 +156,7 @@ QString extractChecksumFromText(const QString& text,
  * @param path Desired file path.
  * @return A unique, non-existing file path.
  */
-QString uniqueFilePath(const QString& path);
+QString uniqueFilePath(const QString& path, const QStringList& reservedPaths = {});
 
 /**
  * @brief Checks whether a normalized path exists and refers to a regular file.

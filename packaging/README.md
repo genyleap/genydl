@@ -1,6 +1,13 @@
 # Packaging Notes
 
-Browser integration will be reintroduced later.
+Experimental browser integration lives in `browser-extension/` and the native
+messaging bridge. The CMake `browser-extension-zip` target creates distinct
+`GenyDL-Firefox-extension.zip` and `GenyDL-Chromium-extension.zip` packages
+with browser-correct Manifest V3 declarations. Native host manifests can be
+registered/repaired in **Configuration → Browsers** in the desktop app; this
+does not silently install extensions or override browser permission dialogs.
+See `docs/browser-integration.md` for the protocol, distribution prerequisites,
+manual tests and platform limitations. Safari Web Extension is not yet shipped.
 
 ## Update Manifest
 

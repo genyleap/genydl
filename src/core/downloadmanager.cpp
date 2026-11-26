@@ -737,6 +737,17 @@ void DownloadManager::setTorrentSeedTimeMinutes(int minutes)
     scheduleSave();
 }
 
+QString DownloadManager::availableDownloadPath(const QString& desiredPath) const
+{
+    QStringList reserved;
+    reserved.reserve(m_queue.size());
+    for (const DownloaderTask* task : m_queue) {
+        if (task && !task->fileName().isEmpty())
+            reserved.append(QFileInfo(task->fileName()).absoluteFilePath());
+    }
+    return utils::uniqueFilePath(desiredPath, reserved);
+}
+
 DownloaderTask* DownloadManager::addDownloadInternal(const QString &urlStr,
                                                      const QString &filePath,
                                                      const QString &queueName,
@@ -828,7 +839,7 @@ DownloaderTask* DownloadManager::addDownloadInternal(const QString &urlStr,
             normalizedPath = QDir(folder).filePath(info.fileName());
         }
     }
-    normalizedPath = utils::uniqueFilePath(normalizedPath);
+    normalizedPath = availableDownloadPath(normalizedPath);
     if (!normalizedPath.isEmpty()) {
         QDir().mkpath(QFileInfo(normalizedPath).absolutePath());
     }
@@ -896,7 +907,7 @@ DownloaderTask* DownloadManager::addIpfsInternal(const QString &urlStr,
         }
         normalizedPath = QDir(folder).filePath(suggestedName);
     }
-    normalizedPath = utils::uniqueFilePath(normalizedPath);
+    normalizedPath = availableDownloadPath(normalizedPath);
     if (!normalizedPath.isEmpty()) {
         QDir().mkpath(QFileInfo(normalizedPath).absolutePath());
     }

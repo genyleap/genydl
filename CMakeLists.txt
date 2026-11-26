@@ -555,6 +555,64 @@ set(GENYDL_MODULE_IFS
     src/services/update_client.cppm
 )
 
+# Qt < 6.13 AUTOGEN rejects Q_OBJECT in .cppm module interface units,
+# although the moc executable itself can parse those sources. Generate the
+# included .moc files explicitly for all such interfaces and skip AUTOMOC
+# on the module units. This keeps C++ module scanning and Qt 6.12 compatible.
+set(GENYDL_QOBJECT_MODULE_IFS
+    src/core/language_manager.cppm
+    src/core/appcontroller.cppm
+    src/core/downloadertask.cppm
+    src/core/torrenttask.cppm
+    src/core/downloadmanager.cppm
+    src/core/downloadmodel.cppm
+    src/services/torrent_session.cppm
+    src/services/gateway_service.cppm
+    src/services/github_release_service.cppm
+    src/services/release_center_service.cppm
+    src/services/update_client.cppm
+)
+
+if(Qt6Core_VERSION VERSION_LESS "6.13.0")
+    # MSVC 19.52 on native ARM64 crashes when LanguageManager's generated
+    # meta-object definitions are compiled inside its exported module interface.
+    # Keep the module and generate the same moc, but emit its definitions in
+    # the non-exported implementation unit for this compiler configuration.
+    if(MSVC AND GENYDL_ARCH STREQUAL "arm64"
+            AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "19.50")
+        set_source_files_properties(
+            src/core/language_manager.cppm src/core/language_manager.cpp
+            PROPERTIES COMPILE_DEFINITIONS GENYDL_LANGUAGE_MOC_IN_IMPL=1)
+    endif()
+    # The .moc is explicitly generated from the module interface below, not
+    # from the implementation file (even when its conditional include is off).
+    set_source_files_properties(src/core/language_manager.cpp
+        PROPERTIES SKIP_AUTOMOC ON)
+
+    set(GENYDL_LEGACY_MODULE_MOC_DIR
+        "${CMAKE_CURRENT_BINARY_DIR}/genydl_module_moc")
+    set(GENYDL_LEGACY_MODULE_MOC_OUTPUTS)
+    foreach(genydl_module IN LISTS GENYDL_QOBJECT_MODULE_IFS)
+        set_source_files_properties("${genydl_module}" PROPERTIES SKIP_AUTOMOC ON)
+        get_filename_component(genydl_module_name "${genydl_module}" NAME_WE)
+        set(genydl_moc_output
+            "${GENYDL_LEGACY_MODULE_MOC_DIR}/${genydl_module_name}.moc")
+        add_custom_command(
+            OUTPUT "${genydl_moc_output}"
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${GENYDL_LEGACY_MODULE_MOC_DIR}"
+            COMMAND $<TARGET_FILE:Qt6::moc>
+                -o "${genydl_moc_output}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/${genydl_module}"
+            DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${genydl_module}" Qt6::moc
+            COMMENT "Generate Qt 6.12 compatible moc for ${genydl_module}"
+            VERBATIM
+        )
+        list(APPEND GENYDL_LEGACY_MODULE_MOC_OUTPUTS "${genydl_moc_output}")
+    endforeach()
+    add_custom_target(genydl_legacy_module_moc
+        DEPENDS ${GENYDL_LEGACY_MODULE_MOC_OUTPUTS})
+endif()
+
 set(GENYDL_IMPL_SOURCES
     src/ui/tray_icon_provider.cpp
     src/core/language_manager.cpp
@@ -579,7 +637,109 @@ qt_add_executable(${APP_NAME}
     WIN32
     MACOSX_BUNDLE
     src/core/main.cpp
+    src/core/browser_activation.h
+    src/core/browser_activation.cpp
+    src/core/browser_host_registration.h
+    src/core/browser_host_registration.cpp
+    src/core/browser_integration_manager.h
+    src/core/browser_integration_manager.cpp
+    src/core/native_messaging_host.h
+    src/core/native_messaging_host.cpp
 )
+
+if(TARGET genydl_legacy_module_moc)
+    add_dependencies(${APP_NAME} genydl_legacy_module_moc)
+    target_include_directories(${APP_NAME} PRIVATE "${GENYDL_LEGACY_MODULE_MOC_DIR}")
+endif()
+
+set(GENYDL_CHROMIUM_EXTENSION_ID "" CACHE STRING
+    "Legacy shared Chromium extension ID (retained for compatibility)")
+set(GENYDL_CHROME_EXTENSION_ID "" CACHE STRING
+    "Published Chrome Web Store extension ID")
+set(GENYDL_EDGE_EXTENSION_ID "" CACHE STRING
+    "Reserved for future Microsoft Edge support")
+set(GENYDL_BRAVE_EXTENSION_ID "" CACHE STRING
+    "Reserved for future Brave support")
+set(GENYDL_VIVALDI_EXTENSION_ID "" CACHE STRING
+    "Reserved for future Vivaldi support")
+# Only set after a real, publicly resolvable store listing is approved.
+# Empty values intentionally hide the end-user installation button.
+set(GENYDL_CHROME_STORE_URL "" CACHE STRING "Verified Chrome Web Store listing URL")
+set(GENYDL_FIREFOX_STORE_URL
+    "https://addons.mozilla.org/en-US/firefox/addon/genydl-download-with-genydl/"
+    CACHE STRING "Approved Mozilla AMO listing URL")
+set(GENYDL_EDGE_STORE_URL "" CACHE STRING "Reserved for future Edge Store listing")
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/core/browser_store_config.h.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/browser_store_config.h"
+    @ONLY)
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/core/browser_config.h.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/browser_config.h"
+    @ONLY)
+target_include_directories(${APP_NAME} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+
+# Native Messaging runs as an early, headless mode of the GenyDL executable.
+# The browser manifest's path points to the same binary; no second distributable
+# process or executable is needed.
+# Discard the obsolete standalone native-host executable from existing
+# development build folders. The browser now invokes the GenyDL binary itself.
+if(APPLE)
+    add_custom_command(TARGET ${APP_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E rm -f
+            "$<TARGET_BUNDLE_DIR:${APP_NAME}>/Contents/MacOS/GenyDLNativeHost"
+        COMMENT "Remove obsolete standalone native host from app bundle"
+        VERBATIM)
+else()
+    add_custom_command(TARGET ${APP_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E rm -f
+            "$<TARGET_FILE_DIR:${APP_NAME}>/GenyDLNativeHost$<TARGET_FILE_SUFFIX:${APP_NAME}>"
+        COMMENT "Remove obsolete standalone native host"
+        VERBATIM)
+endif()
+
+# The Firefox and Chrome Manifest V3 backgrounds have different
+# schemas. Build two browser-ready distributions from the same JS/CSS assets.
+set(GENYDL_BROWSER_STAGE "${CMAKE_BINARY_DIR}/browser-extensions")
+foreach(genydl_browser IN ITEMS firefox chrome)
+    file(MAKE_DIRECTORY "${GENYDL_BROWSER_STAGE}/${genydl_browser}")
+    foreach(genydl_asset IN ITEMS background.js options.html options.js icon128.png)
+        configure_file(
+            "${CMAKE_CURRENT_SOURCE_DIR}/browser-extension/${genydl_asset}"
+            "${GENYDL_BROWSER_STAGE}/${genydl_browser}/${genydl_asset}" COPYONLY)
+    endforeach()
+endforeach()
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/browser-extension/manifest.json"
+    "${GENYDL_BROWSER_STAGE}/firefox/manifest.json" COPYONLY)
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/browser-extension/manifest.chromium.json"
+    "${GENYDL_BROWSER_STAGE}/chrome/manifest.json" COPYONLY)
+
+add_custom_target(browser-extension-zip
+    COMMAND ${CMAKE_COMMAND} -E chdir "${GENYDL_BROWSER_STAGE}/firefox"
+        ${CMAKE_COMMAND} -E tar cf
+        "${CMAKE_BINARY_DIR}/GenyDL-Firefox-extension.zip" --format=zip
+        "manifest.json" "background.js" "options.html" "options.js" "icon128.png"
+    COMMAND ${CMAKE_COMMAND} -E chdir "${GENYDL_BROWSER_STAGE}/chrome"
+        ${CMAKE_COMMAND} -E tar cf
+        "${CMAKE_BINARY_DIR}/GenyDL-Chrome-extension.zip" --format=zip
+        "manifest.json" "background.js" "options.html" "options.js" "icon128.png"
+    COMMENT "Package separate Firefox and Chrome WebExtensions"
+    VERBATIM)
+
+
+if(WIN32)
+    target_link_libraries(${APP_NAME} PRIVATE advapi32)
+endif()
+
+if(APPLE)
+    enable_language(OBJCXX)
+    target_sources(${APP_NAME} PRIVATE
+        src/core/macos_browser_integration.h
+        src/core/macos_browser_integration.mm)
+    target_link_libraries(${APP_NAME} PRIVATE "-framework AppKit")
+endif()
 
 set_target_properties(${APP_NAME} PROPERTIES OUTPUT_NAME "${GENYDL_FINAL_OUTPUT_NAME}")
 
@@ -923,6 +1083,11 @@ if(GENYDL_BUILD_TESTS)
     qt_add_executable(genydl_backend_tests
         tests/backend_tests.cpp
     )
+    if(TARGET genydl_legacy_module_moc)
+        add_dependencies(genydl_backend_tests genydl_legacy_module_moc)
+        target_include_directories(genydl_backend_tests PRIVATE
+            "${GENYDL_LEGACY_MODULE_MOC_DIR}")
+    endif()
 
     target_sources(genydl_backend_tests
         PUBLIC
@@ -957,6 +1122,21 @@ if(GENYDL_BUILD_TESTS)
     )
 
     add_test(NAME genydl_backend_tests COMMAND genydl_backend_tests)
+
+    # Lightweight transport and URL validation tests (no QML/modules needed).
+    qt_add_executable(genydl_browser_bridge_tests
+        tests/browser_bridge_tests.cpp
+        src/core/browser_activation.h
+        src/core/browser_activation.cpp
+    )
+    target_include_directories(genydl_browser_bridge_tests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/core")
+    target_link_libraries(genydl_browser_bridge_tests PRIVATE
+        Qt6::Core Qt6::Gui Qt6::Network Qt6::Test)
+    target_compile_definitions(genydl_browser_bridge_tests PRIVATE
+        GENYDL_NATIVE_TEST_EXECUTABLE="$<TARGET_FILE:${APP_NAME}>")
+    add_dependencies(genydl_browser_bridge_tests ${APP_NAME})
+    add_test(NAME genydl_browser_bridge_tests COMMAND genydl_browser_bridge_tests)
 endif()
 
 # -----------------------------------------------------------------------------
@@ -1171,6 +1351,8 @@ else()
 endif()
 
 if(UNIX AND NOT APPLE)
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/packaging/genydl.desktop"
+        DESTINATION "share/applications")
     if(EXISTS "${GENYDL_LINUX_ICON_PNG}")
         install(FILES "${GENYDL_LINUX_ICON_PNG}"
             DESTINATION "share/icons/hicolor/512x512/apps"
@@ -1366,6 +1548,31 @@ elseif(APPLE)
 
 else()
     set(CPACK_GENERATOR "TGZ")
+endif()
+
+if(WIN32)
+    # CPack writes these values into quoted CMake strings in CPackConfig.cmake.
+    # Escape the raw NSIS script exactly once for that serialization layer.
+    configure_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/properties/Windows/browser-protocol-install.nsh.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/browser-protocol-install.nsh" @ONLY)
+    configure_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/properties/Windows/browser-protocol-uninstall.nsh.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/browser-protocol-uninstall.nsh" @ONLY)
+    file(READ "${CMAKE_CURRENT_BINARY_DIR}/browser-protocol-install.nsh"
+        GENYDL_BROWSER_PROTOCOL_INSTALL_NSIS)
+    file(READ "${CMAKE_CURRENT_BINARY_DIR}/browser-protocol-uninstall.nsh"
+        GENYDL_BROWSER_PROTOCOL_UNINSTALL_NSIS)
+    foreach(genydl_nsis_script IN ITEMS
+            GENYDL_BROWSER_PROTOCOL_INSTALL_NSIS
+            GENYDL_BROWSER_PROTOCOL_UNINSTALL_NSIS)
+        string(REPLACE "\\" "\\\\" ${genydl_nsis_script} "${${genydl_nsis_script}}")
+        string(REPLACE "\"" "\\\"" ${genydl_nsis_script} "${${genydl_nsis_script}}")
+    endforeach()
+    string(APPEND CPACK_NSIS_EXTRA_INSTALL_COMMANDS
+        "\n${GENYDL_BROWSER_PROTOCOL_INSTALL_NSIS}")
+    string(APPEND CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS
+        "\n${GENYDL_BROWSER_PROTOCOL_UNINSTALL_NSIS}")
 endif()
 
 include(CPack)

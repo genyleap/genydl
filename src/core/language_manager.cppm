@@ -12,8 +12,8 @@ module;
 
 #ifndef Q_MOC_RUN
 #  include <QtCore/qtmochelpers.h>
-export module genydl.core.language_manager;
 #endif
+export module genydl.core.language_manager;
 
 #ifdef Q_MOC_RUN
 #define GENYDL_MODULE_EXPORT
@@ -62,4 +62,6 @@ private:
     QTranslator* m_translator = nullptr;
 };
 
+#ifndef GENYDL_LANGUAGE_MOC_IN_IMPL
 #include "language_manager.moc"
+#endif

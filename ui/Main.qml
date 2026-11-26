@@ -94,12 +94,15 @@ ApplicationWindow {
     property string categoryFilter: "All"
     property string sourceFilter: "All"
     property string searchText: ""
+    // An intercepted browser download is never added before explicit approval.
+    property bool browserPromptActive: false
 
     property int sortIndex: 0
     property bool sortAscending: true
     property int themeMode: Colors.modeSystem
     property int downloadsViewMode: 0
     property int configurationTabIndex: 0
+    property var browserHostRows: []
     property string lastUpdateNotificationVersion: ""
 
     property int selectedTaskIndex: -1
@@ -393,6 +396,36 @@ ApplicationWindow {
     function promptRemoveRows() { return Utils.promptRemoveRows.apply(this, arguments) }
     function confirmRemovePending() { return Utils.confirmRemovePending.apply(this, arguments) }
     function executeRowAction() { return Utils.executeRowAction.apply(this, arguments) }
+    // ComboBox.currentValue is undefined while its dynamic model has no current
+    // selection. Never assign it directly to a typed QString QML property or
+    // pass it to a QString argument in the download manager.
+    function selectedAddQueue() {
+        const names = downloadManager.queueNames || []
+        const value = addDialogQueueCombo.currentValue
+        if (value !== undefined && value !== null) {
+            const selected = String(value)
+            if (names.indexOf(selected) >= 0)
+                return selected
+        }
+        if (names.indexOf(appRoot.addDefaultQueue) >= 0)
+            return appRoot.addDefaultQueue
+        const fallback = downloadManager.defaultQueueName()
+        if (names.indexOf(fallback) >= 0)
+            return String(fallback)
+        return names.length > 0 ? String(names[0]) : "General"
+    }
+    function selectedAddCategory() {
+        const names = downloadManager.categoryNames() || []
+        const value = addDialogCategoryCombo.currentValue
+        if (value !== undefined && value !== null) {
+            const selected = String(value)
+            if (names.indexOf(selected) >= 0)
+                return selected
+        }
+        if (names.indexOf(appRoot.addDefaultCategory) >= 0)
+            return appRoot.addDefaultCategory
+        return names.length > 0 ? String(names[0]) : "Auto"
+    }
     function submitDownload() { return Utils.submitDownload.apply(this, arguments) }
     function downloadPathForAsset() { return Utils.downloadPathForAsset.apply(this, arguments) }
     function submitGitHubReleaseAssets() { return Utils.submitGitHubReleaseAssets.apply(this, arguments) }
@@ -407,6 +440,35 @@ ApplicationWindow {
         if (t.length > 0)
             addDialogUrlField.text = t
     }
+    function openBrowserDownloadPrompt(url, filename) {
+        // Avoid overwriting a dialog the user was already editing.
+        if (addUrlPopup.visible) {
+            browserActivation.finishPrompt(false)
+            return
+        }
+        appRoot.openAddUrlDialog()
+        browserPromptActive = true
+        addDialogUrlField.text = url
+        addDialogFilenameField.text = filename || ""
+        if (appRoot.visibility === Window.Minimized)
+            appRoot.visibility = Window.Windowed
+        appRoot.show()
+        appRoot.raise()
+        appRoot.requestActivate()
+        addDialogUrlField.forceActiveFocus()
+    }
+
+    Connections {
+        target: browserActivation
+        function onPromptRequested(url, filename) {
+            appRoot.openBrowserDownloadPrompt(url, filename)
+        }
+        function onPromptAborted() {
+            if (appRoot.browserPromptActive)
+                addUrlPopup.close()
+        }
+    }
+
     function isTorrentLikeInput() { return Utils.isTorrentLikeInput.apply(this, arguments) }
     function loadQueueEditor() { return Utils.loadQueueEditor.apply(this, arguments) }
     function applyQueueEditor() { return Utils.applyQueueEditor.apply(this, arguments) }
@@ -2235,6 +2297,22 @@ ApplicationWindow {
                     }
                 }
 
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 10
+                    visible: appRoot.browserPromptActive
+
+                    Controls.Label {
+                        text: qsTr("Save as")
+                        Layout.preferredWidth: 108
+                    }
+                    Controls.TextField {
+                        id: addDialogFilenameField
+                        Layout.fillWidth: true
+                        placeholderText: qsTr("File name (editable)")
+                    }
+                }
+
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 15
@@ -2368,8 +2446,59 @@ ApplicationWindow {
             }
 
         }
+        onClosed: {
+            if (appRoot.browserPromptActive) {
+                appRoot.browserPromptActive = false
+                browserActivation.finishPrompt(false)
+            }
+        }
         onAccepted: {
             addDialogErrorLabel.text = ""
+            if (appRoot.browserPromptActive) {
+                const proposedName = addDialogFilenameField.text.trim()
+                const safeName = proposedName.length > 0
+                    ? browserActivation.sanitizeFilename(proposedName) : ""
+                if (proposedName.length > 0 && safeName !== proposedName) {
+                    appRoot.appendNotification(
+                        qsTr("Invalid file name"),
+                        qsTr("The file name cannot contain directories or reserved characters."),
+                        "warning")
+                    browserActivation.finishPrompt(false)
+                    appRoot.browserPromptActive = false
+                    return
+                }
+                const before = downloadManager.taskCount()
+                const output = safeName.length > 0
+                    ? appRoot.downloadPathForAsset(addDialogPathField.text, safeName)
+                    : addDialogPathField.text
+                const added = appRoot.submitDownload(
+                    addDialogUrlField.text,
+                    output,
+                    appRoot.selectedAddQueue(),
+                    appRoot.selectedAddCategory(),
+                    addDialogPausedSwitch.checked,
+                    addDialogSegmentsSpin.value,
+                    addDialogAdaptiveSwitch.checked)
+                if (!added || downloadManager.taskCount() <= before) {
+                    browserActivation.finishPrompt(false)
+                    return
+                }
+                appRoot.addDefaultOutputPath = addDialogPathField.text.trim()
+                appRoot.addDefaultQueue = appRoot.selectedAddQueue()
+                appRoot.addDefaultCategory = appRoot.selectedAddCategory()
+                appRoot.addDefaultSegments = addDialogSegmentsSpin.value
+                appRoot.addDefaultAdaptive = addDialogAdaptiveSwitch.checked
+                appRoot.addDefaultStartPaused = addDialogPausedSwitch.checked
+                browserActivation.finishPrompt(true)
+                appRoot.browserPromptActive = false
+                // Make the new task visible even if an older category, queue
+                // or status filter was saved (e.g. Videos during a ZIP transfer).
+                appRoot.setStatusScope("All")
+                appRoot.searchText = ""
+                appRoot.pageIndex = 0
+                addUrlPopup.close()
+                return
+            }
             if (appRoot.isTorrentLikeInput(addDialogUrlField.text)) {
                 if (!torrentSession.available) {
                     addDialogErrorLabel.text = qsTr("BitTorrent support is not available in this build.")
@@ -2378,11 +2507,11 @@ ApplicationWindow {
                 downloadManager.addTorrentDownload(
                             addDialogUrlField.text.trim(),
                             addDialogPathField.text.trim(),
-                            addDialogQueueCombo.currentValue,
-                            addDialogCategoryCombo.currentValue,
+                            appRoot.selectedAddQueue(),
+                            appRoot.selectedAddCategory(),
                             addDialogPausedSwitch.checked)
                 appRoot.addDefaultOutputPath = addDialogPathField.text.trim()
-                appRoot.addDefaultQueue = addDialogQueueCombo.currentValue
+                appRoot.addDefaultQueue = appRoot.selectedAddQueue()
                 appRoot.addDefaultStartPaused = addDialogPausedSwitch.checked
                 addDialogUrlField.text = ""
                 addUrlPopup.close()
@@ -2390,8 +2519,8 @@ ApplicationWindow {
             }
             if (githubReleaseService.isReleaseUrl(addDialogUrlField.text)) {
                 appRoot.addDefaultOutputPath = addDialogPathField.text.trim()
-                appRoot.addDefaultQueue = addDialogQueueCombo.currentValue
-                appRoot.addDefaultCategory = addDialogCategoryCombo.currentValue
+                appRoot.addDefaultQueue = appRoot.selectedAddQueue()
+                appRoot.addDefaultCategory = appRoot.selectedAddCategory()
                 appRoot.addDefaultSegments = addDialogSegmentsSpin.value
                 appRoot.addDefaultAdaptive = addDialogAdaptiveSwitch.checked
                 appRoot.addDefaultStartPaused = addDialogPausedSwitch.checked
@@ -2411,8 +2540,8 @@ ApplicationWindow {
             const added = appRoot.submitDownload(
                             addDialogUrlField.text,
                             addDialogPathField.text,
-                            addDialogQueueCombo.currentValue,
-                            addDialogCategoryCombo.currentValue,
+                            appRoot.selectedAddQueue(),
+                            appRoot.selectedAddCategory(),
                             addDialogPausedSwitch.checked,
                             addDialogSegmentsSpin.value,
                             addDialogAdaptiveSwitch.checked
@@ -2422,8 +2551,8 @@ ApplicationWindow {
             }
 
             appRoot.addDefaultOutputPath = addDialogPathField.text.trim()
-            appRoot.addDefaultQueue = addDialogQueueCombo.currentValue
-            appRoot.addDefaultCategory = addDialogCategoryCombo.currentValue
+            appRoot.addDefaultQueue = appRoot.selectedAddQueue()
+            appRoot.addDefaultCategory = appRoot.selectedAddCategory()
             appRoot.addDefaultSegments = addDialogSegmentsSpin.value
             appRoot.addDefaultAdaptive = addDialogAdaptiveSwitch.checked
             appRoot.addDefaultStartPaused = addDialogPausedSwitch.checked
@@ -2800,13 +2929,18 @@ ApplicationWindow {
                 id: configurationTabs
                 Layout.fillWidth: true
                 currentIndex: appRoot.configurationTabIndex
-                onCurrentIndexChanged: appRoot.configurationTabIndex = currentIndex
+                onCurrentIndexChanged: {
+                    appRoot.configurationTabIndex = currentIndex
+                    if (currentIndex === 5)
+                        appRoot.browserHostRows = browserIntegration.statuses()
+                }
 
                 Controls.TabButton { text: qsTr("General") }
                 Controls.TabButton { text: qsTr("Queues") }
                 Controls.TabButton { text: qsTr("Network") }
                 Controls.TabButton { text: qsTr("Updates") }
                 Controls.TabButton { text: qsTr("Release Center") }
+                Controls.TabButton { text: qsTr("Browsers") }
             }
 
             StackLayout {
@@ -3599,6 +3733,184 @@ ApplicationWindow {
                         spacing: 12
 
                         Controls.ReleaseCenterSettings { Layout.fillWidth: true }
+
+                        Item { Layout.fillHeight: true }
+                    }
+                }
+
+                ScrollView {
+                    id: browserConfigView
+                    Timer {
+                        interval: 12000
+                        repeat: true
+                        running: configurationDialog.visible
+                            && appRoot.configurationTabIndex === 5
+                        onTriggered: appRoot.browserHostRows = browserIntegration.statuses()
+                    }
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+
+                    ColumnLayout {
+                        width: Math.max(320, browserConfigView.availableWidth)
+                        spacing: 12
+
+                        Controls.GroupBox {
+                            title: qsTr("Download with GenyDL")
+                            Layout.fillWidth: true
+                            implicitHeight: browserSetupLayout.implicitHeight
+                                + topPadding + bottomPadding
+
+                            ColumnLayout {
+                                id: browserSetupLayout
+                                width: parent.width
+                                spacing: 8
+
+                                Controls.Label {
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
+                                    text: qsTr("Choose which browsers can send downloads to GenyDL. Turn a switch on or off at any time.")
+                                }
+                                Controls.Label {
+                                    Layout.fillWidth: true
+                                    color: Colors.textMuted
+                                    wrapMode: Text.WordWrap
+                                    text: qsTr("The browser extension must also be installed and allowed by that browser. Downloads remain manual by default. Automatic capture is an optional setting inside the extension.")
+                                }
+                            }
+                        }
+
+                        Repeater {
+                            model: appRoot.browserHostRows
+                            delegate: Controls.GroupBox {
+                                required property var modelData
+                                readonly property var browserRow: modelData
+                                title: ""
+                                Layout.fillWidth: true
+                                implicitHeight: browserEntryLayout.implicitHeight
+                                    + topPadding + bottomPadding
+
+                                ColumnLayout {
+                                    id: browserEntryLayout
+                                    width: parent.width
+                                    spacing: 8
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 12
+
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 4
+                                            Controls.Label {
+                                                Layout.fillWidth: true
+                                                font.bold: true
+                                                text: browserRow.name
+                                            }
+                                            Controls.Label {
+                                                Layout.fillWidth: true
+                                                wrapMode: Text.WordWrap
+                                                color: Colors.textMuted
+                                                text: browserRow.supported
+                                                    ? (!browserRow.enabled
+                                                        ? qsTr("Off")
+                                                        : browserRow.connected
+                                                            ? qsTr("Connected — extension responded to GenyDL.")
+                                                            : browserRow.ready
+                                                                ? qsTr("Not connected — install or reload the browser extension.")
+                                                                : qsTr("Connection setup failed."))
+                                                    : qsTr("Safari extension is not built or installed yet.")
+                                            }
+                                        }
+
+                                        Controls.Switch {
+                                            text: qsTr("Use")
+                                            enabled: browserRow.supported
+                                            checked: browserRow.enabled
+                                            onToggled: {
+                                                const wanted = checked
+                                                const ok = browserIntegration.setEnabled(browserRow.code, wanted)
+                                                appRoot.browserHostRows = browserIntegration.statuses()
+                                                if (!ok)
+                                                    appRoot.appendNotification(
+                                                        qsTr("Browser setup"),
+                                                        qsTr("Could not update the connection. Check that GenyDL Native Host is installed."),
+                                                        "warning")
+                                            }
+                                        }
+                                    }
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        visible: browserRow.supported && browserRow.enabled
+                                        spacing: 8
+
+                                        Controls.Label {
+                                            Layout.fillWidth: true
+                                            wrapMode: Text.WordWrap
+                                            font.pixelSize: Typography.t4
+                                            color: Colors.textMuted
+                                            text: !browserRow.browserInstalled
+                                                ? qsTr("Browser not detected on this computer.")
+                                                : browserRow.connected
+                                                    ? qsTr("Ready. Right-click a link and choose Download with GenyDL.")
+                                                    : browserRow.storeInstallAvailable
+                                                        ? qsTr("Install GenyDL from the official browser store and accept the browser permission prompt.")
+                                                        : browserRow.code === "firefox"
+                                                            ? qsTr("Development setup: load manifest.json as a temporary add-on in Firefox.")
+                                                            : qsTr("Development setup: enable Developer mode, then Load unpacked using the GenyDL extension folder.")
+                                        }
+
+                                        Controls.Button {
+                                            text: qsTr("Extension files")
+                                            visible: !browserRow.connected
+                                                && !browserRow.storeInstallAvailable
+                                            enabled: browserRow.extensionFilesAvailable
+                                            onClicked: {
+                                                if (!browserIntegration.revealExtensionFiles(browserRow.code))
+                                                    appRoot.appendNotification(
+                                                        qsTr("Browser setup"),
+                                                        qsTr("Extension files are missing from this development build."),
+                                                        "warning")
+                                            }
+                                        }
+
+                                        Controls.Button {
+                                            text: qsTr("Install from official store")
+                                            visible: !browserRow.connected && browserRow.storeInstallAvailable
+                                            enabled: browserRow.browserInstalled
+                                            onClicked: {
+                                                if (!browserIntegration.openStoreListing(browserRow.code))
+                                                    appRoot.appendNotification(
+                                                        qsTr("Browser setup"),
+                                                        qsTr("Could not open this browser's official extension store."),
+                                                        "warning")
+                                            }
+                                        }
+
+                                        Controls.Button {
+                                            text: qsTr("Browser extension settings")
+                                            visible: !browserRow.connected && !browserRow.storeInstallAvailable
+                                            enabled: browserRow.browserInstalled
+                                            onClicked: {
+                                                if (!browserIntegration.openBrowserExtensions(browserRow.code))
+                                                    appRoot.appendNotification(
+                                                        qsTr("Browser setup"),
+                                                        qsTr("Could not open the extensions manager. Open it manually from your browser menu."),
+                                                        "warning")
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Controls.Label {
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            color: Colors.textMuted
+                            text: qsTr("Enabling a browser registers its local connection, not the extension itself. Where a verified store listing exists, use Install from official store. Otherwise this development build offers temporary extension files for testing.")
+                        }
 
                         Item { Layout.fillHeight: true }
                     }
@@ -5232,6 +5544,7 @@ ApplicationWindow {
             Controls.AppMenuItem { text: qsTr("Queues"); iconGlyph: "\uf0ca"; onTriggered: appRoot.openConfigurationDialog(1) }
             Controls.AppMenuItem { text: qsTr("Network"); iconGlyph: "\uf1eb"; onTriggered: appRoot.openConfigurationDialog(2) }
             Controls.AppMenuItem { text: qsTr("Updates"); iconGlyph: "\uf021"; onTriggered: appRoot.openConfigurationDialog(3) }
+            Controls.AppMenuItem { text: qsTr("Browser Integration"); iconGlyph: "\uf0c1"; onTriggered: appRoot.openConfigurationDialog(5) }
             Controls.AppMenuSeparator { }
             Controls.AppMenuItem {
                 text: appRoot.sortAscending ? qsTr("Sort Desc") : qsTr("Sort Asc")

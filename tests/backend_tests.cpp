@@ -1,4 +1,12 @@
 #include <QtTest/QtTest>
+#include <QFile>
+#include <QTemporaryDir>
+#include <QFileInfo>
+#include <QHostAddress>
+#include <QRegularExpression>
+#include <QSignalSpy>
+#include <QTcpServer>
+#include <QTcpSocket>
 
 import genydl.utils.version_utils;
 import genydl.utils.download_utils;
@@ -8,11 +16,113 @@ import genydl.services.release_center_service;
 import genydl.services.torrent_session;
 import genydl.utils.ipfs_resolver;
 import genydl.core.language_manager;
+import genydl.core.downloadertask;
 
 namespace utils = genydl::utils;
 namespace github = genydl::github;
 namespace releasecenter = genydl::releasecenter;
 namespace ipfs = genydl::ipfs;
+
+
+namespace {
+// Deliberately small local HTTP fixture: no external downloads, credentials,
+// user settings, or timing-sensitive internet dependencies.
+class RangeFixture final {
+public:
+    enum class Mode { Normal, DropFirstRange, FailSingleGet };
+    explicit RangeFixture(Mode mode) : mode_(mode)
+    {
+        payload.resize(8192);
+        for (qsizetype i = 0; i < payload.size(); ++i)
+            payload[i] = char((i * 31 + i / 7) % 251);
+        QObject::connect(&server, &QTcpServer::newConnection, &server, [this] {
+            while (auto *socket = server.nextPendingConnection()) {
+                QObject::connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
+                QObject::connect(socket, &QTcpSocket::readyRead, socket,
+                    [this, socket, request = QByteArray{}, served = false]() mutable {
+                    request += socket->readAll();
+                    if (served || !request.contains("\r\n\r\n")) return;
+                    served = true;
+                    respond(socket, request);
+                });
+            }
+        });
+    }
+    bool listen() { return server.listen(QHostAddress::LocalHost, 0); }
+    QUrl url() const
+    {
+        return QUrl(QStringLiteral("http://127.0.0.1:%1/file.bin").arg(server.serverPort()));
+    }
+
+    QByteArray payload;
+    QList<QByteArray> ranges;
+    int dropped = 0;
+    int failed = 0;
+
+private:
+    QTcpServer server;
+    Mode mode_;
+
+    void respond(QTcpSocket *socket, const QByteArray& request)
+    {
+        const bool head = request.startsWith("HEAD ");
+        QByteArray range;
+        for (const QByteArray& line : request.split('\n')) {
+            if (line.toLower().startsWith("range:"))
+                range = line.mid(6).trimmed();
+        }
+        if (!head) ranges.append(range);
+        const QByteArray common = "Connection: close\r\nAccept-Ranges: bytes\r\n"
+                                  "ETag: \"genydl-qa-fixture\"\r\n";
+        auto write = [&](const QByteArray& status, const QByteArray& headers, const QByteArray& body) {
+            socket->write("HTTP/1.1 " + status + "\r\n" + common + headers + "\r\n" + body);
+            socket->disconnectFromHost();
+        };
+        const auto length = [](qint64 n) {
+            return QByteArray("Content-Length: ") + QByteArray::number(n) + "\r\n";
+        };
+        if (head) {
+            write("200 OK", length(payload.size()), {});
+            return;
+        }
+        if (mode_ == Mode::FailSingleGet && range.isEmpty() && failed == 0) {
+            ++failed;
+            const QByteArray errorBody = "This is an HTTP error, not file data.";
+            write("503 Service Unavailable", length(errorBody.size()), errorBody);
+            return;
+        }
+        if (range.isEmpty()) {
+            write("200 OK", length(payload.size()), payload);
+            return;
+        }
+        const auto match = QRegularExpression(QStringLiteral("^bytes=(\\d+)-(\\d*)$"))
+                               .match(QString::fromLatin1(range));
+        bool startOk = false, endOk = false;
+        const qint64 first = match.captured(1).toLongLong(&startOk);
+        const qint64 last = match.captured(2).isEmpty()
+            ? payload.size() - 1 : match.captured(2).toLongLong(&endOk);
+        if (match.captured(2).isEmpty()) endOk = true;
+        if (!match.hasMatch() || !startOk || !endOk ||
+            first < 0 || last < first || last >= payload.size()) {
+            write("416 Range Not Satisfiable",
+                  "Content-Range: bytes */" + QByteArray::number(payload.size()) + "\r\n" + length(0), {});
+            return;
+        }
+        const qint64 count = last - first + 1;
+        const QByteArray headers = "Content-Range: bytes " + QByteArray::number(first)
+            + "-" + QByteArray::number(last) + "/" + QByteArray::number(payload.size())
+            + "\r\n" + length(count);
+        if (mode_ == Mode::DropFirstRange && first == 0 && dropped == 0 && count > 512) {
+            ++dropped;
+            // Advertise the entire range, transmit only the first 512 bytes, then
+            // close the transport. The client must request the remaining bytes.
+            write("206 Partial Content", headers, payload.mid(first, 512));
+            return;
+        }
+        write("206 Partial Content", headers, payload.mid(first, count));
+    }
+};
+}
 
 class BackendTests final : public QObject
 {
@@ -26,6 +136,7 @@ private slots:
     void extractChecksumFromText();
     void normalizeHost();
     void detectCategory();
+    void uniqueDownloadPaths();
     void parseGitHubReleaseTagUrl();
     void parseGitHubReleaseLatestUrl();
     void rejectNonGitHubReleaseUrl();
@@ -49,6 +160,9 @@ private slots:
     void parseIpfsReferenceWithSubPath();
     void buildIpfsGatewayUrl();
     void languageCatalogContract();
+    void segmentedRetryAfterDisconnect();
+    void singleStreamRecoversExistingPartial();
+    void singleStreamHttpErrorDoesNotPollutePartial();
 };
 
 void BackendTests::compareVersions_data()
@@ -68,6 +182,21 @@ void BackendTests::compareVersions()
     QFETCH(QString, rhs);
     QFETCH(int, expected);
     QCOMPARE(utils::compareVersions(lhs, rhs), expected);
+}
+
+void BackendTests::uniqueDownloadPaths()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString desired = temp.filePath(QStringLiteral("archive.tar.gz"));
+    QCOMPARE(utils::uniqueFilePath(desired), desired);
+    QCOMPARE(utils::uniqueFilePath(desired, {desired}),
+             temp.filePath(QStringLiteral("archive (1).tar.gz")));
+    QFile segment(desired + QStringLiteral(".part0"));
+    QVERIFY(segment.open(QIODevice::WriteOnly));
+    segment.close();
+    QCOMPARE(utils::uniqueFilePath(desired),
+             temp.filePath(QStringLiteral("archive (1).tar.gz")));
 }
 
 void BackendTests::detectChecksumAlgo()
@@ -550,6 +679,81 @@ void BackendTests::languageCatalogContract()
     QCOMPARE(names.value(QStringLiteral("es")), QString::fromUtf8("Español"));
     QCOMPARE(names.value(QStringLiteral("ru")), QString::fromUtf8("Русский"));
     QCOMPARE(names.value(QStringLiteral("zh_CN")), QString::fromUtf8("简体中文"));
+}
+
+
+void BackendTests::segmentedRetryAfterDisconnect()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    RangeFixture fixture(RangeFixture::Mode::DropFirstRange);
+    QVERIFY(fixture.listen());
+    const QString path = dir.filePath(QStringLiteral("segmented.bin"));
+    DownloaderTask task(fixture.url(), path, 2);
+    task.setAdaptiveSegmentsEnabled(false);
+    task.setRetryMax(2);
+    task.setRetryDelaySec(0);
+    QSignalSpy done(&task, &DownloaderTask::finished);
+    task.start();
+    QTRY_COMPARE_WITH_TIMEOUT(done.size(), 1, 10000);
+    QVERIFY(done.takeFirst().at(0).toBool());
+    QCOMPARE(fixture.dropped, 1);
+    QVERIFY(fixture.ranges.contains(QByteArray("bytes=512-4095")));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QCOMPARE(file.readAll(), fixture.payload);
+    QVERIFY(!QFile::exists(path + QStringLiteral(".part0")));
+    QVERIFY(!QFile::exists(path + QStringLiteral(".part1")));
+}
+
+void BackendTests::singleStreamRecoversExistingPartial()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    RangeFixture fixture(RangeFixture::Mode::Normal);
+    QVERIFY(fixture.listen());
+    const QString path = dir.filePath(QStringLiteral("single.bin"));
+    QFile partial(path + QStringLiteral(".part"));
+    QVERIFY(partial.open(QIODevice::WriteOnly));
+    QCOMPARE(partial.write(fixture.payload.left(1024)), qint64(1024));
+    partial.close();
+    DownloaderTask task(fixture.url(), path, 1);
+    task.setAdaptiveSegmentsEnabled(false);
+    QSignalSpy done(&task, &DownloaderTask::finished);
+    task.start();
+    QTRY_COMPARE_WITH_TIMEOUT(done.size(), 1, 10000);
+    QVERIFY(done.takeFirst().at(0).toBool());
+    QVERIFY(fixture.ranges.contains(QByteArray("bytes=1024-")));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QCOMPARE(file.readAll(), fixture.payload);
+    QVERIFY(!QFile::exists(path + QStringLiteral(".part")));
+}
+
+void BackendTests::singleStreamHttpErrorDoesNotPollutePartial()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    RangeFixture fixture(RangeFixture::Mode::FailSingleGet);
+    QVERIFY(fixture.listen());
+    const QString path = dir.filePath(QStringLiteral("http-error.bin"));
+    DownloaderTask task(fixture.url(), path, 1);
+    task.setAdaptiveSegmentsEnabled(false);
+    QSignalSpy done(&task, &DownloaderTask::finished);
+    task.start();
+    QTRY_COMPARE_WITH_TIMEOUT(done.size(), 1, 10000);
+    QVERIFY(!done.takeFirst().at(0).toBool());
+    QCOMPARE(fixture.failed, 1);
+    QVERIFY(!QFile::exists(path));
+    const QFileInfo partial(path + QStringLiteral(".part"));
+    QVERIFY2(!partial.exists() || partial.size() == 0,
+             "HTTP error response was persisted as file data");
+    task.recover();
+    QTRY_COMPARE_WITH_TIMEOUT(done.size(), 1, 10000);
+    QVERIFY(done.takeFirst().at(0).toBool());
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QCOMPARE(file.readAll(), fixture.payload);
 }
 
 QTEST_MAIN(BackendTests)

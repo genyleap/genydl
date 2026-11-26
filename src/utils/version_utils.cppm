@@ -12,9 +12,7 @@
 module;
 #include <QString>
 
-#ifndef Q_MOC_RUN
 export module genydl.utils.version_utils;
-#endif
 
 #ifdef Q_MOC_RUN
 #define GENYDL_MODULE_EXPORT
