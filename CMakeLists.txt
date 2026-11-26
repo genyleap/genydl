@@ -1536,8 +1536,8 @@ else()
 endif()
 
 if(WIN32)
-    # Keep URL protocol integration separate from the installer command
-    # string to avoid CMake/NSIS double-escaping.
+    # CPack writes these values into quoted CMake strings in CPackConfig.cmake.
+    # Escape the raw NSIS script exactly once for that serialization layer.
     configure_file(
         "${CMAKE_CURRENT_SOURCE_DIR}/properties/Windows/browser-protocol-install.nsh.in"
         "${CMAKE_CURRENT_BINARY_DIR}/browser-protocol-install.nsh" @ONLY)
@@ -1548,6 +1548,12 @@ if(WIN32)
         GENYDL_BROWSER_PROTOCOL_INSTALL_NSIS)
     file(READ "${CMAKE_CURRENT_BINARY_DIR}/browser-protocol-uninstall.nsh"
         GENYDL_BROWSER_PROTOCOL_UNINSTALL_NSIS)
+    foreach(genydl_nsis_script IN ITEMS
+            GENYDL_BROWSER_PROTOCOL_INSTALL_NSIS
+            GENYDL_BROWSER_PROTOCOL_UNINSTALL_NSIS)
+        string(REPLACE "\\" "\\\\" ${genydl_nsis_script} "${${genydl_nsis_script}}")
+        string(REPLACE "\"" "\\\"" ${genydl_nsis_script} "${${genydl_nsis_script}}")
+    endforeach()
     string(APPEND CPACK_NSIS_EXTRA_INSTALL_COMMANDS
         "\n${GENYDL_BROWSER_PROTOCOL_INSTALL_NSIS}")
     string(APPEND CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS
