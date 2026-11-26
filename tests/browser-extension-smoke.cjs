@@ -109,7 +109,7 @@ async function scenario({
       : mode === "always" && !contextLink
         ? "download.request" : "download.prompt");
     if (startupHeartbeat) {
-      assert.equal(message.browser, "chromium");
+      assert.equal(message.browser, "chrome");
       assert.equal(message.url, undefined);
     }
     assert.equal(message.protocolVersion, 2);
