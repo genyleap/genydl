@@ -129,8 +129,16 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          # Match the Visual Studio environment selected by msvc-dev-cmd.
+          # The ARM64 hosted runner uses VS 2026, while windows-2022 uses VS 2022.
+          $generator = switch ($env:VisualStudioVersion) {
+            "18.0" { "Visual Studio 18 2026" }
+            "17.0" { "Visual Studio 17 2022" }
+            default { throw "Unsupported Visual Studio version: $env:VisualStudioVersion" }
+          }
+          Write-Host "Using $generator for ${{ matrix.cmake_arch }}"
           cmake -S . -B build `
-            -G "Visual Studio 17 2022" -A "${{ matrix.cmake_arch }}" `
+            -G "$generator" -A "${{ matrix.cmake_arch }}" `
             -DCMAKE_CONFIGURATION_TYPES="Release" `
             -DCMAKE_PREFIX_PATH="${env:QT_ROOT_DIR}" `
             -DQt6_DIR="${env:QT_ROOT_DIR}/lib/cmake/Qt6" `
