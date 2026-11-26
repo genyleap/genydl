@@ -1,6 +1,8 @@
 // Browser native-messaging host. Exactly one framed JSON request per process.
 // No commands are executed from untrusted browser input.
 #include "browser_socket.h"
+#include "native_messaging_host.h"
+#include <cstring>
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDir>
@@ -11,6 +13,7 @@
 #include <QLocalSocket>
 #include <QProcess>
 #include <QThread>
+#include <QUrl>
 #include <cstdint>
 #include <iostream>
 #ifdef Q_OS_WIN
@@ -98,7 +101,32 @@ bool sendToApplication(const QByteArray& json, bool waitForUser,
 }
 }
 
-int main(int argc, char** argv)
+bool isNativeMessagingInvocation(int argc, char* argv[])
+{
+    if (argc < 2 || !argv || !argv[1]) return false;
+    // Explicit mode for regression tests and controlled internal launches.
+    if (std::strcmp(argv[1], "--native-messaging-host") == 0)
+        return true;
+
+    // Google Chrome passes the originating extension URL as argv[1].
+    // Its host manifest separately restricts allowed_origins to known IDs.
+    const QString first = QString::fromLocal8Bit(argv[1]);
+    if (first.startsWith(QStringLiteral("chrome-extension://"))) {
+        const QUrl origin(first);
+        return origin.isValid()
+            && origin.scheme() == QStringLiteral("chrome-extension")
+            && !origin.host().isEmpty();
+    }
+
+    // Firefox passes its native manifest path followed by the add-on ID.
+    // Requiring both avoids starting the headless host for a normal app open.
+    return argc >= 3 && argv[2]
+        && QFileInfo(first).fileName() == QStringLiteral("com.genyleap.genydl.json")
+        && QString::fromLocal8Bit(argv[2])
+            == QStringLiteral("download-links@genydl.genyleap.com");
+}
+
+int runNativeMessagingHost(int argc, char** argv)
 {
     QCoreApplication app(argc, argv);
     QCoreApplication::setOrganizationName(QStringLiteral("Genyleap"));
