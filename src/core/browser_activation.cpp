@@ -329,9 +329,7 @@ void BrowserActivation::onConnection()
             if (type == QStringLiteral("integration.ping")) {
                 const QString browser = message.value(QStringLiteral("browser")).toString();
                 static const QSet<QString> allowedBrowsers{
-                    QStringLiteral("firefox"), QStringLiteral("chrome"),
-                    QStringLiteral("edge"), QStringLiteral("brave"),
-                    QStringLiteral("chromium"), QStringLiteral("vivaldi")
+                    QStringLiteral("firefox"), QStringLiteral("chrome")
                 };
                 if (version != 2 || !allowedBrowsers.contains(browser)) {
                     reject(QStringLiteral("invalid browser handshake"));
