@@ -18,7 +18,7 @@ Chrome and Opera: [install via Developer Mode](#browser-add-ons) · Store public
 ## 🚧 Project Status
 
 > GenyDL is currently under active development.  
-> Version **1.0.0** is the first milestone release, focused on the desktop UI, core download workflow, packaging, and runtime foundation.
+> Desktop version **1.3.0** introduces browser integration, download recovery fixes, and multilingual UI refinements. See [release notes](release-notes/v1.3.0.md) and [downloads](https://github.com/genyleap/genydl/releases).
 
 ## Highlights
 

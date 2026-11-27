@@ -38,7 +38,12 @@ env:
 jobs:
   plan:
     name: Select requested build targets
-    if: github.event_name != 'pull_request' || startsWith(github.event.label.name, 'ci:')
+    # Release preparation uses a dedicated marker (not [skip ci], which can
+    # suppress tag-triggered workflows too). Build the release only on its tag.
+    if: >-
+      (github.event_name != 'pull_request' || startsWith(github.event.label.name, 'ci:')) &&
+      !(github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') &&
+        contains(github.event.head_commit.message, '[release-tag]'))
     runs-on: ubuntu-latest
     outputs:
       desktop_matrix: ${{ steps.select.outputs.desktop_matrix }}
