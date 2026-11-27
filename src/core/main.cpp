@@ -17,13 +17,13 @@
 #include "browser_host_registration.h"
 #include "browser_integration_manager.h"
 #include "native_messaging_host.h"
+#include "language_manager.h"
 #ifdef Q_OS_MACOS
 #include "macos_browser_integration.h"
 #endif
 
 import genydl.core.downloadmanager;
 import genydl.core.appcontroller;
-import genydl.core.language_manager;
 import genydl.services.github_release_service;
 import genydl.services.release_center_service;
 import genydl.services.update_client;

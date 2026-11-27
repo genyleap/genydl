@@ -1,27 +1,12 @@
-/*!
- * @file language_manager.cppm
- * @brief Runtime language, locale, and layout-direction management.
- */
+#pragma once
 
-module;
 #include <QObject>
 #include <QQmlEngine>
 #include <QString>
 #include <QTranslator>
 #include <QVariantList>
 
-#ifndef Q_MOC_RUN
-#  include <QtCore/qtmochelpers.h>
-#endif
-export module genydl.core.language_manager;
-
-#ifdef Q_MOC_RUN
-#define GENYDL_MODULE_EXPORT
-#else
-#define GENYDL_MODULE_EXPORT export
-#endif
-
-GENYDL_MODULE_EXPORT class LanguageManager final : public QObject {
+class LanguageManager final : public QObject {
     Q_OBJECT
     Q_PROPERTY(QString currentLanguage READ currentLanguage WRITE setLanguage NOTIFY currentLanguageChanged)
     Q_PROPERTY(QString currentLocale READ currentLocale NOTIFY currentLanguageChanged)
@@ -61,7 +46,3 @@ private:
     QQmlEngine* m_engine = nullptr;
     QTranslator* m_translator = nullptr;
 };
-
-#ifndef GENYDL_LANGUAGE_MOC_IN_IMPL
-#include "language_manager.moc"
-#endif

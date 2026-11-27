@@ -15,6 +15,7 @@
 #include <QScopeGuard>
 #include <QScopedPointer>
 #include <QTranslator>
+#include "core/language_manager.h"
 
 import genydl.utils.version_utils;
 import genydl.utils.download_utils;
@@ -23,7 +24,6 @@ import genydl.services.github_release_service;
 import genydl.services.release_center_service;
 import genydl.services.torrent_session;
 import genydl.utils.ipfs_resolver;
-import genydl.core.language_manager;
 import genydl.core.downloadertask;
 
 namespace utils = genydl::utils;

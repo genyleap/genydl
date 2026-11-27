@@ -537,7 +537,6 @@ endfunction()
 # -------------------------
 set(GENYDL_MODULE_IFS
     src/ui/tray_icon_provider.cppm
-    src/core/language_manager.cppm
     src/core/appcontroller.cppm
     src/core/downloadertask.cppm
     src/core/torrenttask.cppm
@@ -560,7 +559,6 @@ set(GENYDL_MODULE_IFS
 # included .moc files explicitly for all such interfaces and skip AUTOMOC
 # on the module units. This keeps C++ module scanning and Qt 6.12 compatible.
 set(GENYDL_QOBJECT_MODULE_IFS
-    src/core/language_manager.cppm
     src/core/appcontroller.cppm
     src/core/downloadertask.cppm
     src/core/torrenttask.cppm
@@ -574,21 +572,6 @@ set(GENYDL_QOBJECT_MODULE_IFS
 )
 
 if(Qt6Core_VERSION VERSION_LESS "6.13.0")
-    # MSVC 19.52 on native ARM64 crashes when LanguageManager's generated
-    # meta-object definitions are compiled inside its exported module interface.
-    # Keep the module and generate the same moc, but emit its definitions in
-    # the non-exported implementation unit for this compiler configuration.
-    if(MSVC AND GENYDL_ARCH STREQUAL "arm64"
-            AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "19.50")
-        set_source_files_properties(
-            src/core/language_manager.cppm src/core/language_manager.cpp
-            PROPERTIES COMPILE_DEFINITIONS GENYDL_LANGUAGE_MOC_IN_IMPL=1)
-    endif()
-    # The .moc is explicitly generated from the module interface below, not
-    # from the implementation file (even when its conditional include is off).
-    set_source_files_properties(src/core/language_manager.cpp
-        PROPERTIES SKIP_AUTOMOC ON)
-
     set(GENYDL_LEGACY_MODULE_MOC_DIR
         "${CMAKE_CURRENT_BINARY_DIR}/genydl_module_moc")
     set(GENYDL_LEGACY_MODULE_MOC_OUTPUTS)
@@ -615,6 +598,7 @@ endif()
 
 set(GENYDL_IMPL_SOURCES
     src/ui/tray_icon_provider.cpp
+    src/core/language_manager.h
     src/core/language_manager.cpp
     src/core/appcontroller.cpp
     src/core/downloadertask.cpp
