@@ -22,6 +22,11 @@ on:
           - linux-x64
           - linux-arm64
           - all
+      recover_v130:
+        description: "One-time v1.3.0 recovery: build macOS ARM64 and publish verified saved artifacts"
+        type: boolean
+        required: false
+        default: false
 
 # Supersede only a run for the same PR/ref and selected target.
 # Do not interrupt a different target or a tagged release.
@@ -1147,3 +1152,32 @@ jobs:
           files: release-artifacts/*
           fail_on_unmatched_files: true
           generate_release_notes: true
+
+  recover-v130:
+    name: Assemble and publish v1.3.0 from saved artifacts
+    if: github.event_name == 'workflow_dispatch' && inputs.recover_v130 && inputs.target == 'macos-arm64' && github.ref == 'refs/heads/main'
+    needs: desktop
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download newly built Apple Silicon package
+        uses: actions/download-artifact@v4
+        with:
+          name: GenyDL-macos-arm64
+          path: recovery/GenyDL-macos-arm64
+      - name: Verify saved build provenance and collect release files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/recover-v130-release.py
+      - name: Publish verified packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The existing draft is intentionally reused. Never delete a release.
+          python3 scripts/recover-v130-release.py --upload
+          gh release edit v1.3.0 --repo "$GITHUB_REPOSITORY" --draft=false --latest
