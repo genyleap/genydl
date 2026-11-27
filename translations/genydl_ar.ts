@@ -4304,6 +4304,146 @@
         <source>Overall: </source>
         <translation>الإجمالي:</translation>
     </message>
+    <message>
+        <source>A green check means the extension responded recently. Enabling a browser does not install its extension.</source>
+        <translation>تشير علامة الصح الخضراء إلى استجابة الإضافة مؤخرا. تمكين المتصفح لا يثبت الإضافة.</translation>
+    </message>
+    <message>
+        <source>Browser Integration</source>
+        <translation>تكامل المتصفحات</translation>
+    </message>
+    <message>
+        <source>Browser connections</source>
+        <translation>اتصالات المتصفحات</translation>
+    </message>
+    <message>
+        <source>Browser not detected</source>
+        <translation>لم يتم اكتشاف المتصفح</translation>
+    </message>
+    <message>
+        <source>Browser setup</source>
+        <translation>إعداد المتصفح</translation>
+    </message>
+    <message>
+        <source>Browsers</source>
+        <translation>المتصفحات</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>مسح</translation>
+    </message>
+    <message>
+        <source>Connected</source>
+        <translation>متصل</translation>
+    </message>
+    <message>
+        <source>Connection setup failed</source>
+        <translation>فشل إعداد الاتصال</translation>
+    </message>
+    <message>
+        <source>Could not open the extension store.</source>
+        <translation>تعذر فتح متجر الإضافات.</translation>
+    </message>
+    <message>
+        <source>Could not register the local browser connection.</source>
+        <translation>تعذر تسجيل اتصال المتصفح المحلي.</translation>
+    </message>
+    <message>
+        <source>Disabled</source>
+        <translation>معطل</translation>
+    </message>
+    <message>
+        <source>Enable %1 integration</source>
+        <translation>تمكين تكامل %1</translation>
+    </message>
+    <message>
+        <source>Extension files are missing.</source>
+        <translation>ملفات الإضافة مفقودة.</translation>
+    </message>
+    <message>
+        <source>File name (editable)</source>
+        <translation>اسم الملف (قابل للتحرير)</translation>
+    </message>
+    <message>
+        <source>Install extension</source>
+        <translation>تثبيت الإضافة</translation>
+    </message>
+    <message>
+        <source>Install the official extension, then check its connection.</source>
+        <translation>ثبت الإضافة الرسمية ثم تحقق من اتصالها.</translation>
+    </message>
+    <message>
+        <source>Install this browser first, then refresh.</source>
+        <translation>ثبت هذا المتصفح أولا ثم حدث القائمة.</translation>
+    </message>
+    <message>
+        <source>Invalid file name</source>
+        <translation>اسم ملف غير صالح</translation>
+    </message>
+    <message>
+        <source>Move/Rename</source>
+        <translation>نقل/إعادة تسمية</translation>
+    </message>
+    <message>
+        <source>OK</source>
+        <translation>موافق</translation>
+    </message>
+    <message>
+        <source>Open extension folder</source>
+        <translation>فتح مجلد الإضافة</translation>
+    </message>
+    <message>
+        <source>Open extension manager</source>
+        <translation>فتح مدير الإضافات</translation>
+    </message>
+    <message>
+        <source>Open the extension folder, enable Developer mode in your browser, then select Load unpacked.</source>
+        <translation>افتح مجلد الإضافة ومكن وضع المطور في المتصفح ثم اختر تحميل الإضافة غير المضغوطة.</translation>
+    </message>
+    <message>
+        <source>Open the extensions manager in your browser.</source>
+        <translation>افتح مدير الإضافات في المتصفح.</translation>
+    </message>
+    <message>
+        <source>Refresh</source>
+        <translation>تحديث</translation>
+    </message>
+    <message>
+        <source>Right-click a link and choose Download with GenyDL.</source>
+        <translation>انقر بزر الفأرة الأيمن على الرابط واختر Download with GenyDL.</translation>
+    </message>
+    <message>
+        <source>Save as</source>
+        <translation>حفظ باسم</translation>
+    </message>
+    <message>
+        <source>Send selected links to GenyDL. Automatic capture is optional.</source>
+        <translation>أرسل الروابط المحددة إلى GenyDL. الالتقاط التلقائي اختياري.</translation>
+    </message>
+    <message>
+        <source>The file name cannot contain directories or reserved characters.</source>
+        <translation>لا يمكن أن يحتوي اسم الملف على مسارات مجلدات أو أحرف محجوزة.</translation>
+    </message>
+    <message>
+        <source>Verify</source>
+        <translation>تحقق</translation>
+    </message>
+    <message>
+        <source>Waiting for extension</source>
+        <translation>في انتظار الإضافة</translation>
+    </message>
+    <message>
+        <source>Firefox</source>
+        <translation>فايرفوكس</translation>
+    </message>
+    <message>
+        <source>Google Chrome</source>
+        <translation>جوجل كروم</translation>
+    </message>
+    <message>
+        <source>Opera</source>
+        <translation>أوبرا</translation>
+    </message>
 </context>
 <context>
     <name>NetworkStatus</name>

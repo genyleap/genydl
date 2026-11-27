@@ -4279,6 +4279,146 @@
         <source>Overall: </source>
         <translation>Genel olarak:</translation>
     </message>
+    <message>
+        <source>A green check means the extension responded recently. Enabling a browser does not install its extension.</source>
+        <translation>Yeşil onay işareti, uzantının yakın zamanda yanıt verdiğini gösterir. Tarayıcıyı etkinleştirmek uzantıyı yüklemez.</translation>
+    </message>
+    <message>
+        <source>Browser Integration</source>
+        <translation>Tarayıcı entegrasyonu</translation>
+    </message>
+    <message>
+        <source>Browser connections</source>
+        <translation>Tarayıcı bağlantıları</translation>
+    </message>
+    <message>
+        <source>Browser not detected</source>
+        <translation>Tarayıcı algılanmadı</translation>
+    </message>
+    <message>
+        <source>Browser setup</source>
+        <translation>Tarayıcı kurulumu</translation>
+    </message>
+    <message>
+        <source>Browsers</source>
+        <translation>Tarayıcılar</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>Temizle</translation>
+    </message>
+    <message>
+        <source>Connected</source>
+        <translation>Bağlı</translation>
+    </message>
+    <message>
+        <source>Connection setup failed</source>
+        <translation>Bağlantı kurulamadı</translation>
+    </message>
+    <message>
+        <source>Could not open the extension store.</source>
+        <translation>Uzantı mağazası açılamadı.</translation>
+    </message>
+    <message>
+        <source>Could not register the local browser connection.</source>
+        <translation>Yerel tarayıcı bağlantısı kaydedilemedi.</translation>
+    </message>
+    <message>
+        <source>Disabled</source>
+        <translation>Devre dışı</translation>
+    </message>
+    <message>
+        <source>Enable %1 integration</source>
+        <translation>%1 entegrasyonunu etkinleştir</translation>
+    </message>
+    <message>
+        <source>Extension files are missing.</source>
+        <translation>Uzantı dosyaları eksik.</translation>
+    </message>
+    <message>
+        <source>File name (editable)</source>
+        <translation>Dosya adı (düzenlenebilir)</translation>
+    </message>
+    <message>
+        <source>Install extension</source>
+        <translation>Uzantıyı yükle</translation>
+    </message>
+    <message>
+        <source>Install the official extension, then check its connection.</source>
+        <translation>Resmi uzantıyı yükleyin, ardından bağlantısını kontrol edin.</translation>
+    </message>
+    <message>
+        <source>Install this browser first, then refresh.</source>
+        <translation>Önce bu tarayıcıyı yükleyin, ardından yenileyin.</translation>
+    </message>
+    <message>
+        <source>Invalid file name</source>
+        <translation>Geçersiz dosya adı</translation>
+    </message>
+    <message>
+        <source>Move/Rename</source>
+        <translation>Taşı/Yeniden adlandır</translation>
+    </message>
+    <message>
+        <source>OK</source>
+        <translation>Tamam</translation>
+    </message>
+    <message>
+        <source>Open extension folder</source>
+        <translation>Uzantı klasörünü aç</translation>
+    </message>
+    <message>
+        <source>Open extension manager</source>
+        <translation>Uzantı yöneticisini aç</translation>
+    </message>
+    <message>
+        <source>Open the extension folder, enable Developer mode in your browser, then select Load unpacked.</source>
+        <translation>Uzantı klasörünü açın, geliştirici modunu etkinleştirin ve paketlenmemiş uzantıyı yükleyin.</translation>
+    </message>
+    <message>
+        <source>Open the extensions manager in your browser.</source>
+        <translation>Tarayıcınızda uzantı yöneticisini açın.</translation>
+    </message>
+    <message>
+        <source>Refresh</source>
+        <translation>Yenile</translation>
+    </message>
+    <message>
+        <source>Right-click a link and choose Download with GenyDL.</source>
+        <translation>Bir bağlantıya sağ tıklayın ve Download with GenyDL seçeneğini seçin.</translation>
+    </message>
+    <message>
+        <source>Save as</source>
+        <translation>Farklı kaydet</translation>
+    </message>
+    <message>
+        <source>Send selected links to GenyDL. Automatic capture is optional.</source>
+        <translation>Seçili bağlantıları GenyDL'ye gönderin. Otomatik yakalama isteğe bağlıdır.</translation>
+    </message>
+    <message>
+        <source>The file name cannot contain directories or reserved characters.</source>
+        <translation>Dosya adı dizin veya ayrılmış karakter içeremez.</translation>
+    </message>
+    <message>
+        <source>Verify</source>
+        <translation>Doğrula</translation>
+    </message>
+    <message>
+        <source>Waiting for extension</source>
+        <translation>Uzantı bekleniyor</translation>
+    </message>
+    <message>
+        <source>Firefox</source>
+        <translation>Firefox</translation>
+    </message>
+    <message>
+        <source>Google Chrome</source>
+        <translation>Google Chrome</translation>
+    </message>
+    <message>
+        <source>Opera</source>
+        <translation>Opera</translation>
+    </message>
 </context>
 <context>
     <name>NetworkStatus</name>

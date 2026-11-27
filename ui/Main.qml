@@ -2935,12 +2935,12 @@ ApplicationWindow {
                         appRoot.browserHostRows = browserIntegration.statuses()
                 }
 
-                Controls.TabButton { text: qsTr("General") }
-                Controls.TabButton { text: qsTr("Queues") }
-                Controls.TabButton { text: qsTr("Network") }
-                Controls.TabButton { text: qsTr("Updates") }
-                Controls.TabButton { text: qsTr("Release Center") }
-                Controls.TabButton { text: qsTr("Browsers") }
+                Controls.TabButton { text: qsTr("General"); width: Math.max(72, contentItem.implicitWidth + leftPadding + rightPadding) }
+                Controls.TabButton { text: qsTr("Queues"); width: Math.max(72, contentItem.implicitWidth + leftPadding + rightPadding) }
+                Controls.TabButton { text: qsTr("Network"); width: Math.max(72, contentItem.implicitWidth + leftPadding + rightPadding) }
+                Controls.TabButton { text: qsTr("Updates"); width: Math.max(72, contentItem.implicitWidth + leftPadding + rightPadding) }
+                Controls.TabButton { text: qsTr("Release Center"); width: Math.max(72, contentItem.implicitWidth + leftPadding + rightPadding) }
+                Controls.TabButton { text: qsTr("Browsers"); width: Math.max(72, contentItem.implicitWidth + leftPadding + rightPadding) }
             }
 
             StackLayout {
@@ -3752,7 +3752,7 @@ ApplicationWindow {
                     clip: true
 
                     ColumnLayout {
-                        width: Math.max(320, browserConfigView.availableWidth)
+                        width: Math.max(0, browserConfigView.availableWidth)
                         spacing: 12
 
                         RowLayout {
@@ -3844,7 +3844,9 @@ ApplicationWindow {
                                             Controls.Label {
                                                 Layout.fillWidth: true
                                                 font.bold: true
-                                                text: browserRow.name
+                                                text: browserRow.code === "firefox" ? qsTr("Firefox")
+                                                    : browserRow.code === "chrome" ? qsTr("Google Chrome")
+                                                    : browserRow.code === "opera" ? qsTr("Opera") : browserRow.name
                                             }
                                             Controls.Label {
                                                 Layout.fillWidth: true
@@ -3860,6 +3862,9 @@ ApplicationWindow {
                                             }
                                         }
                                         Controls.Switch {
+                                            Layout.minimumWidth: implicitWidth
+                                            Layout.preferredWidth: implicitWidth
+                                            Layout.preferredHeight: implicitHeight
                                             Accessible.name: qsTr("Enable %1 integration").arg(browserRow.name)
                                             enabled: browserRow.supported
                                             checked: browserRow.enabled

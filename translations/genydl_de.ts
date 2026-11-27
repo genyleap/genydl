@@ -4284,6 +4284,146 @@
         <source>Overall: </source>
         <translation>Insgesamt:</translation>
     </message>
+    <message>
+        <source>A green check means the extension responded recently. Enabling a browser does not install its extension.</source>
+        <translation>Ein grüner Haken zeigt eine kürzliche Antwort der Erweiterung an. Das Aktivieren des Browsers installiert sie nicht.</translation>
+    </message>
+    <message>
+        <source>Browser Integration</source>
+        <translation>Browser-Integration</translation>
+    </message>
+    <message>
+        <source>Browser connections</source>
+        <translation>Browserverbindungen</translation>
+    </message>
+    <message>
+        <source>Browser not detected</source>
+        <translation>Browser nicht erkannt</translation>
+    </message>
+    <message>
+        <source>Browser setup</source>
+        <translation>Browser-Einrichtung</translation>
+    </message>
+    <message>
+        <source>Browsers</source>
+        <translation>Browser</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>Leeren</translation>
+    </message>
+    <message>
+        <source>Connected</source>
+        <translation>Verbunden</translation>
+    </message>
+    <message>
+        <source>Connection setup failed</source>
+        <translation>Verbindungsaufbau fehlgeschlagen</translation>
+    </message>
+    <message>
+        <source>Could not open the extension store.</source>
+        <translation>Der Erweiterungsstore konnte nicht geöffnet werden.</translation>
+    </message>
+    <message>
+        <source>Could not register the local browser connection.</source>
+        <translation>Die lokale Browserverbindung konnte nicht registriert werden.</translation>
+    </message>
+    <message>
+        <source>Disabled</source>
+        <translation>Deaktiviert</translation>
+    </message>
+    <message>
+        <source>Enable %1 integration</source>
+        <translation>Integration mit %1 aktivieren</translation>
+    </message>
+    <message>
+        <source>Extension files are missing.</source>
+        <translation>Erweiterungsdateien fehlen.</translation>
+    </message>
+    <message>
+        <source>File name (editable)</source>
+        <translation>Dateiname (bearbeitbar)</translation>
+    </message>
+    <message>
+        <source>Install extension</source>
+        <translation>Erweiterung installieren</translation>
+    </message>
+    <message>
+        <source>Install the official extension, then check its connection.</source>
+        <translation>Installieren Sie die offizielle Erweiterung und prüfen Sie dann die Verbindung.</translation>
+    </message>
+    <message>
+        <source>Install this browser first, then refresh.</source>
+        <translation>Installieren Sie zuerst diesen Browser und aktualisieren Sie dann die Ansicht.</translation>
+    </message>
+    <message>
+        <source>Invalid file name</source>
+        <translation>Ungültiger Dateiname</translation>
+    </message>
+    <message>
+        <source>Move/Rename</source>
+        <translation>Verschieben/Umbenennen</translation>
+    </message>
+    <message>
+        <source>OK</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>Open extension folder</source>
+        <translation>Erweiterungsordner öffnen</translation>
+    </message>
+    <message>
+        <source>Open extension manager</source>
+        <translation>Erweiterungsverwaltung öffnen</translation>
+    </message>
+    <message>
+        <source>Open the extension folder, enable Developer mode in your browser, then select Load unpacked.</source>
+        <translation>Öffnen Sie den Erweiterungsordner, aktivieren Sie den Entwicklermodus und wählen Sie „Entpackte Erweiterung laden“.</translation>
+    </message>
+    <message>
+        <source>Open the extensions manager in your browser.</source>
+        <translation>Öffnen Sie die Erweiterungsverwaltung im Browser.</translation>
+    </message>
+    <message>
+        <source>Refresh</source>
+        <translation>Aktualisieren</translation>
+    </message>
+    <message>
+        <source>Right-click a link and choose Download with GenyDL.</source>
+        <translation>Klicken Sie mit der rechten Maustaste auf einen Link und wählen Sie Download with GenyDL.</translation>
+    </message>
+    <message>
+        <source>Save as</source>
+        <translation>Speichern unter</translation>
+    </message>
+    <message>
+        <source>Send selected links to GenyDL. Automatic capture is optional.</source>
+        <translation>Senden Sie ausgewählte Links an GenyDL. Die automatische Übernahme ist optional.</translation>
+    </message>
+    <message>
+        <source>The file name cannot contain directories or reserved characters.</source>
+        <translation>Der Dateiname darf keine Verzeichnisse oder reservierten Zeichen enthalten.</translation>
+    </message>
+    <message>
+        <source>Verify</source>
+        <translation>Überprüfen</translation>
+    </message>
+    <message>
+        <source>Waiting for extension</source>
+        <translation>Warten auf Erweiterung</translation>
+    </message>
+    <message>
+        <source>Firefox</source>
+        <translation>Firefox</translation>
+    </message>
+    <message>
+        <source>Google Chrome</source>
+        <translation>Google Chrome</translation>
+    </message>
+    <message>
+        <source>Opera</source>
+        <translation>Opera</translation>
+    </message>
 </context>
 <context>
     <name>NetworkStatus</name>

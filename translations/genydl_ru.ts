@@ -4289,6 +4289,146 @@
         <source>Overall: </source>
         <translation>В целом:</translation>
     </message>
+    <message>
+        <source>A green check means the extension responded recently. Enabling a browser does not install its extension.</source>
+        <translation>Зелёная галочка означает недавний ответ расширения. Включение браузера не устанавливает расширение.</translation>
+    </message>
+    <message>
+        <source>Browser Integration</source>
+        <translation>Интеграция с браузерами</translation>
+    </message>
+    <message>
+        <source>Browser connections</source>
+        <translation>Подключения браузеров</translation>
+    </message>
+    <message>
+        <source>Browser not detected</source>
+        <translation>Браузер не обнаружен</translation>
+    </message>
+    <message>
+        <source>Browser setup</source>
+        <translation>Настройка браузера</translation>
+    </message>
+    <message>
+        <source>Browsers</source>
+        <translation>Браузеры</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>Очистить</translation>
+    </message>
+    <message>
+        <source>Connected</source>
+        <translation>Подключено</translation>
+    </message>
+    <message>
+        <source>Connection setup failed</source>
+        <translation>Не удалось настроить подключение</translation>
+    </message>
+    <message>
+        <source>Could not open the extension store.</source>
+        <translation>Не удалось открыть магазин расширений.</translation>
+    </message>
+    <message>
+        <source>Could not register the local browser connection.</source>
+        <translation>Не удалось зарегистрировать локальное подключение браузера.</translation>
+    </message>
+    <message>
+        <source>Disabled</source>
+        <translation>Отключено</translation>
+    </message>
+    <message>
+        <source>Enable %1 integration</source>
+        <translation>Включить интеграцию с %1</translation>
+    </message>
+    <message>
+        <source>Extension files are missing.</source>
+        <translation>Файлы расширения отсутствуют.</translation>
+    </message>
+    <message>
+        <source>File name (editable)</source>
+        <translation>Имя файла (изменяемое)</translation>
+    </message>
+    <message>
+        <source>Install extension</source>
+        <translation>Установить расширение</translation>
+    </message>
+    <message>
+        <source>Install the official extension, then check its connection.</source>
+        <translation>Установите официальное расширение и проверьте подключение.</translation>
+    </message>
+    <message>
+        <source>Install this browser first, then refresh.</source>
+        <translation>Сначала установите браузер, затем обновите список.</translation>
+    </message>
+    <message>
+        <source>Invalid file name</source>
+        <translation>Недопустимое имя файла</translation>
+    </message>
+    <message>
+        <source>Move/Rename</source>
+        <translation>Переместить/Переименовать</translation>
+    </message>
+    <message>
+        <source>OK</source>
+        <translation>ОК</translation>
+    </message>
+    <message>
+        <source>Open extension folder</source>
+        <translation>Открыть папку расширения</translation>
+    </message>
+    <message>
+        <source>Open extension manager</source>
+        <translation>Открыть менеджер расширений</translation>
+    </message>
+    <message>
+        <source>Open the extension folder, enable Developer mode in your browser, then select Load unpacked.</source>
+        <translation>Откройте папку расширения, включите режим разработчика и выберите загрузку распакованного расширения.</translation>
+    </message>
+    <message>
+        <source>Open the extensions manager in your browser.</source>
+        <translation>Откройте менеджер расширений в браузере.</translation>
+    </message>
+    <message>
+        <source>Refresh</source>
+        <translation>Обновить</translation>
+    </message>
+    <message>
+        <source>Right-click a link and choose Download with GenyDL.</source>
+        <translation>Щёлкните ссылку правой кнопкой мыши и выберите Download with GenyDL.</translation>
+    </message>
+    <message>
+        <source>Save as</source>
+        <translation>Сохранить как</translation>
+    </message>
+    <message>
+        <source>Send selected links to GenyDL. Automatic capture is optional.</source>
+        <translation>Отправляйте выбранные ссылки в GenyDL. Автоматический перехват необязателен.</translation>
+    </message>
+    <message>
+        <source>The file name cannot contain directories or reserved characters.</source>
+        <translation>Имя файла не может содержать пути к каталогам или зарезервированные символы.</translation>
+    </message>
+    <message>
+        <source>Verify</source>
+        <translation>Проверить</translation>
+    </message>
+    <message>
+        <source>Waiting for extension</source>
+        <translation>Ожидание расширения</translation>
+    </message>
+    <message>
+        <source>Firefox</source>
+        <translation>Firefox</translation>
+    </message>
+    <message>
+        <source>Google Chrome</source>
+        <translation>Google Chrome</translation>
+    </message>
+    <message>
+        <source>Opera</source>
+        <translation>Opera</translation>
+    </message>
 </context>
 <context>
     <name>NetworkStatus</name>

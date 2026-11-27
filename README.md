@@ -8,7 +8,9 @@ GenyDL is a modern, high-performance download manager built with **C++23**, **Qt
 ![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
 ![C++](https://img.shields.io/badge/C%2B%2B%20Version-23-blue.svg)
 ![Qt](https://img.shields.io/badge/Qt-6.8%2B-brightgreen.svg)
-![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen.svg)
+[![Firefox Add-on](https://img.shields.io/badge/Firefox-Install%20add--on-FF7139?logo=firefoxbrowser&logoColor=white)](https://addons.mozilla.org/en-US/firefox/addon/genydl-download-with-genydl/)
+[![Chrome](https://img.shields.io/badge/Chrome-Developer%20mode-4285F4?logo=googlechrome&logoColor=white)](#browser-add-ons)
+[![Opera](https://img.shields.io/badge/Opera-Developer%20mode-FF1B2D?logo=opera&logoColor=white)](#browser-add-ons)
 
 ## 🚧 Project Status
 
@@ -32,10 +34,29 @@ GenyDL is a modern, high-performance download manager built with **C++23**, **Qt
 - URL probe, advanced GitHub, and IPFS-based update client
 - Session persistence, import/export, and post-download action foundation
 - Cross-platform packaging for macOS and Windows
-- Experimental desktop browser integration v2: Manual right-click by default,
-  opt-in Ask/Always capture, optional permissions, versioned Native Messaging,
-  and Firefox/Chromium packaging for macOS, Windows and Linux. Safari still
-  requires a signed Web Extension (details in `docs/browser-integration.md`).
+- Browser integration with Firefox, Chrome and Opera; manual link review by default and optional automatic capture.
+
+## Browser add-ons
+
+Send a link directly to GenyDL using the extension popup or the **Download with GenyDL** context menu. The desktop review dialog remains the default. Ask/Always capture is optional and requires explicit browser permission.
+
+| Browser | Availability | Get the extension |
+| --- | --- | --- |
+| Firefox | Published on Mozilla Add-ons (1.3.3) | [Install from Mozilla Add-ons](https://addons.mozilla.org/en-US/firefox/addon/genydl-download-with-genydl/) |
+| Chrome | Unpacked package; store publication pending | Configuration → Browsers → Chrome → Open extension folder |
+| Opera | Unpacked package; store publication pending, real-browser verification pending | Configuration → Browsers → Opera → Open extension folder |
+
+Launch GenyDL, enable the desired browser under **Configuration → Browsers**, then install the extension. For Chrome and Opera, open the browser's extension manager, enable Developer mode and select **Load unpacked** (or **Load Extension**) using the folder exported by GenyDL. A green check confirms a recent Native Messaging response, not just registration.
+
+To build the standalone add-on ZIPs from source (without compiling the desktop application):
+
+```sh
+cmake --build build --target browser-extension-zip
+```
+
+Use an already configured build directory; the output files are `GenyDL-Firefox-extension.zip`, `GenyDL-Chrome-extension.zip` and `GenyDL-Opera-extension.zip`. Unpacked users must extract ZIPs before loading. These are not signed store packages.
+
+[Installation and troubleshooting](docs/browser-integration.md) · [Store submission guide](docs/browser-store-publication.md)
 
 ## Planned Features
 

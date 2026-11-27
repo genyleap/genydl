@@ -4279,6 +4279,146 @@
         <source>Overall: </source>
         <translation>پیشرفت کلی: </translation>
     </message>
+    <message>
+        <source>A green check means the extension responded recently. Enabling a browser does not install its extension.</source>
+        <translation>تیک سبز نشان می‌دهد افزونه به‌تازگی پاسخ داده است. فعال‌کردن مرورگر، افزونه را نصب نمی‌کند.</translation>
+    </message>
+    <message>
+        <source>Browser Integration</source>
+        <translation>اتصال مرورگرها</translation>
+    </message>
+    <message>
+        <source>Browser connections</source>
+        <translation>اتصال مرورگرها</translation>
+    </message>
+    <message>
+        <source>Browser not detected</source>
+        <translation>مرورگر شناسایی نشد</translation>
+    </message>
+    <message>
+        <source>Browser setup</source>
+        <translation>راه‌اندازی مرورگر</translation>
+    </message>
+    <message>
+        <source>Browsers</source>
+        <translation>مرورگرها</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>پاک‌کردن</translation>
+    </message>
+    <message>
+        <source>Connected</source>
+        <translation>متصل</translation>
+    </message>
+    <message>
+        <source>Connection setup failed</source>
+        <translation>راه‌اندازی اتصال ناموفق بود</translation>
+    </message>
+    <message>
+        <source>Could not open the extension store.</source>
+        <translation>بازکردن فروشگاه افزونه‌ها ممکن نبود.</translation>
+    </message>
+    <message>
+        <source>Could not register the local browser connection.</source>
+        <translation>ثبت اتصال محلی مرورگر ممکن نبود.</translation>
+    </message>
+    <message>
+        <source>Disabled</source>
+        <translation>غیرفعال</translation>
+    </message>
+    <message>
+        <source>Enable %1 integration</source>
+        <translation>فعال‌کردن اتصال %1</translation>
+    </message>
+    <message>
+        <source>Extension files are missing.</source>
+        <translation>فایل‌های افزونه موجود نیستند.</translation>
+    </message>
+    <message>
+        <source>File name (editable)</source>
+        <translation>نام فایل (قابل ویرایش)</translation>
+    </message>
+    <message>
+        <source>Install extension</source>
+        <translation>نصب افزونه</translation>
+    </message>
+    <message>
+        <source>Install the official extension, then check its connection.</source>
+        <translation>افزونهٔ رسمی را نصب کنید، سپس اتصال آن را بررسی کنید.</translation>
+    </message>
+    <message>
+        <source>Install this browser first, then refresh.</source>
+        <translation>ابتدا این مرورگر را نصب کنید، سپس تازه‌سازی کنید.</translation>
+    </message>
+    <message>
+        <source>Invalid file name</source>
+        <translation>نام فایل نامعتبر</translation>
+    </message>
+    <message>
+        <source>Move/Rename</source>
+        <translation>انتقال/تغییر نام</translation>
+    </message>
+    <message>
+        <source>OK</source>
+        <translation>تأیید</translation>
+    </message>
+    <message>
+        <source>Open extension folder</source>
+        <translation>بازکردن پوشهٔ افزونه</translation>
+    </message>
+    <message>
+        <source>Open extension manager</source>
+        <translation>بازکردن مدیریت افزونه‌ها</translation>
+    </message>
+    <message>
+        <source>Open the extension folder, enable Developer mode in your browser, then select Load unpacked.</source>
+        <translation>پوشهٔ افزونه را باز کنید، حالت توسعه‌دهنده را در مرورگر فعال کنید و گزینهٔ بارگذاری افزونهٔ بازشده (Load unpacked) را انتخاب کنید.</translation>
+    </message>
+    <message>
+        <source>Open the extensions manager in your browser.</source>
+        <translation>مدیریت افزونه‌ها را در مرورگر باز کنید.</translation>
+    </message>
+    <message>
+        <source>Refresh</source>
+        <translation>تازه‌سازی</translation>
+    </message>
+    <message>
+        <source>Right-click a link and choose Download with GenyDL.</source>
+        <translation>روی پیوند راست‌کلیک کنید و «دانلود با GenyDL» (Download with GenyDL) را انتخاب کنید.</translation>
+    </message>
+    <message>
+        <source>Save as</source>
+        <translation>ذخیره به نام</translation>
+    </message>
+    <message>
+        <source>Send selected links to GenyDL. Automatic capture is optional.</source>
+        <translation>پیوندهای انتخابی را به GenyDL بفرستید. دریافت خودکار اختیاری است.</translation>
+    </message>
+    <message>
+        <source>The file name cannot contain directories or reserved characters.</source>
+        <translation>نام فایل نمی‌تواند شامل مسیر پوشه یا نویسه‌های رزروشده باشد.</translation>
+    </message>
+    <message>
+        <source>Verify</source>
+        <translation>اعتبارسنجی</translation>
+    </message>
+    <message>
+        <source>Waiting for extension</source>
+        <translation>در انتظار افزونه</translation>
+    </message>
+    <message>
+        <source>Firefox</source>
+        <translation>فایرفاکس</translation>
+    </message>
+    <message>
+        <source>Google Chrome</source>
+        <translation>گوگل کروم</translation>
+    </message>
+    <message>
+        <source>Opera</source>
+        <translation>اپرا</translation>
+    </message>
 </context>
 <context>
     <name>NetworkStatus</name>

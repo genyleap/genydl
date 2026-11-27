@@ -53,7 +53,8 @@ T.TabButton {
         horizontalAlignment: QQ.Text.AlignHCenter
         verticalAlignment: QQ.Text.AlignVCenter
         elide: AppGlobals.rtl ? QQ.Text.ElideLeft : QQ.Text.ElideRight
-        font.pixelSize: 14
+        font.family: FontSystem.getContentFont.name
+        font.pixelSize: Typography.t3
         font.weight: control.checked ? Font.DemiBold : Font.Medium
         color: control.enabled
                ? (control.checked ? Colors.textPrimary : Colors.textSecondary)

@@ -4279,6 +4279,146 @@
         <source>Overall: </source>
         <translation>总体：</translation>
     </message>
+    <message>
+        <source>A green check means the extension responded recently. Enabling a browser does not install its extension.</source>
+        <translation>绿色对勾表示扩展最近已响应。启用浏览器不会安装扩展。</translation>
+    </message>
+    <message>
+        <source>Browser Integration</source>
+        <translation>浏览器集成</translation>
+    </message>
+    <message>
+        <source>Browser connections</source>
+        <translation>浏览器连接</translation>
+    </message>
+    <message>
+        <source>Browser not detected</source>
+        <translation>未检测到浏览器</translation>
+    </message>
+    <message>
+        <source>Browser setup</source>
+        <translation>浏览器设置</translation>
+    </message>
+    <message>
+        <source>Browsers</source>
+        <translation>浏览器</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>清除</translation>
+    </message>
+    <message>
+        <source>Connected</source>
+        <translation>已连接</translation>
+    </message>
+    <message>
+        <source>Connection setup failed</source>
+        <translation>连接设置失败</translation>
+    </message>
+    <message>
+        <source>Could not open the extension store.</source>
+        <translation>无法打开扩展商店。</translation>
+    </message>
+    <message>
+        <source>Could not register the local browser connection.</source>
+        <translation>无法注册本地浏览器连接。</translation>
+    </message>
+    <message>
+        <source>Disabled</source>
+        <translation>已禁用</translation>
+    </message>
+    <message>
+        <source>Enable %1 integration</source>
+        <translation>启用 %1 集成</translation>
+    </message>
+    <message>
+        <source>Extension files are missing.</source>
+        <translation>扩展文件缺失。</translation>
+    </message>
+    <message>
+        <source>File name (editable)</source>
+        <translation>文件名（可编辑）</translation>
+    </message>
+    <message>
+        <source>Install extension</source>
+        <translation>安装扩展</translation>
+    </message>
+    <message>
+        <source>Install the official extension, then check its connection.</source>
+        <translation>安装官方扩展，然后检查连接。</translation>
+    </message>
+    <message>
+        <source>Install this browser first, then refresh.</source>
+        <translation>请先安装此浏览器，然后刷新。</translation>
+    </message>
+    <message>
+        <source>Invalid file name</source>
+        <translation>文件名无效</translation>
+    </message>
+    <message>
+        <source>Move/Rename</source>
+        <translation>移动/重命名</translation>
+    </message>
+    <message>
+        <source>OK</source>
+        <translation>确定</translation>
+    </message>
+    <message>
+        <source>Open extension folder</source>
+        <translation>打开扩展文件夹</translation>
+    </message>
+    <message>
+        <source>Open extension manager</source>
+        <translation>打开扩展管理器</translation>
+    </message>
+    <message>
+        <source>Open the extension folder, enable Developer mode in your browser, then select Load unpacked.</source>
+        <translation>打开扩展文件夹，启用浏览器开发者模式，然后选择加载已解压的扩展程序。</translation>
+    </message>
+    <message>
+        <source>Open the extensions manager in your browser.</source>
+        <translation>在浏览器中打开扩展管理器。</translation>
+    </message>
+    <message>
+        <source>Refresh</source>
+        <translation>刷新</translation>
+    </message>
+    <message>
+        <source>Right-click a link and choose Download with GenyDL.</source>
+        <translation>右键单击链接并选择 Download with GenyDL。</translation>
+    </message>
+    <message>
+        <source>Save as</source>
+        <translation>另存为</translation>
+    </message>
+    <message>
+        <source>Send selected links to GenyDL. Automatic capture is optional.</source>
+        <translation>将选定链接发送至 GenyDL。自动捕获为可选功能。</translation>
+    </message>
+    <message>
+        <source>The file name cannot contain directories or reserved characters.</source>
+        <translation>文件名不能包含目录路径或保留字符。</translation>
+    </message>
+    <message>
+        <source>Verify</source>
+        <translation>验证</translation>
+    </message>
+    <message>
+        <source>Waiting for extension</source>
+        <translation>等待扩展</translation>
+    </message>
+    <message>
+        <source>Firefox</source>
+        <translation>Firefox</translation>
+    </message>
+    <message>
+        <source>Google Chrome</source>
+        <translation>Google Chrome</translation>
+    </message>
+    <message>
+        <source>Opera</source>
+        <translation>Opera</translation>
+    </message>
 </context>
 <context>
     <name>NetworkStatus</name>

@@ -25,6 +25,13 @@ T.Switch {
     hoverEnabled: true
     focusPolicy: Qt.StrongFocus
 
+    implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
+                            implicitContentWidth + leftPadding + rightPadding,
+                            implicitIndicatorWidth + leftPadding + rightPadding)
+    implicitHeight: Math.max(implicitBackgroundHeight + topInset + bottomInset,
+                             implicitContentHeight + topPadding + bottomPadding,
+                             implicitIndicatorHeight + topPadding + bottomPadding)
+
     text: title
     font.family: FontSystem.getContentFont.name
     font.pixelSize: Typography.t2
@@ -33,7 +40,7 @@ T.Switch {
         id: backgroundSwitch
         implicitWidth: 42
         implicitHeight: 22
-        anchors.left: parent.left
+        x: control.mirrored ? control.width - control.rightPadding - width : control.leftPadding
         radius: Colors.radius
         anchors.verticalCenter: parent.verticalCenter
         border.width:  1
@@ -66,7 +73,7 @@ T.Switch {
 
         Rectangle {
             id: rectTwo
-            x: AppGlobals.rtl
+            x: control.mirrored
                ? (control.checked ? 5 : parent.width - width - 5)
                : (control.checked ? parent.width - width - 5 : 5)
             width: 13
@@ -95,9 +102,9 @@ T.Switch {
         Text {
         text: control.text
         font: control.font
-        fontSizeMode: Text.Fit
-        leftPadding: AppGlobals.rtl ? 0 : control.indicator.width + control.spacing
-        rightPadding: AppGlobals.rtl ? control.indicator.width + control.spacing : 0
+        fontSizeMode: Text.FixedSize
+        leftPadding: control.mirrored || !control.text.length ? 0 : control.indicator.width + control.spacing
+        rightPadding: control.mirrored && control.text.length ? control.indicator.width + control.spacing : 0
         horizontalAlignment: Text.AlignLeading
         opacity: enabled ? 1.0 : 0.3
         color: Colors.primary
