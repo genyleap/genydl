@@ -142,9 +142,8 @@ Item {
         anchors.fill: parent
         drag.target: control
         drag.axis: Drag.XAndYAxis
-        cursorShape: control.movable ? Qt.OpenHandCursor: null
-        onPressed: cursorShape = Qt.ClosedHandCursor
-        onReleased: cursorShape = Qt.OpenHandCursor
+        cursorShape: !control.movable ? Qt.ArrowCursor
+                                      : pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
         onPositionChanged: control.updateMapping()
     }
 }

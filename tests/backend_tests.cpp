@@ -7,6 +7,14 @@
 #include <QSignalSpy>
 #include <QTcpServer>
 #include <QTcpSocket>
+#include <QQmlComponent>
+#include <QQmlContext>
+#include <QQmlEngine>
+#include <QGuiApplication>
+#include <QSettings>
+#include <QScopeGuard>
+#include <QScopedPointer>
+#include <QTranslator>
 
 import genydl.utils.version_utils;
 import genydl.utils.download_utils;
@@ -160,6 +168,7 @@ private slots:
     void parseIpfsReferenceWithSubPath();
     void buildIpfsGatewayUrl();
     void languageCatalogContract();
+    void languageBindingsRetranslate();
     void segmentedRetryAfterDisconnect();
     void singleStreamRecoversExistingPartial();
     void singleStreamHttpErrorDoesNotPollutePartial();
@@ -681,6 +690,79 @@ void BackendTests::languageCatalogContract()
     QCOMPARE(names.value(QStringLiteral("zh_CN")), QString::fromUtf8("简体中文"));
 }
 
+
+
+void BackendTests::languageBindingsRetranslate()
+{
+    // Isolate persistent language settings and restore global Qt state.
+    QSettings settings;
+    const QString key = QStringLiteral("ui/language");
+    const bool hadLanguage = settings.contains(key);
+    const QVariant previousLanguage = settings.value(key);
+    const QLocale previousLocale;
+    const auto previousDirection = QGuiApplication::layoutDirection();
+    const auto restore = qScopeGuard([&] {
+        if (hadLanguage) settings.setValue(key, previousLanguage);
+        else settings.remove(key);
+        settings.sync();
+        QLocale::setDefault(previousLocale);
+        QGuiApplication::setLayoutDirection(previousDirection);
+    });
+    settings.setValue(key, QStringLiteral("en"));
+    settings.sync();
+
+    QQmlEngine engine;
+    LanguageManager manager;
+    manager.setQmlEngine(&engine);
+    engine.rootContext()->setContextProperty(QStringLiteral("languageManager"), &manager);
+    // Constant inputs deliberately do not change during retranslation.
+    // No qsTr or currentLanguage reads here: these are the affected bindings.
+    QQmlComponent component(&engine);
+    component.setData(R"qml(
+import QtQml
+QtObject {
+    property string gateway: languageManager.gatewayHealthLabel(3)
+    property string status: languageManager.statusLabel("Active")
+    property string category: languageManager.categoryLabel("Video")
+    property string queue: languageManager.queueLabel("General")
+    property string pauseReason: languageManager.pauseReasonLabel("Network")
+    property string releaseState: languageManager.releaseStatusLabel("up_to_date")
+    property string systemName: languageManager.nativeLanguageName("system")
+}
+)qml", QUrl());
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    QScopedPointer<QObject> object(component.create());
+    QVERIFY2(object, qPrintable(component.errorString()));
+
+    const QList<QByteArray> properties{"gateway", "status", "category", "queue",
+                                      "pauseReason", "releaseState", "systemName"};
+    const QStringList english{QStringLiteral("Down"), QStringLiteral("Active"),
+        QStringLiteral("Video"), QStringLiteral("General"), QStringLiteral("Network"),
+        QStringLiteral("Up to date"), QStringLiteral("System default")};
+    const auto check = [&](const QString& prefix) {
+        for (qsizetype i = 0; i < properties.size(); ++i) {
+            QCOMPARE(object->property(properties.at(i).constData()).toString(),
+                     prefix + english.at(i));
+        }
+    };
+    check(QString());
+
+    class FixtureTranslator final : public QTranslator {
+    public:
+        bool isEmpty() const override { return false; }
+        QString translate(const char*, const char* sourceText,
+                          const char* = nullptr, int = -1) const override
+        {
+            return QStringLiteral("FA:") + QString::fromUtf8(sourceText);
+        }
+    } translator;
+    QVERIFY(QCoreApplication::installTranslator(&translator));
+    engine.retranslate();
+    check(QStringLiteral("FA:"));
+    QVERIFY(QCoreApplication::removeTranslator(&translator));
+    engine.retranslate();
+    check(QString());
+}
 
 void BackendTests::segmentedRetryAfterDisconnect()
 {

@@ -136,6 +136,8 @@ bool LanguageManager::setLanguage(const QString& languageCode)
 
 QString LanguageManager::nativeLanguageName(const QString& languageCode) const
 {
+    // C++ invokables must participate in QQmlEngine::retranslate().
+    if (m_engine) m_engine->markCurrentFunctionAsTranslationBinding();
     const auto* entry = entryForCode(normalizeLanguageCode(languageCode));
     if (!entry) return languageCode;
     return QLatin1String(entry->code) == QLatin1String("system")
@@ -145,6 +147,8 @@ QString LanguageManager::nativeLanguageName(const QString& languageCode) const
 
 QString LanguageManager::statusLabel(const QString& status) const
 {
+    // C++ invokables must participate in QQmlEngine::retranslate().
+    if (m_engine) m_engine->markCurrentFunctionAsTranslationBinding();
     if (status == QLatin1String("All")) return QCoreApplication::translate("DownloadStatus", "All");
     if (status == QLatin1String("Unfinished")) return QCoreApplication::translate("DownloadStatus", "Unfinished");
     if (status == QLatin1String("History")) return QCoreApplication::translate("DownloadStatus", "History");
@@ -178,6 +182,8 @@ QString LanguageManager::statusLabel(const QString& status) const
 
 QString LanguageManager::categoryLabel(const QString& category) const
 {
+    // C++ invokables must participate in QQmlEngine::retranslate().
+    if (m_engine) m_engine->markCurrentFunctionAsTranslationBinding();
     if (category == QLatin1String("Auto")) return QCoreApplication::translate("DownloadCategory", "Auto");
     if (category == QLatin1String("Video")) return QCoreApplication::translate("DownloadCategory", "Video");
     if (category == QLatin1String("Audio")) return QCoreApplication::translate("DownloadCategory", "Audio");
@@ -205,6 +211,8 @@ QString LanguageManager::categoryLabel(const QString& category) const
 
 QString LanguageManager::queueLabel(const QString& queue) const
 {
+    // C++ invokables must participate in QQmlEngine::retranslate().
+    if (m_engine) m_engine->markCurrentFunctionAsTranslationBinding();
     // Queue names are user data. Only the built-in default queue has a
     // translatable display label; its stable English identifier remains intact.
     if (queue == QLatin1String("General"))
@@ -214,6 +222,8 @@ QString LanguageManager::queueLabel(const QString& queue) const
 
 QString LanguageManager::pauseReasonLabel(const QString& reason) const
 {
+    // C++ invokables must participate in QQmlEngine::retranslate().
+    if (m_engine) m_engine->markCurrentFunctionAsTranslationBinding();
     if (reason == QLatin1String("User")) return QCoreApplication::translate("PauseReason", "User");
     if (reason == QLatin1String("Network")) return QCoreApplication::translate("PauseReason", "Network");
     if (reason == QLatin1String("Network changed")) return QCoreApplication::translate("PauseReason", "Network changed");
@@ -224,6 +234,8 @@ QString LanguageManager::pauseReasonLabel(const QString& reason) const
 
 QString LanguageManager::releaseStatusLabel(const QString& status) const
 {
+    // C++ invokables must participate in QQmlEngine::retranslate().
+    if (m_engine) m_engine->markCurrentFunctionAsTranslationBinding();
     if (status == QLatin1String("up_to_date")) return QCoreApplication::translate("ReleaseCenterService", "Up to date");
     if (status == QLatin1String("update_available")) return QCoreApplication::translate("ReleaseCenterService", "Update available");
     if (status == QLatin1String("downloaded")) return QCoreApplication::translate("ReleaseCenterService", "Ready to install");
@@ -234,6 +246,8 @@ QString LanguageManager::releaseStatusLabel(const QString& status) const
 
 QString LanguageManager::gatewayHealthLabel(int health) const
 {
+    // C++ invokables must participate in QQmlEngine::retranslate().
+    if (m_engine) m_engine->markCurrentFunctionAsTranslationBinding();
     switch (health) {
     case 1: return QCoreApplication::translate("GatewayService", "Healthy");
     case 2: return QCoreApplication::translate("GatewayService", "Slow");
