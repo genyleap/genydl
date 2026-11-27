@@ -1,31 +1,51 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
-<title>GenyDL Browser Integration</title>
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GenyDL settings</title>
+<link rel="stylesheet" href="popup.css">
 <style>
-:root{color-scheme:light dark;font-family:system-ui,-apple-system,sans-serif}
-body{max-width:540px;padding:24px;margin:auto;font-size:14px;line-height:1.5}
-label{display:block;margin:18px 0 6px;font-weight:600}
-select,textarea{width:100%;box-sizing:border-box;padding:9px;border-radius:7px}
-textarea{min-height:110px} .muted{color:gray;font-size:12px}
-#message{min-height:20px;margin-top:12px} h1{font-size:22px}
-</style></head>
-<body><h1>GenyDL browser integration</h1>
-<p>GenyDL never intercepts downloads unless you enable an automatic mode. Right-click a link and select <strong>Download with GenyDL</strong> to review it first. The browser will ask for download-management permission only when you enable Ask or Always.</p>
+body {width:auto;max-width:620px;margin:0 auto;padding:16px}
+.brand {padding-inline:0;border-bottom:1px solid var(--border)}
+main {padding-inline:0}
+section {margin-bottom:24px}
+h2 {font-size:15px;margin:0 0 8px}
+label {margin-top:16px}
+select,textarea {font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:10px;width:100%;box-sizing:border-box}
+select:focus-visible,textarea:focus-visible {outline:2px solid var(--focus);outline-offset:2px}
+textarea {min-height:100px;resize:vertical}
+.muted {color:var(--muted);font-size:12px;margin-top:8px}
+#message {min-height:20px;margin-top:12px;color:var(--text)}
+</style>
+</head>
+<body>
+<header class="brand"><img src="icon128.png" width="48" height="48" alt=""><div class="identity"><h1>GenyDL settings</h1><p>Browser download integration</p></div></header>
+<main>
+<section aria-labelledby="capture-title">
+<h2 id="capture-title">Download behavior</h2>
+<p class="muted">Manual mode leaves ordinary downloads in your browser. Right-click a link or send it from the toolbar to review it in GenyDL.</p>
 <label for="mode">Capture mode</label>
 <select id="mode">
-<option value="manual">Manual — right-click only (recommended)</option>
-<option value="ask">Ask — prompt before transferring downloads</option>
+<option value="manual">Manual — only when I choose (recommended)</option>
+<option value="ask">Ask — review eligible downloads</option>
 <option value="always">Always — transfer eligible downloads automatically</option>
 <option value="off">Disabled — browser handles all downloads</option>
 </select>
-<label for="scope">Automatic interception scope</label>
+<p class="muted">Ask and Always request the browser's download-management permission. You can return to Manual at any time.</p>
+</section>
+<section aria-labelledby="scope-title">
+<h2 id="scope-title">Automatic capture rules</h2>
+<label for="scope">Download types</label>
 <select id="scope">
 <option value="recognized">Recognized downloadable files only</option>
 <option value="all">All HTTP(S) downloads (advanced)</option>
 </select>
-<label for="excluded">Excluded websites (one hostname per line)</label>
-<textarea id="excluded" placeholder="example.com"></textarea>
-<p class="muted">Always mode requires your explicit choice. Authenticated, POST, and stream-backed downloads may fail outside the browser. GenyDL asks for browser permissions using the browser's normal UI; it does not silently install extensions.</p>
+<label for="excluded">Excluded websites</label>
+<textarea id="excluded" placeholder="example.com" aria-describedby="excluded-help"></textarea>
+<p id="excluded-help" class="muted">One hostname per line. Rules apply to Ask and Always. Authenticated, POST and stream-backed downloads may need to remain in the browser.</p>
+</section>
 <div id="message" role="status" aria-live="polite"></div>
-<script src="options.js"></script></body></html>
+</main>
+<script src="options.js"></script>
+</body>
+</html>

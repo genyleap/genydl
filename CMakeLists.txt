@@ -703,7 +703,7 @@ endif()
 set(GENYDL_BROWSER_STAGE "${CMAKE_BINARY_DIR}/browser-extensions")
 foreach(genydl_browser IN ITEMS firefox chrome)
     file(MAKE_DIRECTORY "${GENYDL_BROWSER_STAGE}/${genydl_browser}")
-    foreach(genydl_asset IN ITEMS background.js options.html options.js icon128.png)
+    foreach(genydl_asset IN ITEMS background.js options.html options.js popup.html popup.css popup.js icon16.png icon32.png icon64.png icon128.png)
         configure_file(
             "${CMAKE_CURRENT_SOURCE_DIR}/browser-extension/${genydl_asset}"
             "${GENYDL_BROWSER_STAGE}/${genydl_browser}/${genydl_asset}" COPYONLY)
@@ -720,11 +720,13 @@ add_custom_target(browser-extension-zip
     COMMAND ${CMAKE_COMMAND} -E chdir "${GENYDL_BROWSER_STAGE}/firefox"
         ${CMAKE_COMMAND} -E tar cf
         "${CMAKE_BINARY_DIR}/GenyDL-Firefox-extension.zip" --format=zip
-        "manifest.json" "background.js" "options.html" "options.js" "icon128.png"
+        "manifest.json" "background.js" "options.html" "options.js"
+        "popup.html" "popup.css" "popup.js" "icon16.png" "icon32.png" "icon64.png" "icon128.png"
     COMMAND ${CMAKE_COMMAND} -E chdir "${GENYDL_BROWSER_STAGE}/chrome"
         ${CMAKE_COMMAND} -E tar cf
         "${CMAKE_BINARY_DIR}/GenyDL-Chrome-extension.zip" --format=zip
-        "manifest.json" "background.js" "options.html" "options.js" "icon128.png"
+        "manifest.json" "background.js" "options.html" "options.js"
+        "popup.html" "popup.css" "popup.js" "icon16.png" "icon32.png" "icon64.png" "icon128.png"
     COMMENT "Package separate Firefox and Chrome WebExtensions"
     VERBATIM)
 

@@ -44,3 +44,4 @@ jobs:
           node tests/firefox-extension-smoke.cjs
           node tests/browser-options-smoke.cjs
           node tests/browser-setup-smoke.cjs
+          node tests/browser-popup-smoke.cjs

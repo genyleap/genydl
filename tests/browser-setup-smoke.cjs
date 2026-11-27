@@ -20,9 +20,15 @@ assert.deepEqual(firefox.background.scripts, ["background.js"]);
 assert.equal(firefox.browser_specific_settings.gecko.id,
   "browser@genyleap.com");
 assert.ok(firefox.browser_specific_settings.gecko.data_collection_permissions.required
-  .includes("browsingActivity"),
+  .includes("websiteActivity"),
   "New Firefox releases must disclose URL transfer to the local desktop app");
 for (const manifest of [chrome, firefox]) {
+  assert.equal(manifest.action.default_popup, "popup.html");
+  assert.equal(manifest.options_ui.page, "options.html");
+  for (const [size, icon] of Object.entries(manifest.icons)) {
+    assert.equal(manifest.action.default_icon[size], icon);
+    assert.ok(fs.existsSync("browser-extension/" + icon));
+  }
   assert.ok(manifest.permissions.includes("nativeMessaging"));
   assert.ok(manifest.permissions.includes("contextMenus"));
   assert.ok(!manifest.permissions.includes("downloads"));

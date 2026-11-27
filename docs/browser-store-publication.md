@@ -1,7 +1,7 @@
 # Publishing GenyDL browser extensions (2026)
 
-**Status:** not submitted or published. This guide prepares an authorized
-maintainer to submit. Draft store listing text, privacy explanations and
+**Status:** Firefox 0.1.1 is published on AMO. The repository prepares a
+new update for owner submission; Chrome remains unpacked/developer-mode. Draft store listing text, privacy explanations and
 reviewer instructions are in `docs/browser-store-submission-materials.md`.
 Do not create developer accounts, pay fees, upload, claim approval, or enable
 CI without explicit owner authorization.
@@ -10,7 +10,7 @@ CI without explicit owner authorization.
 
 | Distribution channel | Artifact | Desktop browsers | Native messaging |
 | --- | --- | --- | --- |
-| Chrome Web Store | `GenyDL-Chromium-extension.zip` | Chrome, and compatible Brave/Vivaldi/Chromium variants | Configure the **real store-assigned ID** in GenyDL |
+| Chrome Web Store | `GenyDL-Chrome-extension.zip` | Chrome, and compatible Brave/Vivaldi/Chromium variants | Configure the **real store-assigned ID** in GenyDL |
 | Firefox Add-ons (AMO) | `GenyDL-Firefox-extension.zip` | Firefox | Fixed `gecko.id`: `browser@genyleap.com` |
 | Microsoft Edge Add-ons | Chromium ZIP | Microsoft Edge | Configure its **own store-assigned ID** |
 | Apple distribution | **not yet built** | Safari on macOS only | Requires separately signed Safari App Extension |
@@ -67,14 +67,14 @@ https://extensionworkshop.com/documentation/publish/submitting-an-add-on/
 https://extensionworkshop.com/documentation/publish/signing-and-distribution-overview/
 https://extensionworkshop.com/documentation/develop/firefox-builtin-data-consent/
 
-1. Owner signs in to https://addons.mozilla.org/developers/ and begins a new
-   public listed extension submission.
+1. Owner signs in to https://addons.mozilla.org/developers/ and opens the existing
+   GenyDL listing and submits a new version (do not create a new listing).
 2. Upload `GenyDL-Firefox-extension.zip`, with `manifest.json` at ZIP root.
 3. Preserve `browser_specific_settings.gecko.id` across updates.
 4. New Firefox extensions must disclose data collection/transmission via
    `browser_specific_settings.gecko.data_collection_permissions`. The extension
    sends user-selected/download URLs to a **separate local desktop application**,
-   so the manifest declares `browsingActivity` rather than incorrectly
+   so the manifest declares `websiteActivity` rather than incorrectly
    declaring `none`. Review this classification with AMO policy documentation
    and actual application data handling before final submission.
 5. Add accurate privacy/support details, reviewer notes explaining local

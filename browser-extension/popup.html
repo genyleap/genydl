@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GenyDL</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header class="brand">
+    <img src="icon128.png" width="48" height="48" alt="">
+    <div class="identity"><h1>GenyDL</h1><p>Download manager</p></div>
+    <button class="icon-button" id="settings" type="button" aria-label="Extension settings" title="Extension settings">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/><path d="m19.4 13.5 1.1 1.8-1.7 2.9-2.1-.1-1.6.9-.9 1.9h-3.4L9.9 19l-1.6-.9-2.1.1-1.7-2.9 1.1-1.8v-1.9L4.5 9.8l1.7-2.9 2.1.1 1.6-.9.9-1.9h3.4l.9 1.9 1.6.9 2.1-.1 1.7 2.9-1.1 1.8Z"/></svg>
+    </button>
+  </header>
+  <section class="connection" aria-label="Desktop connection">
+    <div class="connection-copy" role="status" aria-live="polite">
+      <div class="connection-title"><span id="indicator" data-state="checking" aria-hidden="true"></span><strong id="connection">Checking connection…</strong></div>
+      <p id="connection-detail">Looking for the GenyDL desktop app.</p>
+    </div>
+    <button id="check" type="button" class="secondary" disabled>Check again</button>
+  </section>
+  <main>
+    <form id="download-form">
+      <label for="url">Download a link</label>
+      <input id="url" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://example.com/file.zip" required maxlength="8192">
+      <button class="primary" id="send" type="submit">Review in GenyDL</button>
+      <p id="feedback" class="feedback" role="status" aria-live="polite" hidden></p>
+    </form>
+    <p class="hint">Or right-click a link or media item and choose <strong>Download with GenyDL</strong>.</p>
+  </main>
+  <footer><span>Capture mode</span><strong id="mode-label">Loading…</strong><span class="version" id="version"></span></footer>
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -165,7 +165,7 @@ async function capture(item) {
 async function offerContextLink(info) {
   if (info.menuItemId !== MENU_ID) return;
   if ((await readSettings()).mode === "off") return;
-  const url = validatedUrl(info.linkUrl);
+  const url = validatedUrl(info.linkUrl || info.srcUrl);
   if (!url) return;
   try { await nativeHandoff(url.href, "", "download.prompt"); }
   catch (error) { console.warn("GenyDL is unavailable", String(error)); }
@@ -176,9 +176,15 @@ if (EXT.downloads?.onCreated)
 
 function registerMenu() {
   if (!EXT.contextMenus?.create) return;
-  EXT.contextMenus.create({
-    id: MENU_ID, title: "Download with GenyDL", contexts: ["link"]
+  const create = () => EXT.contextMenus.create({
+    id: MENU_ID, title: "Download with GenyDL", contexts: ["link", "image", "video", "audio"]
   }, () => { void EXT.runtime.lastError; });
+  // AMO 0.1.1 used a different menu ID. Remove only this extension's menus
+  // before recreating the current entry, including during an update.
+  if (!EXT.contextMenus.removeAll) { create(); return; }
+  if (typeof globalThis.browser !== "undefined")
+    EXT.contextMenus.removeAll().then(create).catch(console.warn);
+  else EXT.contextMenus.removeAll(create);
 }
 async function browserCode() {
   if (typeof globalThis.browser !== "undefined"
@@ -200,6 +206,32 @@ async function browserCode() {
   if (ua.includes("Chrome/")) return "chrome";
   return "chrome";
 }
+
+async function handlePopup(message) {
+  try {
+    if (message.kind === "ping") {
+      const reply = await nativeHandoff(null, "", "integration.ping", await browserCode());
+      return {ok: reply?.ok === true, message: reply?.message || ""};
+    }
+    if ((await readSettings()).mode === "off")
+      return {ok: false, message: "Enable a capture mode in Settings first."};
+    const url = validatedUrl(message.url);
+    if (!url) return {ok: false, message: "Enter a valid direct HTTP(S) link."};
+    const reply = await nativeHandoff(url.href, "", "download.prompt");
+    return {ok: reply?.ok === true, message: reply?.message || ""};
+  } catch {
+    return {ok: false, message: "GenyDL is unavailable. Open the desktop app and check browser integration."};
+  }
+}
+
+if (EXT.runtime?.onMessage) EXT.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.source !== "genydl-popup" || !["ping", "download"].includes(message.kind)
+      || sender.id !== EXT.runtime.id) return false;
+  const task = handlePopup(message);
+  if (typeof globalThis.browser !== "undefined") return task;
+  task.then(sendResponse);
+  return true;
+});
 
 async function reportConnection() {
   // A verified round trip is the only basis for the desktop's
