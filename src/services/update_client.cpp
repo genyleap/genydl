@@ -22,6 +22,7 @@ module;
 #include <QTimer>
 #include <QUrl>
 #include <QSettings>
+#include <QScopeGuard>
 
 #if defined(Q_OS_WIN)
 #ifndef NOMINMAX
@@ -259,17 +260,8 @@ void UpdateClient::setPublicKeyPath(const QString& path)
 
 void UpdateClient::checkNow()
 {
-    if (m_downloadReply) {
-        setStatus(tr("Updater busy"));
-        setError(tr("A download is already in progress"));
-        return;
-    }
-    if (m_activeReply) {
-        m_activeReply->disconnect(this);
-        m_activeReply->abort();
-        m_activeReply->deleteLater();
-        m_activeReply = nullptr;
-    }
+    // Reopening the updates dialog is not a transfer failure.
+    if (m_downloadBusy || m_activeReply) return;
     resetUpdateInfo();
     setError(QString());
     setStatus(tr("Checking for updates..."));
@@ -309,17 +301,15 @@ void UpdateClient::checkNow()
 
 void UpdateClient::downloadUpdate()
 {
+    // Single-flight: never abort or restart an existing transfer.
+    if (m_downloadBusy || m_activeReply || downloadReady()) return;
     if (m_downloadUrl.isEmpty()) {
         setError(tr("No download URL"));
         return;
     }
-    if (m_downloadReply) {
-        m_downloadReply->disconnect(this);
-        m_downloadReply->abort();
-        m_downloadReply->deleteLater();
-        m_downloadReply = nullptr;
-    }
-
+    m_downloadCancelled = false;
+    m_downloadWriteError.clear();
+    setDownloadBusy(true);
     setError(QString());
     m_downloadProgress = 0.0;
     emit downloadProgressChanged();
@@ -347,6 +337,7 @@ void UpdateClient::downloadUpdate()
         setError(tr("Failed to open file for download"));
         m_downloadFile->deleteLater();
         m_downloadFile = nullptr;
+        setDownloadBusy(false);
         return;
     }
 
@@ -360,10 +351,10 @@ void UpdateClient::downloadUpdate()
     connect(reply, &QNetworkReply::readyRead, this, [this, reply]() {
         if (reply != m_downloadReply) return;
         if (!m_downloadFile) return;
-        if (!reply->isOpen() || reply->isFinished()) return;
         const QByteArray chunk = reply->readAll();
-        if (!chunk.isEmpty()) {
-            m_downloadFile->write(chunk);
+        if (!chunk.isEmpty() && m_downloadFile->write(chunk) != chunk.size()) {
+            m_downloadWriteError = m_downloadFile->errorString();
+            reply->abort();
         }
     });
     connect(reply, &QNetworkReply::downloadProgress, this, [this, reply](qint64 received, qint64 total) {
@@ -377,39 +368,49 @@ void UpdateClient::downloadUpdate()
             reply->deleteLater();
             return;
         }
-        if (m_downloadFile && reply->isOpen()) {
+        const auto finish = qScopeGuard([this] { setDownloadBusy(false); });
+        if (m_downloadFile && reply->isOpen() && !m_downloadCancelled
+                && reply->error() == QNetworkReply::NoError) {
             const QByteArray chunk = reply->readAll();
-            if (!chunk.isEmpty()) {
-                m_downloadFile->write(chunk);
-            }
+            if (!chunk.isEmpty() && m_downloadFile->write(chunk) != chunk.size())
+                m_downloadWriteError = m_downloadFile->errorString();
         }
         const bool ok = (reply->error() == QNetworkReply::NoError);
         const QString err = reply->errorString();
         reply->deleteLater();
         m_downloadReply = nullptr;
+        emit downloadInProgressChanged();
         if (m_downloadFile) {
-            m_downloadFile->flush();
+            if (!m_downloadFile->flush() && m_downloadWriteError.isEmpty())
+                m_downloadWriteError = m_downloadFile->errorString();
             m_downloadFile->close();
             m_downloadFile->deleteLater();
             m_downloadFile = nullptr;
         }
-        if (!ok) {
+        if (m_downloadCancelled || !ok || !m_downloadWriteError.isEmpty()) {
             QFile::remove(targetPath);
-            setStatus(tr("Download failed"));
-            setError(err);
+            m_downloadProgress = 0.0;
+            emit downloadProgressChanged();
+            setStatus(m_downloadCancelled ? tr("Download cancelled") : tr("Download failed"));
+            setError(m_downloadCancelled ? QString() :
+                     (m_downloadWriteError.isEmpty() ? err : m_downloadWriteError));
             return;
         }
         if (m_downloadProgress < 1.0) {
             m_downloadProgress = 1.0;
             emit downloadProgressChanged();
         }
+        setStatus(tr("Verifying update..."));
         QString verifyError;
         if (!verifyDownloadedPayload(targetPath, &verifyError)) {
             QFile::remove(targetPath);
+            m_downloadProgress = 0.0;
+            emit downloadProgressChanged();
             setStatus(tr("Verification failed"));
             setError(verifyError.isEmpty() ? tr("Downloaded payload verification failed") : verifyError);
             return;
         }
+        setError(QString());
         m_downloadedPath = targetPath;
         emit downloadReadyChanged();
         if (m_expectedSha256.trimmed().isEmpty()) {
@@ -420,10 +421,26 @@ void UpdateClient::downloadUpdate()
             setStatus(tr("Update downloaded"));
         }
     });
+    emit downloadInProgressChanged();
+}
+
+void UpdateClient::cancelDownload()
+{
+    if (!m_downloadReply) return;
+    m_downloadCancelled = true;
+    m_downloadReply->abort(); // finished owns all cleanup
+}
+
+void UpdateClient::setDownloadBusy(bool busy)
+{
+    if (m_downloadBusy == busy) return;
+    m_downloadBusy = busy;
+    emit downloadInProgressChanged();
 }
 
 void UpdateClient::installUpdate()
 {
+    if (m_downloadBusy) return;
     const QString path = m_downloadedPath.trimmed();
     if (path.isEmpty() || !QFileInfo::exists(path)) {
         setError(tr("Downloaded update file was not found"));
@@ -524,26 +541,16 @@ void UpdateClient::installUpdate()
 
 void UpdateClient::resetSettingsToDefaults()
 {
+    // Avoid changing checksum/signature metadata during verification.
+    if (m_downloadBusy && !m_downloadReply) return;
+    if (m_downloadReply) cancelDownload();
+    if (m_downloadBusy) return;
     if (m_activeReply) {
         m_activeReply->disconnect(this);
         m_activeReply->abort();
         m_activeReply->deleteLater();
         m_activeReply = nullptr;
     }
-    if (m_downloadReply) {
-        m_downloadReply->disconnect(this);
-        m_downloadReply->abort();
-        m_downloadReply->deleteLater();
-        m_downloadReply = nullptr;
-    }
-    if (m_downloadFile) {
-        if (m_downloadFile->isOpen()) {
-            m_downloadFile->close();
-        }
-        m_downloadFile->deleteLater();
-        m_downloadFile = nullptr;
-    }
-
     QSettings settings;
     settings.beginGroup(settingsGroup());
     settings.remove(QString());
@@ -707,7 +714,7 @@ void UpdateClient::resetUpdateInfo()
 
 void UpdateClient::maybeAutoCheck()
 {
-    checkNow();
+    if (!downloadReady()) checkNow();
 }
 
 void UpdateClient::checkWebsiteManifest()

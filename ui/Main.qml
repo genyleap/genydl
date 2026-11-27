@@ -846,9 +846,10 @@ ApplicationWindow {
                         width: parent.width
                         spacing: 10
 
-                        Controls.Button { text: qsTr("Check Now"); onClicked: updateClient.checkNow() }
-                        Controls.Button { text: qsTr("Download"); enabled: updateClient.updateAvailable; onClicked: updateClient.downloadUpdate() }
-                        Controls.Button { text: qsTr("Install"); enabled: updateClient.downloadReady; onClicked: updateClient.installUpdate() }
+                        Controls.Button { text: qsTr("Check Now"); enabled: !updateClient.downloadInProgress; onClicked: updateClient.checkNow() }
+                        Controls.Button { text: qsTr("Download"); enabled: updateClient.updateAvailable && !updateClient.downloadInProgress && !updateClient.downloadReady; onClicked: updateClient.downloadUpdate() }
+                        Controls.Button { text: qsTr("Install"); enabled: updateClient.downloadReady && !updateClient.downloadInProgress; onClicked: updateClient.installUpdate() }
+                        Controls.Button { text: qsTr("Cancel"); visible: updateClient.downloadCancelable; onClicked: updateClient.cancelDownload() }
                         Controls.Button {
                             text: qsTr("Settings")
                             onClicked: appRoot.openConfigurationDialog(3)
@@ -3689,9 +3690,10 @@ ApplicationWindow {
 
                                 RowLayout {
                                     Layout.fillWidth: true
-                                    Controls.Button { text: qsTr("Check Now"); onClicked: updateClient.checkNow() }
-                                    Controls.Button { text: qsTr("Download"); enabled: updateClient.updateAvailable; onClicked: updateClient.downloadUpdate() }
-                                    Controls.Button { text: qsTr("Install"); enabled: updateClient.downloadReady; onClicked: updateClient.installUpdate() }
+                                    Controls.Button { text: qsTr("Check Now"); enabled: !updateClient.downloadInProgress; onClicked: updateClient.checkNow() }
+                                    Controls.Button { text: qsTr("Download"); enabled: updateClient.updateAvailable && !updateClient.downloadInProgress && !updateClient.downloadReady; onClicked: updateClient.downloadUpdate() }
+                                    Controls.Button { text: qsTr("Install"); enabled: updateClient.downloadReady && !updateClient.downloadInProgress; onClicked: updateClient.installUpdate() }
+                                    Controls.Button { text: qsTr("Cancel"); visible: updateClient.downloadCancelable; onClicked: updateClient.cancelDownload() }
                                 }
 
                                 Controls.ProgressBar {
@@ -5192,7 +5194,7 @@ ApplicationWindow {
         onAccepted: {
             if (updateClient.downloadReady) {
                 updateClient.installUpdate()
-            } else if (!(updateClient.downloadProgress > 0 && updateClient.downloadProgress < 1)) {
+            } else if (!updateClient.downloadInProgress) {
                 updateClient.downloadUpdate()
             }
         }
@@ -5600,7 +5602,8 @@ ApplicationWindow {
                 iconGlyph: "\uf0e7"
                 onTriggered: {
                     updateDialog.open()
-                    updateClient.checkNow()
+                    if (!updateClient.downloadInProgress && !updateClient.downloadReady)
+                        updateClient.checkNow()
                 }
             }
             Controls.AppMenuItem { text: qsTr("License & OpenSource"); iconGlyph: "\uf0a3"; onTriggered: licenseDialog.open() }
@@ -7797,17 +7800,18 @@ ApplicationWindow {
 
                             RowLayout {
                                 Layout.fillWidth: true
-                                Button { text: qsTr("Check Now"); onClicked: updateClient.checkNow() }
+                                Button { text: qsTr("Check Now"); enabled: !updateClient.downloadInProgress; onClicked: updateClient.checkNow() }
                                 Button {
                                     text: qsTr("Download")
-                                    enabled: updateClient.updateAvailable
+                                    enabled: updateClient.updateAvailable && !updateClient.downloadInProgress && !updateClient.downloadReady
                                     onClicked: updateClient.downloadUpdate()
                                 }
                                 Button {
                                     text: qsTr("Install")
-                                    enabled: updateClient.downloadReady
+                                    enabled: updateClient.downloadReady && !updateClient.downloadInProgress
                                     onClicked: updateClient.installUpdate()
                                 }
+                                Button { text: qsTr("Cancel"); visible: updateClient.downloadCancelable; onClicked: updateClient.cancelDownload() }
                                 Item { Layout.fillWidth: true }
                                 Label {
                                     text: updateClient.signatureVerified ? qsTr("Signature verified") : ""

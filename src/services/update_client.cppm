@@ -120,7 +120,8 @@ GENYDL_MODULE_EXPORT class UpdateClient : public QObject {
     Q_PROPERTY(QString status READ status NOTIFY statusChanged)
 
     //!< @brief Whether the updater is currently transferring a payload.
-    Q_PROPERTY(bool downloadInProgress READ downloadInProgress NOTIFY statusChanged)
+    Q_PROPERTY(bool downloadInProgress READ downloadInProgress NOTIFY downloadInProgressChanged)
+    Q_PROPERTY(bool downloadCancelable READ downloadCancelable NOTIFY downloadInProgressChanged)
 
     //!< @brief Last error text.
     Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
@@ -238,7 +239,8 @@ public:
     QString status() const { return m_status; }
 
     //!< @brief Return whether an update payload transfer is active.
-    bool downloadInProgress() const { return m_downloadReply != nullptr; }
+    bool downloadInProgress() const { return m_downloadBusy; }
+    bool downloadCancelable() const { return m_downloadReply != nullptr; }
 
     //!< @brief Return last error.
     QString lastError() const { return m_lastError; }
@@ -282,6 +284,7 @@ public:
      * after a successful update check.
      */
     Q_INVOKABLE void downloadUpdate();
+    Q_INVOKABLE void cancelDownload();
 
     /**
      * @brief Install the downloaded update (best-effort).
@@ -325,6 +328,7 @@ signals:
 
     //!< @brief Emitted when download progress changes.
     void downloadProgressChanged();
+    void downloadInProgressChanged();
 
     //!< @brief Emitted when download ready changes.
     void downloadReadyChanged();
@@ -356,6 +360,7 @@ private:
 
     //!< @brief Update status message.
     void setStatus(const QString& status);
+    void setDownloadBusy(bool busy);
 
     //!< @brief Update last error message.
     void setError(const QString& error);
@@ -452,6 +457,9 @@ private:
 
     QNetworkAccessManager m_net;                             //!< Network access manager.
     QNetworkReply* m_activeReply = nullptr;                  //!< Active check reply.
+    bool m_downloadBusy = false;
+    bool m_downloadCancelled = false;
+    QString m_downloadWriteError;
     QNetworkReply* m_downloadReply = nullptr;                //!< Active download reply.
     QFile* m_downloadFile = nullptr;                         //!< Active download file.
     QTimer m_autoTimer;                                      //!< Auto-check timer.

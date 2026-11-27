@@ -1,5 +1,14 @@
 #include <QtTest/QtTest>
 #include <QFile>
+#include <QCryptographicHash>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QStandardPaths>
+#include <QUuid>
+#include <QPointer>
+#include <QDir>
+#include <QSysInfo>
 #include <QTemporaryDir>
 #include <QFileInfo>
 #include <QHostAddress>
@@ -21,6 +30,7 @@ import genydl.utils.version_utils;
 import genydl.utils.download_utils;
 import genydl.utils.category_utils;
 import genydl.services.github_release_service;
+import genydl.services.update_client;
 import genydl.services.release_center_service;
 import genydl.services.torrent_session;
 import genydl.utils.ipfs_resolver;
@@ -137,6 +147,7 @@ class BackendTests final : public QObject
     Q_OBJECT
 
 private slots:
+    void updaterSingleFlight();
     void compareVersions_data();
     void compareVersions();
     void detectChecksumAlgo();
@@ -836,6 +847,110 @@ void BackendTests::singleStreamHttpErrorDoesNotPollutePartial()
     QFile file(path);
     QVERIFY(file.open(QIODevice::ReadOnly));
     QCOMPARE(file.readAll(), fixture.payload);
+}
+
+
+void BackendTests::updaterSingleFlight()
+{
+    const auto previousOrg = QCoreApplication::organizationName();
+    const auto previousApp = QCoreApplication::applicationName();
+    const auto previousVersion = QCoreApplication::applicationVersion();
+    const auto previousFormat = QSettings::defaultFormat();
+    QCoreApplication::setOrganizationName(QStringLiteral("GenyDL-QA"));
+    QCoreApplication::setApplicationName(QUuid::createUuid().toString(QUuid::WithoutBraces));
+    QCoreApplication::setApplicationVersion(QStringLiteral("1.2.200"));
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    const auto restore = qScopeGuard([&] {
+        QSettings isolated;
+        isolated.clear();
+        isolated.sync();
+        QSettings::setDefaultFormat(previousFormat);
+        QCoreApplication::setOrganizationName(previousOrg);
+        QCoreApplication::setApplicationName(previousApp);
+        QCoreApplication::setApplicationVersion(previousVersion);
+    });
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost, 0));
+    const QByteArray payload(8192, 'x');
+    const QString fileName = QStringLiteral("GenyDL-1.3.0-") + QUuid::createUuid().toString(QUuid::WithoutBraces)
+#if defined(Q_OS_MAC)
+        + QStringLiteral("-macos-") + QSysInfo::currentCpuArchitecture() + QStringLiteral(".dmg");
+#elif defined(Q_OS_WIN)
+        + QStringLiteral("-windows-") + QSysInfo::currentCpuArchitecture() + QStringLiteral(".exe");
+#else
+        + QStringLiteral("-linux-") + QSysInfo::currentCpuArchitecture() + QStringLiteral(".AppImage");
+#endif
+    const QString root = QStringLiteral("http://127.0.0.1:%1/").arg(server.serverPort());
+    const QString sha = QString::fromLatin1(QCryptographicHash::hash(payload, QCryptographicHash::Sha256).toHex());
+    const QByteArray manifest = QJsonDocument(QJsonObject{
+        {"version", "1.3.0"}, {"assets", QJsonArray{QJsonObject{
+            {"name", fileName}, {"url", root + fileName}, {"sha256", sha}}}}
+    }).toJson(QJsonDocument::Compact);
+    QPointer<QTcpSocket> pending;
+    int downloads = 0;
+    QObject::connect(&server, &QTcpServer::newConnection, &server, [&] {
+        while (auto *socket = server.nextPendingConnection()) {
+            QObject::connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
+            QObject::connect(socket, &QTcpSocket::readyRead, socket,
+                [&, socket, request = QByteArray{}, served = false]() mutable {
+                request += socket->readAll();
+                if (served || !request.contains("\r\n\r\n")) return;
+                served = true;
+                if (request.startsWith("GET /manifest ")) {
+                    socket->write("HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: " +
+                        QByteArray::number(manifest.size()) + "\r\n\r\n" + manifest);
+                    socket->disconnectFromHost();
+                } else {
+                    ++downloads;
+                    pending = socket;
+                    socket->write("HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: " +
+                        QByteArray::number(payload.size()) + "\r\n\r\n" + payload.left(512));
+                    socket->flush();
+                }
+            });
+        }
+    });
+    QString downloadDir = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
+    if (downloadDir.isEmpty()) downloadDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+    if (downloadDir.isEmpty()) downloadDir = QDir::tempPath();
+    QVERIFY(QDir().mkpath(downloadDir));
+    const QString expectedPath = QDir(downloadDir).filePath(fileName);
+    const auto cleanup = qScopeGuard([&] { QFile::remove(expectedPath); });
+    UpdateClient client;
+    client.setSourcePreference(QStringLiteral("website"));
+    client.setManifestUrl(root + QStringLiteral("manifest"));
+    client.setUpdateMode(QStringLiteral("custom"));
+    client.setRequireSignature(false);
+    client.checkNow();
+    QTRY_VERIFY_WITH_TIMEOUT(client.updateAvailable(), 5000);
+    client.downloadUpdate();
+    QTRY_COMPARE_WITH_TIMEOUT(downloads, 1, 5000);
+    QVERIFY(client.downloadInProgress());
+    QVERIFY(client.downloadCancelable());
+    client.checkNow();
+    client.downloadUpdate();
+    QVERIFY(client.lastError().isEmpty());
+    QCOMPARE(downloads, 1);
+    client.cancelDownload();
+    QTRY_VERIFY_WITH_TIMEOUT(!client.downloadInProgress(), 5000);
+    QVERIFY(!client.downloadReady());
+    QVERIFY(client.lastError().isEmpty());
+    QVERIFY(!QFile::exists(expectedPath));
+    client.downloadUpdate();
+    QTRY_COMPARE_WITH_TIMEOUT(downloads, 2, 5000);
+    QVERIFY(pending);
+    pending->write(payload.mid(512));
+    pending->disconnectFromHost();
+    QTRY_VERIFY_WITH_TIMEOUT(client.downloadReady(), 5000);
+    QVERIFY(!client.downloadInProgress());
+    QVERIFY(client.lastError().isEmpty());
+    QCOMPARE(client.downloadProgress(), qreal(1.0));
+    QFile file(client.downloadedPath());
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QCOMPARE(file.readAll(), payload);
+    file.close();
+    client.downloadUpdate();
+    QCOMPARE(downloads, 2);
 }
 
 QTEST_MAIN(BackendTests)

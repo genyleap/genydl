@@ -22,6 +22,11 @@ on:
           - linux-x64
           - linux-arm64
           - all
+      replace_v130:
+        description: "Rebuild all six v1.3.0 targets and replace the old release only after validation"
+        type: boolean
+        required: false
+        default: false
       recover_v130:
         description: "One-time v1.3.0 recovery: build macOS ARM64 and publish verified saved artifacts"
         type: boolean
@@ -640,6 +645,16 @@ jobs:
           path: ${{ env.SCCACHE_DIR }}
           key: ${{ steps.compiler-cache.outputs.cache-primary-key }}
 
+      - name: Run updater regression
+        if: github.event_name == 'workflow_dispatch' && inputs.replace_v130
+        shell: bash
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          set -euo pipefail
+          test -x build/genydl_backend_tests
+          build/genydl_backend_tests updaterSingleFlight
+
       - name: Create Linux x64 AppImage
         shell: bash
         run: |
@@ -1181,3 +1196,21 @@ jobs:
           # The existing draft is intentionally reused. Never delete a release.
           python3 scripts/recover-v130-release.py --upload
           gh release edit v1.3.0 --repo "$GITHUB_REPOSITORY" --draft=false --latest
+
+  replace-v130:
+    name: Verify and replace v1.3.0
+    if: github.event_name == 'workflow_dispatch' && inputs.replace_v130 && inputs.target == 'all' && github.ref == 'refs/heads/main'
+    needs: [desktop, linux-x64, linux-arm64]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: replacement-artifacts
+      - name: Validate packages and publish replacement
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/replace-v130-release.py
