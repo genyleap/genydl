@@ -905,6 +905,7 @@ set(qml_controls
     ui/Controls/FootMenu.qml
     ui/Controls/FootButton.qml
     ui/Controls/GroupBox.qml
+    ui/Controls/VerticalSettingsView.qml
     ui/Controls/Image.qml
     ui/Controls/DownloadDelegate.qml
     ui/Controls/DownloadListView.qml
@@ -1187,6 +1188,20 @@ if(GENYDL_BUILD_TESTS)
         GENYDL_NATIVE_TEST_EXECUTABLE="$<TARGET_FILE:${APP_NAME}>")
     add_dependencies(genydl_browser_bridge_tests ${APP_NAME})
     add_test(NAME genydl_browser_bridge_tests COMMAND genydl_browser_bridge_tests)
+
+    # Run the QML viewport regression without building the desktop application.
+    if(NOT CMAKE_CROSSCOMPILING)
+        find_program(GENYDL_QML_TEST_RUNNER NAMES qmltestrunner qmltestrunner6
+            HINTS "${Qt6_DIR}/../../../bin" NO_DEFAULT_PATH)
+        if(GENYDL_QML_TEST_RUNNER)
+            add_test(NAME genydl_vertical_settings_view
+                COMMAND "${GENYDL_QML_TEST_RUNNER}"
+                    -input "${CMAKE_CURRENT_SOURCE_DIR}/tests/qml/tst_vertical_settings_view.qml")
+            set_tests_properties(genydl_vertical_settings_view PROPERTIES
+                ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_DISABLE_DISK_CACHE=1"
+                TIMEOUT 30)
+        endif()
+    endif()
 endif()
 
 # -----------------------------------------------------------------------------

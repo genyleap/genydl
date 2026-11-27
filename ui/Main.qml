@@ -3738,7 +3738,7 @@ ApplicationWindow {
                     }
                 }
 
-                ScrollView {
+                Controls.VerticalSettingsView {
                     id: browserConfigView
                     Timer {
                         interval: 12000
@@ -3749,10 +3749,13 @@ ApplicationWindow {
                     }
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    clip: true
+                    contentHeight: browserSettingsContent.implicitHeight
 
                     ColumnLayout {
-                        width: Math.max(0, browserConfigView.availableWidth)
+                        id: browserSettingsContent
+                        x: browserConfigView.contentInset
+                        width: browserConfigView.availableWidth
+                        height: implicitHeight
                         spacing: 12
 
                         RowLayout {
@@ -3760,15 +3763,18 @@ ApplicationWindow {
                             spacing: 10
                             ColumnLayout {
                                 Layout.fillWidth: true
+                                Layout.minimumWidth: 0
                                 spacing: 3
                                 Controls.Label {
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.Wrap
                                     text: qsTr("Browser connections")
                                     font.bold: true
                                     font.pixelSize: Typography.t2
                                 }
                                 Controls.Label {
                                     Layout.fillWidth: true
-                                    wrapMode: Text.WordWrap
+                                    wrapMode: Text.Wrap
                                     color: Colors.textSecondary
                                     text: qsTr("Send selected links to GenyDL. Automatic capture is optional.")
                                 }
@@ -3789,6 +3795,7 @@ ApplicationWindow {
                                 readonly property var browserRow: modelData
                                 title: ""
                                 Layout.fillWidth: true
+                                Layout.minimumWidth: 0
                                 implicitHeight: browserEntryLayout.implicitHeight + topPadding + bottomPadding
                                 ColumnLayout {
                                     id: browserEntryLayout
@@ -3840,17 +3847,19 @@ ApplicationWindow {
                                         }
                                         ColumnLayout {
                                             Layout.fillWidth: true
+                                            Layout.minimumWidth: 0
                                             spacing: 3
                                             Controls.Label {
                                                 Layout.fillWidth: true
                                                 font.bold: true
+                                                wrapMode: Text.Wrap
                                                 text: browserRow.code === "firefox" ? qsTr("Firefox")
                                                     : browserRow.code === "chrome" ? qsTr("Google Chrome")
                                                     : browserRow.code === "opera" ? qsTr("Opera") : browserRow.name
                                             }
                                             Controls.Label {
                                                 Layout.fillWidth: true
-                                                wrapMode: Text.WordWrap
+                                                wrapMode: Text.Wrap
                                                 color: browserRow.connected
                                                     ? (Colors.lightMode ? "#19763d" : "#7cdda0")
                                                     : Colors.textSecondary
@@ -3880,7 +3889,7 @@ ApplicationWindow {
                                     Controls.Label {
                                         Layout.fillWidth: true
                                         visible: browserRow.enabled
-                                        wrapMode: Text.WordWrap
+                                        wrapMode: Text.Wrap
                                         color: Colors.textSecondary
                                         font.pixelSize: Typography.t4
                                         text: browserRow.connected
@@ -3892,10 +3901,13 @@ ApplicationWindow {
                                                     : qsTr("Open the extension folder, enable Developer mode in your browser, then select Load unpacked.")
                                     }
                                     Flow {
+                                        id: browserActions
                                         Layout.fillWidth: true
+                                        Layout.minimumWidth: 0
                                         spacing: 8
                                         visible: browserRow.enabled && !browserRow.connected
                                         Controls.Button {
+                                            width: Math.min(implicitWidth, browserActions.width)
                                             text: qsTr("Install extension")
                                             visible: browserRow.storeInstallAvailable
                                             enabled: browserRow.browserInstalled
@@ -3906,6 +3918,7 @@ ApplicationWindow {
                                             }
                                         }
                                         Controls.Button {
+                                            width: Math.min(implicitWidth, browserActions.width)
                                             text: qsTr("Open extension folder")
                                             visible: !browserRow.storeInstallAvailable
                                             enabled: browserRow.extensionFilesAvailable
@@ -3916,6 +3929,7 @@ ApplicationWindow {
                                             }
                                         }
                                         Controls.Button {
+                                            width: Math.min(implicitWidth, browserActions.width)
                                             text: qsTr("Open extension manager")
                                             visible: !browserRow.storeInstallAvailable
                                             enabled: browserRow.browserInstalled
@@ -3932,12 +3946,11 @@ ApplicationWindow {
 
                         Controls.Label {
                             Layout.fillWidth: true
-                            wrapMode: Text.WordWrap
+                            wrapMode: Text.Wrap
                             color: Colors.textSecondary
                             text: qsTr("A green check means the extension responded recently. Enabling a browser does not install its extension.")
                         }
 
-                        Item { Layout.fillHeight: true }
                     }
                 }
             }
