@@ -656,6 +656,7 @@ set(GENYDL_CHROMIUM_EXTENSION_ID "" CACHE STRING
     "Legacy shared Chromium extension ID (retained for compatibility)")
 set(GENYDL_CHROME_EXTENSION_ID "" CACHE STRING
     "Published Chrome Web Store extension ID")
+set(GENYDL_OPERA_EXTENSION_ID "" CACHE STRING "Published Opera Add-ons extension ID")
 set(GENYDL_EDGE_EXTENSION_ID "" CACHE STRING
     "Reserved for future Microsoft Edge support")
 set(GENYDL_BRAVE_EXTENSION_ID "" CACHE STRING
@@ -701,7 +702,7 @@ endif()
 # The Firefox and Chrome Manifest V3 backgrounds have different
 # schemas. Build two browser-ready distributions from the same JS/CSS assets.
 set(GENYDL_BROWSER_STAGE "${CMAKE_BINARY_DIR}/browser-extensions")
-foreach(genydl_browser IN ITEMS firefox chrome)
+foreach(genydl_browser IN ITEMS firefox chrome opera)
     file(MAKE_DIRECTORY "${GENYDL_BROWSER_STAGE}/${genydl_browser}")
     foreach(genydl_asset IN ITEMS background.js options.html options.js popup.html popup.css popup.js icon16.png icon32.png icon64.png icon128.png)
         configure_file(
@@ -716,6 +717,20 @@ configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/browser-extension/manifest.chromium.json"
     "${GENYDL_BROWSER_STAGE}/chrome/manifest.json" COPYONLY)
 
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/browser-extension/manifest.opera.json"
+    "${GENYDL_BROWSER_STAGE}/opera/manifest.json" COPYONLY)
+
+# Embed the unpacked distributions so installed GenyDL can export them too.
+set(genydl_extension_assets)
+foreach(browser IN ITEMS firefox chrome opera)
+    foreach(asset IN ITEMS manifest.json background.js options.html options.js popup.html popup.css popup.js icon16.png icon32.png icon64.png icon128.png)
+        list(APPEND genydl_extension_assets "${GENYDL_BROWSER_STAGE}/${browser}/${asset}")
+    endforeach()
+endforeach()
+qt_add_resources(${APP_NAME} GenyDLBrowserExtensions
+    PREFIX "/browser-extensions"
+    BASE "${GENYDL_BROWSER_STAGE}"
+    FILES ${genydl_extension_assets})
 add_custom_target(browser-extension-zip
     COMMAND ${CMAKE_COMMAND} -E chdir "${GENYDL_BROWSER_STAGE}/firefox"
         ${CMAKE_COMMAND} -E tar cf
@@ -727,7 +742,12 @@ add_custom_target(browser-extension-zip
         "${CMAKE_BINARY_DIR}/GenyDL-Chrome-extension.zip" --format=zip
         "manifest.json" "background.js" "options.html" "options.js"
         "popup.html" "popup.css" "popup.js" "icon16.png" "icon32.png" "icon64.png" "icon128.png"
-    COMMENT "Package separate Firefox and Chrome WebExtensions"
+    COMMAND ${CMAKE_COMMAND} -E chdir "${GENYDL_BROWSER_STAGE}/opera"
+        ${CMAKE_COMMAND} -E tar cf
+        "${CMAKE_BINARY_DIR}/GenyDL-Opera-extension.zip" --format=zip
+        "manifest.json" "background.js" "options.html" "options.js"
+        "popup.html" "popup.css" "popup.js" "icon16.png" "icon32.png" "icon64.png" "icon128.png"
+    COMMENT "Package Firefox, Chrome and Opera WebExtensions"
     VERBATIM)
 
 
@@ -916,6 +936,9 @@ set(qml_resource_files
 
     # Canonical icon assets (PREFIX /, so paths become :/resources/icons/...).
     resources/icons/app/GenyDL.png
+    resources/icons/browser-firefox.svg
+    resources/icons/browser-chrome.svg
+    resources/icons/browser-opera.svg
     resources/icons/tray/GenyDL.png
     resources/icons/tray/GenyDLTemplate.png
     resources/icons/tray/GenyDLTemplate@2x.png

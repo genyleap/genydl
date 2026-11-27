@@ -10,6 +10,7 @@ namespace genydl::browser {
 inline bool availableInRelease(const QString& code)
 {
     return code == QStringLiteral("firefox")
-        || code == QStringLiteral("chrome");
+        || code == QStringLiteral("chrome")
+        || code == QStringLiteral("opera");
 }
 }

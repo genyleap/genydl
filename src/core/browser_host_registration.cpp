@@ -145,6 +145,7 @@ void registerBrowserNativeHosts()
 
     const QString legacy = QString::fromLatin1(GENYDL_CHROMIUM_EXTENSION_ID);
     const QString chromeId = QString::fromLatin1(GENYDL_CHROME_EXTENSION_ID);
+    const QString operaId = QString::fromLatin1(GENYDL_OPERA_EXTENSION_ID);
     const QString edgeId = QString::fromLatin1(GENYDL_EDGE_EXTENSION_ID);
     const QString braveId = QString::fromLatin1(GENYDL_BRAVE_EXTENSION_ID);
     const QString vivaldiId = QString::fromLatin1(GENYDL_VIVALDI_EXTENSION_ID);
@@ -153,6 +154,9 @@ void registerBrowserNativeHosts()
         {QStringLiteral("chrome"), QStringLiteral("Google/Chrome"),
          QStringLiteral("google-chrome"), QStringLiteral("Google\\Chrome"),
          extensionIds(QStringLiteral("chrome"), {chromeId, legacy, QString::fromLatin1(kChromiumDevId)})},
+        {QStringLiteral("opera"), QStringLiteral("com.operasoftware.Opera"),
+         QStringLiteral("opera"), QStringLiteral("Opera Software\\Opera Stable"),
+         extensionIds(QStringLiteral("opera"), {operaId, QStringLiteral("dfhcknlghpfenoedpjajifdihnokkpbh")})},
         {QStringLiteral("edge"), QStringLiteral("Microsoft Edge"),
          QStringLiteral("microsoft-edge"), QStringLiteral("Microsoft\\Edge"),
          extensionIds(QStringLiteral("edge"), {edgeId, chromeId, legacy, QString::fromLatin1(kChromiumDevId)})},
@@ -190,7 +194,8 @@ void registerBrowserNativeHosts()
     for (const BrowserTarget& target : targets) {
         if (target.key != QStringLiteral("chrome")
             && target.key != QStringLiteral("brave")
-            && target.key != QStringLiteral("vivaldi"))
+            && target.key != QStringLiteral("vivaldi")
+            && target.key != QStringLiteral("opera"))
             continue;
         if (!browserEnabled(target.key)) continue;
         for (const QString& id : target.ids)

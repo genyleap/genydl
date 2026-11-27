@@ -22,7 +22,13 @@ assert.equal(firefox.browser_specific_settings.gecko.id,
 assert.ok(firefox.browser_specific_settings.gecko.data_collection_permissions.required
   .includes("websiteActivity"),
   "New Firefox releases must disclose URL transfer to the local desktop app");
-for (const manifest of [chrome, firefox]) {
+const opera = JSON.parse(fs.readFileSync("browser-extension/manifest.opera.json", "utf8"));
+const operaHex = crypto.createHash("sha256").update(Buffer.from(opera.key, "base64")).digest("hex").slice(0, 32);
+const operaId = [...operaHex].map(nibble => String.fromCharCode(97 + Number.parseInt(nibble, 16))).join("");
+assert.equal(operaId, "dfhcknlghpfenoedpjajifdihnokkpbh");
+assert.notEqual(operaId, id);
+assert.equal(opera.background.service_worker, "background.js");
+for (const manifest of [chrome, firefox, opera]) {
   assert.equal(manifest.action.default_popup, "popup.html");
   assert.equal(manifest.options_ui.page, "options.html");
   for (const [size, icon] of Object.entries(manifest.icons)) {
@@ -42,6 +48,7 @@ for (const file of ["browser_host_registration.cpp", "browser_integration_manage
     file + " must use the shared Firefox identity");
 }
 const registry = fs.readFileSync("src/core/browser_host_registration.cpp", "utf8");
+assert.ok(registry.includes(operaId), "Opera registration must include its own ID");
 assert.ok(registry.includes(id), "Native host must include the unpacked extension ID");
 assert.ok(registry.includes("browserIntegration/enabled/"),
   "Per-browser connection switches must affect native host registration");

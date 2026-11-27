@@ -17,6 +17,7 @@
 #include <QJsonObject>
 #include <QProcess>
 #include <QSettings>
+#include <QSaveFile>
 #include <QStandardPaths>
 #include <QStringList>
 #include <QVariantMap>
@@ -35,6 +36,7 @@ constexpr BrowserInfo kBrowsers[] = {
     {"firefox", "Firefox", "Firefox", "Mozilla", ".mozilla", "about:addons"},
     {"chrome", "Google Chrome", "Google Chrome", "Google/Chrome",
      ".config/google-chrome", "chrome://extensions"},
+    {"opera", "Opera", "Opera", "com.operasoftware.Opera", ".config/opera", "opera://extensions"},
     {"edge", "Microsoft Edge", "Microsoft Edge", "Microsoft Edge",
      ".config/microsoft-edge", "edge://extensions"},
     {"brave", "Brave", "Brave Browser", "BraveSoftware/Brave-Browser",
@@ -116,6 +118,7 @@ QStringList linuxNames(const QString& code)
     if (code == QStringLiteral("firefox")) return {QStringLiteral("firefox")};
     if (code == QStringLiteral("chrome"))
         return {QStringLiteral("google-chrome-stable"), QStringLiteral("google-chrome")};
+    if (code == QStringLiteral("opera")) return {QStringLiteral("opera")};
     if (code == QStringLiteral("edge"))
         return {QStringLiteral("microsoft-edge-stable"), QStringLiteral("microsoft-edge")};
     if (code == QStringLiteral("brave"))
@@ -142,6 +145,7 @@ QString browserExecutable(const BrowserInfo& browser)
     QString rel;
     if (code == QStringLiteral("firefox")) rel = QStringLiteral("Mozilla Firefox/firefox.exe");
     if (code == QStringLiteral("chrome")) rel = QStringLiteral("Google/Chrome/Application/chrome.exe");
+    if (code == QStringLiteral("opera")) rel = QStringLiteral("Programs/Opera/launcher.exe");
     if (code == QStringLiteral("edge")) rel = QStringLiteral("Microsoft/Edge/Application/msedge.exe");
     if (code == QStringLiteral("brave")) rel = QStringLiteral("BraveSoftware/Brave-Browser/Application/brave.exe");
     if (code == QStringLiteral("chromium")) rel = QStringLiteral("Chromium/Application/chrome.exe");
@@ -168,8 +172,10 @@ QString browserExecutable(const BrowserInfo& browser)
 
 QString developmentExtensionFolder(const QString& code)
 {
-    const QString name = code == QStringLiteral("firefox")
-        ? QStringLiteral("firefox") : QStringLiteral("chrome");
+    const QString name = code == QStringLiteral("firefox") || code == QStringLiteral("opera")
+        ? code : QStringLiteral("chrome");
+    if (QFileInfo::exists(QStringLiteral(":/browser-extensions/") + name + QStringLiteral("/manifest.json")))
+        return QStringLiteral(":/browser-extensions/") + name;
     QDir current(QCoreApplication::applicationDirPath());
     // Covers <build>/bin/GenyDL.app/Contents/MacOS as well as <build>/bin
     // while avoiding a hard-coded source checkout or user home directory.
@@ -198,6 +204,11 @@ bool isManifestReady(const QString& path, const QString& nativeExecutable,
         return obj.value(QStringLiteral("allowed_extensions")).toArray().contains(
             genydl::browser::firefoxExtensionId());
     const QJsonArray origins = obj.value(QStringLiteral("allowed_origins")).toArray();
+    if (code == QStringLiteral("opera")) {
+        const QString published = QString::fromLatin1(GENYDL_OPERA_EXTENSION_ID).trimmed();
+        return origins.contains(QStringLiteral("chrome-extension://dfhcknlghpfenoedpjajifdihnokkpbh/"))
+            || (published.size() == 32 && origins.contains(QStringLiteral("chrome-extension://") + published + QLatin1Char('/')));
+    }
     if (origins.contains(QStringLiteral("chrome-extension://dhmfclimdfgeemdecnghagiodcmiafdb/")))
         return true; // Pinned unpacked Chrome build.
     const QString publishedId = QString::fromLatin1(GENYDL_CHROME_EXTENSION_ID).trimmed();
@@ -304,8 +315,28 @@ bool BrowserIntegrationManager::openStoreListing(const QString& code) const
 bool BrowserIntegrationManager::revealExtensionFiles(const QString& code) const
 {
     if (!browserInfo(code)) return false;
-    const QString folder = developmentExtensionFolder(code);
-    if (folder.isEmpty()) return false;
+    const QString source = developmentExtensionFolder(code);
+    if (source.isEmpty() || !genydl::browser::availableInRelease(code)) return false;
+    const QString base = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    if (base.isEmpty()) return false;
+    const QString folder = QDir(base).filePath(QStringLiteral("browser-extensions/") + code);
+    if (!QDir().mkpath(folder)) return false;
+    const QStringList assets{QStringLiteral("manifest.json"), QStringLiteral("background.js"),
+        QStringLiteral("options.html"), QStringLiteral("options.js"), QStringLiteral("popup.html"),
+        QStringLiteral("popup.css"), QStringLiteral("popup.js"), QStringLiteral("icon16.png"),
+        QStringLiteral("icon32.png"), QStringLiteral("icon64.png"), QStringLiteral("icon128.png")};
+    for (const QString& asset : assets) {
+        QFile input(QDir(source).filePath(asset));
+        if (!input.open(QIODevice::ReadOnly)) return false;
+        const QByteArray bytes = input.readAll();
+        const QString destination = QDir(folder).filePath(asset);
+        QFile existing(destination);
+        if (existing.open(QIODevice::ReadOnly) && existing.readAll() == bytes) continue;
+        existing.close();
+        QSaveFile output(destination);
+        if (!output.open(QIODevice::WriteOnly) || output.write(bytes) != bytes.size()
+            || !output.commit()) return false;
+    }
     return QDesktopServices::openUrl(QUrl::fromLocalFile(folder));
 }
 

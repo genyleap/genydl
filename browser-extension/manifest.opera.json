@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "GenyDL – Download with GenyDL",
+  "description": "User-controlled downloads with the GenyDL desktop application.",
+  "version": "1.3.3",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAl5XjnD6PdAMriWIfUI5LNEU5Kw47CfdSG+IK2oZR0sM4gzSWrxvDA3hknFf+nWJ8UEiEPnnZbsICEfSoLzo2mZb2p4lU14tRRRGRw8+KxInomXoF+gkdqAn+j6q/8idwNdEaoYXVwfaGhHp5d1yZy50DpLTnSg0LYNfM5VXLcka+XpEU2x+hytKILqSAdnlQwbfXh8pm5y+997Uafv61uw74CNpWnLFHnkzraN2/qBPrS357s/wp09lKFgg8ger/Y44ydy5uQGjCiRpwFMpZ3nI0TkQPgv0b2l1ur71x+uVHLoNcnV2jWwb4nMs4pPc1Tj55BDGkugRiOyRtGGjRrwIDAQAB",
+  "icons": {
+    "16": "icon16.png",
+    "32": "icon32.png",
+    "64": "icon64.png",
+    "128": "icon128.png"
+  },
+  "permissions": [
+    "nativeMessaging",
+    "storage",
+    "contextMenus",
+    "alarms"
+  ],
+  "optional_permissions": [
+    "downloads"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "GenyDL download integration",
+    "default_icon": {
+      "16": "icon16.png",
+      "32": "icon32.png",
+      "64": "icon64.png",
+      "128": "icon128.png"
+    }
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "short_name": "GenyDL Opera"
+}

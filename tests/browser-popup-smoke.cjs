@@ -6,9 +6,9 @@ const vm = require("node:vm");
 const script = fs.readFileSync("browser-extension/background.js", "utf8");
 const popup = fs.readFileSync("browser-extension/popup.js", "utf8");
 const tick = async () => { for (let i=0;i<12;i++) await new Promise(r=>setImmediate(r)); };
-async function background(firefox,mode,kind,url,approved=true,sender="genydl") {
+async function background(firefox,mode,kind,url,approved=true,sender="genydl",opera=false) {
   let handler, packets=[];
-  const runtime = {id:"genydl", onMessage:{addListener(f){handler=f;}},
+  const runtime = {id:opera?"dfhcknlghpfenoedpjajifdihnokkpbh":"genydl", onMessage:{addListener(f){handler=f;}},
     ...(firefox?{getBrowserInfo:async()=>({name:"Firefox"})}:{}),
     connectNative(host) {
       assert.equal(host,"com.genyleap.genydl");
@@ -64,6 +64,8 @@ async function ui(mode,approved) {
     r=await background(firefox,"manual","ping",undefined,true,"other");
     assert.equal(r.reply,false);assert.equal(r.packets.length,0);count++;
   }
+  const opera = await background(false,"manual","ping",undefined,true,"dfhcknlghpfenoedpjajifdihnokkpbh",true);
+  assert.equal(opera.reply.ok,true);assert.equal(opera.packets[0].browser,"opera");count++;
   await ui("manual",true);count++;
   await ui("manual",false);count++;
   await ui("off",true);count++;

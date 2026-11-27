@@ -3755,27 +3755,29 @@ ApplicationWindow {
                         width: Math.max(320, browserConfigView.availableWidth)
                         spacing: 12
 
-                        Controls.GroupBox {
-                            title: qsTr("Download with GenyDL")
+                        RowLayout {
                             Layout.fillWidth: true
-                            implicitHeight: browserSetupLayout.implicitHeight
-                                + topPadding + bottomPadding
-
+                            spacing: 10
                             ColumnLayout {
-                                id: browserSetupLayout
-                                width: parent.width
-                                spacing: 8
-
+                                Layout.fillWidth: true
+                                spacing: 3
                                 Controls.Label {
-                                    Layout.fillWidth: true
-                                    wrapMode: Text.WordWrap
-                                    text: qsTr("Choose which browsers can send downloads to GenyDL. Turn a switch on or off at any time.")
+                                    text: qsTr("Browser connections")
+                                    font.bold: true
+                                    font.pixelSize: Typography.t2
                                 }
                                 Controls.Label {
                                     Layout.fillWidth: true
-                                    color: Colors.textMuted
                                     wrapMode: Text.WordWrap
-                                    text: qsTr("The browser extension must also be installed and allowed by that browser. Downloads remain manual by default. Automatic capture is an optional setting inside the extension.")
+                                    color: Colors.textSecondary
+                                    text: qsTr("Send selected links to GenyDL. Automatic capture is optional.")
+                                }
+                            }
+                            Controls.Button {
+                                text: qsTr("Refresh")
+                                onClicked: {
+                                    browserIntegration.repairNativeHosts()
+                                    appRoot.browserHostRows = browserIntegration.statuses()
                                 }
                             }
                         }
@@ -3787,21 +3789,58 @@ ApplicationWindow {
                                 readonly property var browserRow: modelData
                                 title: ""
                                 Layout.fillWidth: true
-                                implicitHeight: browserEntryLayout.implicitHeight
-                                    + topPadding + bottomPadding
-
+                                implicitHeight: browserEntryLayout.implicitHeight + topPadding + bottomPadding
                                 ColumnLayout {
                                     id: browserEntryLayout
                                     width: parent.width
-                                    spacing: 8
-
+                                    spacing: 10
                                     RowLayout {
                                         Layout.fillWidth: true
                                         spacing: 12
-
+                                        Item {
+                                            Layout.preferredWidth: 46
+                                            Layout.preferredHeight: 46
+                                            Image {
+                                                anchors.centerIn: parent
+                                                width: 38
+                                                height: 38
+                                                source: "qrc:/resources/icons/browser-" + browserRow.code + ".svg"
+                                                sourceSize.width: 76
+                                                sourceSize.height: 76
+                                                fillMode: Image.PreserveAspectFit
+                                            }
+                                            Rectangle {
+                                                visible: browserRow.connected
+                                                anchors.right: parent.right
+                                                anchors.bottom: parent.bottom
+                                                width: 19
+                                                height: 19
+                                                radius: width / 2
+                                                color: "#19763d"
+                                                border.color: Colors.background
+                                                border.width: 2
+                                                Canvas {
+                                                    anchors.fill: parent
+                                                    anchors.margins: 4
+                                                    onPaint: {
+                                                        const ctx = getContext("2d")
+                                                        ctx.clearRect(0, 0, width, height)
+                                                        ctx.strokeStyle = "#ffffff"
+                                                        ctx.lineWidth = 1.8
+                                                        ctx.lineCap = "round"
+                                                        ctx.lineJoin = "round"
+                                                        ctx.beginPath()
+                                                        ctx.moveTo(width * 0.12, height * 0.53)
+                                                        ctx.lineTo(width * 0.39, height * 0.79)
+                                                        ctx.lineTo(width * 0.88, height * 0.20)
+                                                        ctx.stroke()
+                                                    }
+                                                }
+                                            }
+                                        }
                                         ColumnLayout {
                                             Layout.fillWidth: true
-                                            spacing: 4
+                                            spacing: 3
                                             Controls.Label {
                                                 Layout.fillWidth: true
                                                 font.bold: true
@@ -3810,94 +3849,75 @@ ApplicationWindow {
                                             Controls.Label {
                                                 Layout.fillWidth: true
                                                 wrapMode: Text.WordWrap
-                                                color: Colors.textMuted
-                                                text: browserRow.supported
-                                                    ? (!browserRow.enabled
-                                                        ? qsTr("Off")
-                                                        : browserRow.connected
-                                                            ? qsTr("Connected — extension responded to GenyDL.")
-                                                            : browserRow.ready
-                                                                ? qsTr("Not connected — install or reload the browser extension.")
-                                                                : qsTr("Connection setup failed."))
-                                                    : qsTr("Safari extension is not built or installed yet.")
+                                                color: browserRow.connected
+                                                    ? (Colors.lightMode ? "#19763d" : "#7cdda0")
+                                                    : Colors.textSecondary
+                                                text: !browserRow.enabled ? qsTr("Disabled")
+                                                    : browserRow.connected ? qsTr("Connected")
+                                                    : !browserRow.browserInstalled ? qsTr("Browser not detected")
+                                                    : !browserRow.ready ? qsTr("Connection setup failed")
+                                                    : qsTr("Waiting for extension")
                                             }
                                         }
-
                                         Controls.Switch {
-                                            text: qsTr("Use")
+                                            Accessible.name: qsTr("Enable %1 integration").arg(browserRow.name)
                                             enabled: browserRow.supported
                                             checked: browserRow.enabled
                                             onToggled: {
-                                                const wanted = checked
-                                                const ok = browserIntegration.setEnabled(browserRow.code, wanted)
+                                                const ok = browserIntegration.setEnabled(browserRow.code, checked)
                                                 appRoot.browserHostRows = browserIntegration.statuses()
                                                 if (!ok)
-                                                    appRoot.appendNotification(
-                                                        qsTr("Browser setup"),
-                                                        qsTr("Could not update the connection. Check that GenyDL Native Host is installed."),
-                                                        "warning")
+                                                    appRoot.appendNotification(qsTr("Browser setup"),
+                                                        qsTr("Could not register the local browser connection."), "warning")
                                             }
                                         }
                                     }
-
-                                    RowLayout {
+                                    Controls.Label {
                                         Layout.fillWidth: true
-                                        visible: browserRow.supported && browserRow.enabled
+                                        visible: browserRow.enabled
+                                        wrapMode: Text.WordWrap
+                                        color: Colors.textSecondary
+                                        font.pixelSize: Typography.t4
+                                        text: browserRow.connected
+                                            ? qsTr("Right-click a link and choose Download with GenyDL.")
+                                            : !browserRow.browserInstalled
+                                                ? qsTr("Install this browser first, then refresh.")
+                                                : browserRow.storeInstallAvailable
+                                                    ? qsTr("Install the official extension, then check its connection.")
+                                                    : qsTr("Open the extension folder, enable Developer mode in your browser, then select Load unpacked.")
+                                    }
+                                    Flow {
+                                        Layout.fillWidth: true
                                         spacing: 8
-
-                                        Controls.Label {
-                                            Layout.fillWidth: true
-                                            wrapMode: Text.WordWrap
-                                            font.pixelSize: Typography.t4
-                                            color: Colors.textMuted
-                                            text: !browserRow.browserInstalled
-                                                ? qsTr("Browser not detected on this computer.")
-                                                : browserRow.connected
-                                                    ? qsTr("Ready. Right-click a link and choose Download with GenyDL.")
-                                                    : browserRow.storeInstallAvailable
-                                                        ? qsTr("Install GenyDL from the official browser store and accept the browser permission prompt.")
-                                                        : browserRow.code === "firefox"
-                                                            ? qsTr("Development setup: load manifest.json as a temporary add-on in Firefox.")
-                                                            : qsTr("Development setup: enable Developer mode, then Load unpacked using the GenyDL extension folder.")
-                                        }
-
+                                        visible: browserRow.enabled && !browserRow.connected
                                         Controls.Button {
-                                            text: qsTr("Extension files")
-                                            visible: !browserRow.connected
-                                                && !browserRow.storeInstallAvailable
-                                            enabled: browserRow.extensionFilesAvailable
-                                            onClicked: {
-                                                if (!browserIntegration.revealExtensionFiles(browserRow.code))
-                                                    appRoot.appendNotification(
-                                                        qsTr("Browser setup"),
-                                                        qsTr("Extension files are missing from this development build."),
-                                                        "warning")
-                                            }
-                                        }
-
-                                        Controls.Button {
-                                            text: qsTr("Install from official store")
-                                            visible: !browserRow.connected && browserRow.storeInstallAvailable
+                                            text: qsTr("Install extension")
+                                            visible: browserRow.storeInstallAvailable
                                             enabled: browserRow.browserInstalled
                                             onClicked: {
                                                 if (!browserIntegration.openStoreListing(browserRow.code))
-                                                    appRoot.appendNotification(
-                                                        qsTr("Browser setup"),
-                                                        qsTr("Could not open this browser's official extension store."),
-                                                        "warning")
+                                                    appRoot.appendNotification(qsTr("Browser setup"),
+                                                        qsTr("Could not open the extension store."), "warning")
                                             }
                                         }
-
                                         Controls.Button {
-                                            text: qsTr("Browser extension settings")
-                                            visible: !browserRow.connected && !browserRow.storeInstallAvailable
+                                            text: qsTr("Open extension folder")
+                                            visible: !browserRow.storeInstallAvailable
+                                            enabled: browserRow.extensionFilesAvailable
+                                            onClicked: {
+                                                if (!browserIntegration.revealExtensionFiles(browserRow.code))
+                                                    appRoot.appendNotification(qsTr("Browser setup"),
+                                                        qsTr("Extension files are missing."), "warning")
+                                            }
+                                        }
+                                        Controls.Button {
+                                            text: qsTr("Open extension manager")
+                                            visible: !browserRow.storeInstallAvailable
                                             enabled: browserRow.browserInstalled
                                             onClicked: {
                                                 if (!browserIntegration.openBrowserExtensions(browserRow.code))
-                                                    appRoot.appendNotification(
-                                                        qsTr("Browser setup"),
-                                                        qsTr("Could not open the extensions manager. Open it manually from your browser menu."),
-                                                        "warning")
+                                                    appRoot.appendNotification(qsTr("Browser setup"),
+                                                        qsTr("Open the extensions manager in your browser."), "warning")
                                             }
                                         }
                                     }
@@ -3908,8 +3928,8 @@ ApplicationWindow {
                         Controls.Label {
                             Layout.fillWidth: true
                             wrapMode: Text.WordWrap
-                            color: Colors.textMuted
-                            text: qsTr("Enabling a browser registers its local connection, not the extension itself. Where a verified store listing exists, use Install from official store. Otherwise this development build offers temporary extension files for testing.")
+                            color: Colors.textSecondary
+                            text: qsTr("A green check means the extension responded recently. Enabling a browser does not install its extension.")
                         }
 
                         Item { Layout.fillHeight: true }

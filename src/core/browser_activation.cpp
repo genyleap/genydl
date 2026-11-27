@@ -327,12 +327,22 @@ void BrowserActivation::onConnection()
                 reject(QStringLiteral("invalid protocol or request ID"));
                 return;
             }
+            const QString sourceBrowser = message.value(QStringLiteral("browser")).toString();
+            if (!sourceBrowser.isEmpty()) {
+                QSettings settings;
+                if (!genydl::browser::availableInRelease(sourceBrowser)
+                    || !settings.value(QStringLiteral("browserIntegration/enabled/") + sourceBrowser,
+                        sourceBrowser == QStringLiteral("firefox")).toBool()) {
+                    reject(QStringLiteral("browser integration disabled"));
+                    return;
+                }
+            }
             if (type == QStringLiteral("integration.ping")) {
                 const QString browser = message.value(QStringLiteral("browser")).toString();
                 static const QSet<QString> knownBrowsers{
                     QStringLiteral("firefox"), QStringLiteral("chrome"),
                     QStringLiteral("edge"), QStringLiteral("brave"),
-                    QStringLiteral("chromium"), QStringLiteral("vivaldi")
+                    QStringLiteral("chromium"), QStringLiteral("vivaldi"), QStringLiteral("opera")
                 };
                 if (version != 2 || !knownBrowsers.contains(browser)
                     || !genydl::browser::availableInRelease(browser)) {

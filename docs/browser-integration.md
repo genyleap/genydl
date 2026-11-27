@@ -1,15 +1,16 @@
-# GenyDL browser integration: Firefox and Chrome
+# GenyDL browser integration: Firefox, Chrome and Opera
 
 ## Release scope
 
-GenyDL currently exposes two browser integrations in **Configuration → Browsers**:
+GenyDL currently exposes three browser integrations in **Configuration → Browsers**:
 
 | Browser | Installation | Native Messaging | Default capture |
 | --- | --- | --- | --- |
 | Mozilla Firefox | [Official AMO listing](https://addons.mozilla.org/en-US/firefox/addon/genydl-download-with-genydl/) | Supported via GenyDL itself | Manual |
-| Google Chrome | Load unpacked from `<build>/browser-extensions/chrome` until Chrome Store approval | Supported via GenyDL itself | Manual |
+| Google Chrome | Load unpacked from the exported Chrome folder | Native Messaging implemented | Manual |
+| Opera | Load unpacked from the exported Opera folder | Native Messaging implemented; real Opera test pending | Manual |
 
-Both integrations can be switched on or off independently. Firefox defaults to enabled for continuity; Chrome is opt-in. An enabled switch registers the local native host, **not** the browser extension itself. The browser performs extension installation, permission grants, and extension enable/disable.
+All three integrations can be switched on or off independently. Firefox defaults to enabled for continuity; Chrome and Opera are opt-in. An enabled switch registers the local native host, **not** the browser extension itself. The browser performs extension installation, permission grants, and extension enable/disable.
 
 Edge, Brave, Chromium, Vivaldi and Safari are intentionally **not displayed or activated** in this release. Their existing adapters, protocol seams and configuration hooks remain available as future implementation points; they must not be advertised as tested or shipped support.
 
@@ -18,18 +19,19 @@ Edge, Brave, Chromium, Vivaldi and Safari are intentionally **not displayed or a
 1. Build and launch GenyDL. The app creates the native manifest automatically on startup (or when toggled). Its `path` is the absolute path of the **main GenyDL executable**, not a second helper executable.
 2. Open **Configuration → Browsers**, turn on the appropriate browser, and follow its installation action.
 3. **Firefox:** choose **Install from official store** and approve installation on Mozilla Add-ons. Confirm the add-on ID is `browser@genyleap.com`.
-4. **Chrome:** open `chrome://extensions`, enable **Developer mode**, select **Load unpacked**, and choose `<build>/browser-extensions/chrome`. The fixed development ID is `dhmfclimdfgeemdecnghagiodcmiafdb`. The Chrome package is `GenyDL-Chrome-extension.zip`. A published Chrome Store listing requires a separately configured verified URL and ID.
-5. Keep GenyDL running while opening or restarting the extension. A successful `integration.ping` heartbeat changes its state to **Connected**. Simply locating a browser or creating its host manifest is not evidence that the extension is connected.
-6. Right-click a direct HTTP(S) link and select **Download with GenyDL**. Review the desktop dialog and approve or reject.
+4. **Chrome:** open `chrome://extensions`, enable **Developer mode**, select **Load unpacked**, and choose the folder opened by **Open extension folder**. The fixed development ID is `dhmfclimdfgeemdecnghagiodcmiafdb`. The Chrome package is `GenyDL-Chrome-extension.zip`. A published Chrome Store listing requires a separately configured verified URL and ID.
+5. **Opera:** open `opera://extensions`, enable Developer mode, select Load unpacked and choose the exported Opera folder. The Opera package is `GenyDL-Opera-extension.zip`; its independent unpacked ID is `dfhcknlghpfenoedpjajifdihnokkpbh`. Store publication requires verification of the assigned ID. Both Chrome and Opera folders are exported from embedded application resources to a stable user-data path, including in installed builds.
+6. Keep GenyDL running while opening or restarting the extension. A successful `integration.ping` heartbeat changes its state to **Connected**. Simply locating a browser or creating its host manifest is not evidence that the extension is connected.
+7. Right-click a direct HTTP(S) link and select **Download with GenyDL**. Review the desktop dialog and approve or reject.
 
 If a user moves `GenyDL.app` or changes its installed path, use the connection repair function or restart GenyDL to re-register absolute paths.
 
 ## Single-executable native host
 
-There is **no separate `GenyDLNativeHost` executable**. Both Firefox and Chrome native manifests point at the main `GenyDL` executable. The browser's launch arguments select a pre-GUI headless mode:
+There is **no separate `GenyDLNativeHost` executable**. Firefox, Chrome and Opera native manifests point at the main `GenyDL` executable. The browser's launch arguments select a pre-GUI headless mode:
 
 - Firefox supplies the native manifest path and its add-on ID.
-- Chrome supplies its `chrome-extension://` origin.
+- Chromium-family browsers supply their `chrome-extension://` origin.
 
 The GenyDL entry point detects these before constructing `QApplication` or loading QML. The headless path instead uses `QCoreApplication`, reads a little-endian, 32-bit-length-prefixed JSON request from standard input, forwards the validated request to the running GUI over a private user-scoped `QLocalSocket`, and writes only a length-prefixed JSON response to standard output. Diagnostics must never be printed to stdout. User-approved download prompts can keep the native Port open while awaiting the decision. Ordinary browser pings must **not** automatically launch the GUI.
 
@@ -49,7 +51,7 @@ uses the current `protocolVersion:2` envelope.
 
 ## User-selected download policy
 
-- **Manual (default):** only the right-click action sends a link; normal browser downloads stay in the browser.
+- **Manual (default):** only explicit right-click or popup actions send a link; normal browser downloads stay in the browser.
 - **Ask (explicit opt-in):** recognized downloads are temporarily paused, and the browser resumes them if the user cancels, the host fails, or the timeout expires.
 - **Always (explicit opt-in):** eligible downloads transfer to the desktop only after a positive acknowledgment.
 - **Off:** no handoff.
@@ -68,8 +70,9 @@ ctest --test-dir <build> --output-on-failure
 node tests/browser-extension-smoke.cjs
 node tests/browser-options-smoke.cjs
 node tests/browser-setup-smoke.cjs
+node tests/browser-popup-smoke.cjs
 ```
 
 The native integration tests launch **GenyDL itself** with Firefox and Chrome-style arguments and validate the length-prefixed protocol and the approval flow. On macOS also test installation through the Mozilla store, browser heartbeat, GUI cold start on a right-click, 3+ simultaneous prompts, Ask/Always permissions, rejection and browser recovery.
 
-**Verification limitations:** Qt 6.12/macOS desktop runtime, real Firefox AMO round-trip, and Chrome user-installation behavior require testing on machines with those browsers. The code and store link alone do not establish that the end-to-end experience passed.
+**Verification limitations:** Qt 6.12/macOS desktop runtime, real Firefox AMO round-trip, and Chrome and Opera user-installation behavior require testing on machines with those browsers. The code and store link alone do not establish that the end-to-end experience passed.

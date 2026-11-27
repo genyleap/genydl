@@ -145,7 +145,7 @@ async function capture(item) {
     await downloadAction("pause", item.id);
     paused = true;
     const response = await nativeHandoff(url.href, filenameHint(item),
-      config.mode === "always" ? "download.request" : "download.prompt");
+      config.mode === "always" ? "download.request" : "download.prompt", await browserCode());
     if (response?.ok !== true) return;
 
     await downloadAction("cancel", item.id);
@@ -167,7 +167,7 @@ async function offerContextLink(info) {
   if ((await readSettings()).mode === "off") return;
   const url = validatedUrl(info.linkUrl || info.srcUrl);
   if (!url) return;
-  try { await nativeHandoff(url.href, "", "download.prompt"); }
+  try { await nativeHandoff(url.href, "", "download.prompt", await browserCode()); }
   catch (error) { console.warn("GenyDL is unavailable", String(error)); }
 }
 
@@ -191,6 +191,8 @@ async function browserCode() {
       && typeof globalThis.browser.runtime.getBrowserInfo === "function")
     return "firefox";
   const nav = globalThis.navigator;
+  if (nav?.userAgent?.includes("OPR/") || EXT.runtime.id === "dfhcknlghpfenoedpjajifdihnokkpbh"
+      || EXT.runtime.getManifest?.().short_name === "GenyDL Opera") return "opera";
   try {
     if (await nav?.brave?.isBrave?.()) return "brave";
   } catch { /* detection can be disabled by browser settings */ }
@@ -200,7 +202,8 @@ async function browserCode() {
   const brands = nav?.userAgentData?.brands || [];
   if (brands.some(b => b.brand === "Microsoft Edge")) return "edge";
   if (brands.some(b => b.brand === "Google Chrome")) return "chrome";
-  if (brands.some(b => b.brand === "Chromium")) return "chromium";
+  // Chromium-only UA hints are common in Google Chrome as well.
+  if (brands.some(b => b.brand === "Chromium")) return "chrome";
   // The currently shipped Chromium package targets Google Chrome.
   // Future browser adapters can override this code when they ship.
   if (ua.includes("Chrome/")) return "chrome";
@@ -217,7 +220,7 @@ async function handlePopup(message) {
       return {ok: false, message: "Enable a capture mode in Settings first."};
     const url = validatedUrl(message.url);
     if (!url) return {ok: false, message: "Enter a valid direct HTTP(S) link."};
-    const reply = await nativeHandoff(url.href, "", "download.prompt");
+    const reply = await nativeHandoff(url.href, "", "download.prompt", await browserCode());
     return {ok: reply?.ok === true, message: reply?.message || ""};
   } catch {
     return {ok: false, message: "GenyDL is unavailable. Open the desktop app and check browser integration."};
