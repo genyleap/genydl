@@ -8,9 +8,12 @@ GenyDL is a modern, high-performance download manager built with **C++23**, **Qt
 ![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
 ![C++](https://img.shields.io/badge/C%2B%2B%20Version-23-blue.svg)
 ![Qt](https://img.shields.io/badge/Qt-6.8%2B-brightgreen.svg)
-[![Firefox Add-on](https://img.shields.io/badge/Firefox-Install%20add--on-FF7139?logo=firefoxbrowser&logoColor=white)](https://addons.mozilla.org/en-US/firefox/addon/genydl-download-with-genydl/)
-[![Chrome](https://img.shields.io/badge/Chrome-Developer%20mode-4285F4?logo=googlechrome&logoColor=white)](#browser-add-ons)
-[![Opera](https://img.shields.io/badge/Opera-Developer%20mode-FF1B2D?logo=opera&logoColor=white)](#browser-add-ons)
+
+### Browser extensions
+
+<a href="https://addons.mozilla.org/en-US/firefox/addon/genydl-download-with-genydl/"><img src="docs/assets/store-badges/firefox-get-the-addon.svg" alt="Get the GenyDL add-on for Firefox" width="172" height="60"></a>
+
+Chrome and Opera: [install via Developer Mode](#browser-add-ons) · Store publication pending.
 
 ## 🚧 Project Status
 
