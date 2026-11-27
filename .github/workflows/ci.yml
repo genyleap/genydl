@@ -68,7 +68,7 @@ jobs:
           import json
           import os
 
-          desktop = [{"target":"macos-arm64","artifact_name":"GenyDL-macos-arm64","os":"macos-14","qt_version":"6.11.0","qt_arch":"clang_64","target_arch":"arm64","macos_deployment_target":"15.1"},{"target":"macos-x86_64","artifact_name":"GenyDL-macos-x86_64","os":"macos-15-intel","qt_version":"6.11.0","qt_arch":"clang_64","target_arch":"x86_64","macos_deployment_target":"15.1"},{"target":"windows-x64","artifact_name":"GenyDL-windows-x64","os":"windows-2022","qt_version":"6.10.3","qt_arch":"win64_msvc2022_64","cmake_arch":"x64","target_arch":"x86_64"},{"target":"windows-arm64","artifact_name":"GenyDL-windows-arm64","os":"windows-11-arm","qt_version":"6.10.3","qt_arch":"win64_msvc2022_arm64","cmake_arch":"ARM64","target_arch":"arm64"}]
+          desktop = [{"target":"macos-arm64","artifact_name":"GenyDL-macos-arm64","os":"macos-15","qt_version":"6.11.0","qt_arch":"clang_64","target_arch":"arm64","macos_deployment_target":"15.1"},{"target":"macos-x86_64","artifact_name":"GenyDL-macos-x86_64","os":"macos-15-intel","qt_version":"6.11.0","qt_arch":"clang_64","target_arch":"x86_64","macos_deployment_target":"15.1"},{"target":"windows-x64","artifact_name":"GenyDL-windows-x64","os":"windows-2022","qt_version":"6.10.3","qt_arch":"win64_msvc2022_64","cmake_arch":"x64","target_arch":"x86_64"},{"target":"windows-arm64","artifact_name":"GenyDL-windows-arm64","os":"windows-11-arm","qt_version":"6.10.3","qt_arch":"win64_msvc2022_arm64","cmake_arch":"ARM64","target_arch":"arm64"}]
           if os.environ["EVENT_NAME"] == "pull_request":
               selected = os.environ["PR_LABEL"].removeprefix("ci:")
           elif os.environ["EVENT_NAME"] == "workflow_dispatch":
