@@ -18,7 +18,7 @@ assert.equal(firefox.manifest_version, 3);
 assert.equal(chrome.background.service_worker, "background.js");
 assert.deepEqual(firefox.background.scripts, ["background.js"]);
 assert.equal(firefox.browser_specific_settings.gecko.id,
-  "download-links@genydl.genyleap.com");
+  "browser@genyleap.com");
 assert.ok(firefox.browser_specific_settings.gecko.data_collection_permissions.required
   .includes("browsingActivity"),
   "New Firefox releases must disclose URL transfer to the local desktop app");
@@ -27,6 +27,13 @@ for (const manifest of [chrome, firefox]) {
   assert.ok(manifest.permissions.includes("contextMenus"));
   assert.ok(!manifest.permissions.includes("downloads"));
   assert.ok(manifest.optional_permissions.includes("downloads"));
+}
+const identity = fs.readFileSync("src/core/browser_identity.h", "utf8");
+assert.ok(identity.includes(`QStringLiteral("${firefox.browser_specific_settings.gecko.id}")`),
+  "Firefox signed add-on ID must match the desktop native host identity");
+for (const file of ["browser_host_registration.cpp", "browser_integration_manager.cpp", "native_messaging_host.cpp"]) {
+  assert.ok(fs.readFileSync("src/core/" + file, "utf8").includes("genydl::browser::firefoxExtensionId()"),
+    file + " must use the shared Firefox identity");
 }
 const registry = fs.readFileSync("src/core/browser_host_registration.cpp", "utf8");
 assert.ok(registry.includes(id), "Native host must include the unpacked extension ID");

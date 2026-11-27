@@ -256,7 +256,7 @@ private slots:
         QVERIFY2(QFileInfo::exists(host), qPrintable(host));
         QProcess process;
         process.start(host, {QStringLiteral("/tmp/com.genyleap.genydl.json"),
-                             QStringLiteral("download-links@genydl.genyleap.com")});
+                             QStringLiteral("browser@genyleap.com")});
         QVERIFY(process.waitForStarted(3000));
 
         const QByteArray payload = QJsonDocument(QJsonObject{

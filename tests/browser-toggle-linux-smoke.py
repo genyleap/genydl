@@ -65,7 +65,7 @@ with tempfile.TemporaryDirectory(prefix="genydl-browser-toggle-") as scratch:
     firefox_manifest = json.loads(firefox.read_text())
     assert Path(firefox_manifest["path"]).resolve() == app, "Firefox host must be the GUI executable"
     assert firefox_manifest["allowed_extensions"] == [
-        "download-links@genydl.genyleap.com"
+        "browser@genyleap.com"
     ]
     settings.parent.mkdir(parents=True, exist_ok=True)
     # QSettings on Unix stores nested keys as a backslash-escaped subkey.

@@ -1,6 +1,7 @@
 #include "browser_integration_manager.h"
 #include "browser_host_registration.h"
 #include "browser_release_policy.h"
+#include "browser_identity.h"
 #include "browser_store_config.h"
 #include "browser_config.h"
 
@@ -195,7 +196,7 @@ bool isManifestReady(const QString& path, const QString& nativeExecutable,
         return false;
     if (code == QStringLiteral("firefox"))
         return obj.value(QStringLiteral("allowed_extensions")).toArray().contains(
-            QStringLiteral("download-links@genydl.genyleap.com"));
+            genydl::browser::firefoxExtensionId());
     const QJsonArray origins = obj.value(QStringLiteral("allowed_origins")).toArray();
     if (origins.contains(QStringLiteral("chrome-extension://dhmfclimdfgeemdecnghagiodcmiafdb/")))
         return true; // Pinned unpacked Chrome build.

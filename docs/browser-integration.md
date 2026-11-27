@@ -17,7 +17,7 @@ Edge, Brave, Chromium, Vivaldi and Safari are intentionally **not displayed or a
 
 1. Build and launch GenyDL. The app creates the native manifest automatically on startup (or when toggled). Its `path` is the absolute path of the **main GenyDL executable**, not a second helper executable.
 2. Open **Configuration → Browsers**, turn on the appropriate browser, and follow its installation action.
-3. **Firefox:** choose **Install from official store** and approve installation on Mozilla Add-ons. Confirm the add-on ID is `download-links@genydl.genyleap.com`.
+3. **Firefox:** choose **Install from official store** and approve installation on Mozilla Add-ons. Confirm the add-on ID is `browser@genyleap.com`.
 4. **Chrome:** open `chrome://extensions`, enable **Developer mode**, select **Load unpacked**, and choose `<build>/browser-extensions/chrome`. The fixed development ID is `dhmfclimdfgeemdecnghagiodcmiafdb`. The Chrome package is `GenyDL-Chrome-extension.zip`. A published Chrome Store listing requires a separately configured verified URL and ID.
 5. Keep GenyDL running while opening or restarting the extension. A successful `integration.ping` heartbeat changes its state to **Connected**. Simply locating a browser or creating its host manifest is not evidence that the extension is connected.
 6. Right-click a direct HTTP(S) link and select **Download with GenyDL**. Review the desktop dialog and approve or reject.

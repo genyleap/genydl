@@ -1,6 +1,7 @@
 // Browser native-messaging host. Exactly one framed JSON request per process.
 // No commands are executed from untrusted browser input.
 #include "browser_socket.h"
+#include "browser_identity.h"
 #include "native_messaging_host.h"
 #include <cstring>
 #include <QCoreApplication>
@@ -125,7 +126,7 @@ bool isNativeMessagingInvocation(int argc, char* argv[])
         || manifestFile == QStringLiteral("firefox-com.genyleap.genydl.json");
     return argc >= 3 && argv[2] && ownManifest
         && QString::fromLocal8Bit(argv[2])
-            == QStringLiteral("download-links@genydl.genyleap.com");
+            == genydl::browser::firefoxExtensionId();
 }
 
 int runNativeMessagingHost(int argc, char** argv)

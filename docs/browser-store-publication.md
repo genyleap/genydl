@@ -11,7 +11,7 @@ CI without explicit owner authorization.
 | Distribution channel | Artifact | Desktop browsers | Native messaging |
 | --- | --- | --- | --- |
 | Chrome Web Store | `GenyDL-Chromium-extension.zip` | Chrome, and compatible Brave/Vivaldi/Chromium variants | Configure the **real store-assigned ID** in GenyDL |
-| Firefox Add-ons (AMO) | `GenyDL-Firefox-extension.zip` | Firefox | Fixed `gecko.id`: `download-links@genydl.genyleap.com` |
+| Firefox Add-ons (AMO) | `GenyDL-Firefox-extension.zip` | Firefox | Fixed `gecko.id`: `browser@genyleap.com` |
 | Microsoft Edge Add-ons | Chromium ZIP | Microsoft Edge | Configure its **own store-assigned ID** |
 | Apple distribution | **not yet built** | Safari on macOS only | Requires separately signed Safari App Extension |
 

@@ -24,7 +24,7 @@
   },
   "browser_specific_settings": {
     "gecko": {
-      "id": "download-links@genydl.genyleap.com",
+      "id": "browser@genyleap.com",
       "data_collection_permissions": {
         "required": ["browsingActivity"]
       }

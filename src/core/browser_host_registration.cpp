@@ -1,5 +1,6 @@
 #include "browser_host_registration.h"
 #include "browser_release_policy.h"
+#include "browser_identity.h"
 #include "browser_config.h"
 
 #include <QCoreApplication>
@@ -19,7 +20,6 @@
 
 namespace {
 constexpr auto kHostName = "com.genyleap.genydl";
-constexpr auto kFirefoxId = "download-links@genydl.genyleap.com";
 // Stable ID generated from the public "key" in manifest.chromium.json.
 // This is for unpacked development builds, not an assertion of store identity.
 constexpr auto kChromiumDevId = "dhmfclimdfgeemdecnghagiodcmiafdb";
@@ -141,7 +141,7 @@ void registerBrowserNativeHosts()
 
     QJsonObject firefox(base);
     firefox.insert(QStringLiteral("allowed_extensions"),
-                   QJsonArray{QString::fromLatin1(kFirefoxId)});
+                   QJsonArray{genydl::browser::firefoxExtensionId()});
 
     const QString legacy = QString::fromLatin1(GENYDL_CHROMIUM_EXTENSION_ID);
     const QString chromeId = QString::fromLatin1(GENYDL_CHROME_EXTENSION_ID);
