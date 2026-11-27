@@ -35,6 +35,18 @@ The GenyDL entry point detects these before constructing `QApplication` or loadi
 
 The browser validates `allowed_extensions` (Firefox) or `allowed_origins` (Chrome) in `com.genyleap.genydl.json`; no wildcard extension origins are used. The native host replies only after the desktop reports acceptance, so a rejected or unreachable desktop leaves the browser download under browser control.
 
+### Published Firefox add-on compatibility
+
+The official AMO release 0.1.1 (`browser@genyleap.com`) sends a different
+wire envelope: `{version:1, kind:"ping"|"download", requestId, url?}`.
+The desktop recognizes this exact legacy format only for the registered
+Firefox invocation, honors the Firefox enable switch, translates ping into
+the current heartbeat and download into a manual desktop review prompt.
+The browser receives a positive acknowledgement only after approval.
+Legacy handoff currently supports direct HTTP(S) URLs; other schemes are
+rejected rather than falsely acknowledged. The repository's newer extension
+uses the current `protocolVersion:2` envelope.
+
 ## User-selected download policy
 
 - **Manual (default):** only the right-click action sends a link; normal browser downloads stay in the browser.

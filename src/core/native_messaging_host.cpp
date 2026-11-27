@@ -13,6 +13,8 @@
 #include <QJsonObject>
 #include <QLocalSocket>
 #include <QProcess>
+#include <QRegularExpression>
+#include <QSettings>
 #include <QThread>
 #include <QUrl>
 #include <cstdint>
@@ -47,6 +49,15 @@ void respond(bool ok, const QString& message, const QString& requestId = {})
     std::cout.write(len, 4);
     std::cout.write(data.constData(), data.size());
     std::cout.flush();
+}
+
+bool isFirefoxInvocation(int argc, char** argv)
+{
+    if (argc < 3 || !argv || !argv[1] || !argv[2]) return false;
+    const QString manifestFile = QFileInfo(QString::fromLocal8Bit(argv[1])).fileName();
+    return (manifestFile == QStringLiteral("com.genyleap.genydl.json")
+            || manifestFile == QStringLiteral("firefox-com.genyleap.genydl.json"))
+        && QString::fromLocal8Bit(argv[2]) == genydl::browser::firefoxExtensionId();
 }
 
 bool sendToApplication(const QByteArray& json, bool waitForUser,
@@ -119,18 +130,12 @@ bool isNativeMessagingInvocation(int argc, char* argv[])
             && !origin.host().isEmpty();
     }
 
-    // Firefox passes its native manifest path followed by the add-on ID.
-    // Requiring both avoids starting the headless host for a normal app open.
-    const QString manifestFile = QFileInfo(first).fileName();
-    const bool ownManifest = manifestFile == QStringLiteral("com.genyleap.genydl.json")
-        || manifestFile == QStringLiteral("firefox-com.genyleap.genydl.json");
-    return argc >= 3 && argv[2] && ownManifest
-        && QString::fromLocal8Bit(argv[2])
-            == genydl::browser::firefoxExtensionId();
+    return isFirefoxInvocation(argc, argv);
 }
 
 int runNativeMessagingHost(int argc, char** argv)
 {
+    const bool fromFirefox = isFirefoxInvocation(argc, argv);
     QCoreApplication app(argc, argv);
     QCoreApplication::setOrganizationName(QStringLiteral("Genyleap"));
     QCoreApplication::setApplicationName(QStringLiteral("GenyDL"));
@@ -154,7 +159,49 @@ int runNativeMessagingHost(int argc, char** argv)
         return 1;
     }
     const QJsonDocument document = QJsonDocument::fromJson(data);
-    const QJsonObject request = document.object();
+    QJsonObject request = document.object();
+    // AMO's published 0.1.1 add-on uses {version:1, kind:"ping"|"download",
+    // requestId, url?}, not the newer type/protocolVersion envelope. Normalize
+    // only that exact legacy shape from the registered Firefox identity.
+    const bool legacyFirefox = fromFirefox && document.isObject()
+        && !request.contains(QStringLiteral("type"))
+        && !request.contains(QStringLiteral("protocolVersion"))
+        && request.value(QStringLiteral("version")).toDouble(-1) == 1;
+    if (legacyFirefox) {
+        const QString kind = request.value(QStringLiteral("kind")).toString();
+        const QString id = request.value(QStringLiteral("requestId")).toString();
+        static const QRegularExpression validId(QStringLiteral("^[A-Za-z0-9_-]{1,96}$"));
+        if ((kind != QStringLiteral("ping") && kind != QStringLiteral("download"))
+            || !validId.match(id).hasMatch()) {
+            respond(false, QStringLiteral("invalid legacy Firefox request"), id);
+            return 1;
+        }
+        QSettings settings;
+        if (!settings.value(QStringLiteral("browserIntegration/enabled/firefox"), true).toBool()) {
+            respond(false, QStringLiteral("Firefox integration disabled"), id);
+            return 0;
+        }
+        if (kind == QStringLiteral("download")) {
+            const QUrl url = QUrl::fromEncoded(
+                request.value(QStringLiteral("url")).toString().toUtf8(), QUrl::StrictMode);
+            if (!url.isValid() || (url.scheme() != QStringLiteral("http")
+                                  && url.scheme() != QStringLiteral("https"))) {
+                respond(false, QStringLiteral("Browser handoff supports direct HTTP(S) links"), id);
+                return 0;
+            }
+        }
+        // Legacy capture is manual: always open the review dialog, never
+        // convert it into an automatic download.
+        request = QJsonObject{
+            {QStringLiteral("protocolVersion"), 2},
+            {QStringLiteral("requestId"), id},
+            {QStringLiteral("type"), kind == QStringLiteral("ping")
+                ? QStringLiteral("integration.ping") : QStringLiteral("download.prompt")},
+            {QStringLiteral("browser"), QStringLiteral("firefox")},
+            {QStringLiteral("url"), request.value(QStringLiteral("url"))}
+        };
+        data = QJsonDocument(request).toJson(QJsonDocument::Compact);
+    }
     const QString type = request.value(QStringLiteral("type")).toString();
     const QString requestId = request.value(QStringLiteral("requestId")).toString();
     const int version = request.value(QStringLiteral("protocolVersion")).toInt(1);
@@ -172,7 +219,11 @@ int runNativeMessagingHost(int argc, char** argv)
     const bool accepted = sendToApplication(
         data, type == QStringLiteral("download.prompt"), requestId,
         type != QStringLiteral("integration.ping"));
-    respond(accepted, accepted ? QStringLiteral("GenyDL accepted download")
-                              : QStringLiteral("not accepted; keep browser download"), requestId);
+    const bool ping = type == QStringLiteral("integration.ping");
+    respond(accepted, ping
+        ? (accepted ? QStringLiteral("GenyDL integration active")
+                    : QStringLiteral("GenyDL is not connected or integration is disabled"))
+        : (accepted ? QStringLiteral("GenyDL accepted download")
+                    : QStringLiteral("not accepted; keep browser download")), requestId);
     return 0;
 }

@@ -129,6 +129,120 @@ private slots:
         ping(false);
     }
 
+    // Exact wire envelope extracted from the published Firefox 0.1.1 XPI.
+    void publishedFirefoxProtocol_data()
+    {
+        QTest::addColumn<QString>("kind");
+        QTest::addColumn<QString>("url");
+        QTest::addColumn<bool>("enabled");
+        QTest::addColumn<bool>("fromFirefox");
+        QTest::addColumn<bool>("approve");
+        QTest::addColumn<bool>("expectPrompt");
+        QTest::addColumn<bool>("expectOk");
+        const QString validUrl = QStringLiteral("https://example.org/published-addon.zip");
+        QTest::newRow("ping") << QStringLiteral("ping") << QString() << true << true << false << false << true;
+        QTest::newRow("disabled-ping") << QStringLiteral("ping") << QString() << false << true << false << false << false;
+        QTest::newRow("download-approve") << QStringLiteral("download") << validUrl << true << true << true << true << true;
+        QTest::newRow("download-decline") << QStringLiteral("download") << validUrl << true << true << false << true << false;
+        QTest::newRow("disabled-download") << QStringLiteral("download") << validUrl << false << true << false << false << false;
+        QTest::newRow("unsafe-url") << QStringLiteral("download") << QStringLiteral("file:///tmp/private") << true << true << false << false << false;
+        QTest::newRow("unsupported-kind") << QStringLiteral("unknown") << QString() << true << true << false << false << false;
+        QTest::newRow("not-firefox") << QStringLiteral("ping") << QString() << true << false << false << false << false;
+    }
+
+    void publishedFirefoxProtocol()
+    {
+        QFETCH(QString, kind);
+        QFETCH(QString, url);
+        QFETCH(bool, enabled);
+        QFETCH(bool, fromFirefox);
+        QFETCH(bool, approve);
+        QFETCH(bool, expectPrompt);
+        QFETCH(bool, expectOk);
+
+        const QString enabledKey = QStringLiteral("browserIntegration/enabled/firefox");
+        const QString seenKey = QStringLiteral("browserIntegration/lastSeen/firefox");
+        QSettings settings;
+        struct Restore {
+            QString e, s;
+            QVariant pe, ps;
+            bool he, hs;
+            ~Restore() {
+                QSettings settings;
+                if (he) settings.setValue(e, pe); else settings.remove(e);
+                if (hs) settings.setValue(s, ps); else settings.remove(s);
+                settings.sync();
+            }
+        } restore{enabledKey, seenKey, settings.value(enabledKey), settings.value(seenKey),
+                  settings.contains(enabledKey), settings.contains(seenKey)};
+        settings.setValue(enabledKey, enabled);
+        settings.remove(seenKey);
+        settings.sync();
+
+        int directAdds = 0;
+        int prompts = 0;
+        BrowserActivation activation([&](const QUrl&, const QString&) {
+            ++directAdds;
+            return true;
+        });
+        QVERIFY(activation.start({}));
+        connect(&activation, &BrowserActivation::promptRequested,
+                &activation, [&](const QString& requestedUrl, const QString&) {
+            ++prompts;
+            QCOMPARE(requestedUrl, url);
+        });
+
+        QProcess process;
+        const QString host = QStringLiteral(GENYDL_NATIVE_TEST_EXECUTABLE);
+        const QStringList arguments = fromFirefox
+            ? QStringList{QStringLiteral("/tmp/com.genyleap.genydl.json"),
+                          QStringLiteral("browser@genyleap.com")}
+            : QStringList{QStringLiteral("chrome-extension://dhmfclimdfgeemdecnghagiodcmiafdb/")};
+        process.start(host, arguments);
+        QVERIFY(process.waitForStarted(3000));
+
+        const QString id = QStringLiteral("ea86ac68-9822-4c0d-acfb-6af941d1902e");
+        QJsonObject request{
+            {QStringLiteral("version"), 1},
+            {QStringLiteral("kind"), kind},
+            {QStringLiteral("requestId"), id}
+        };
+        if (!url.isEmpty()) request.insert(QStringLiteral("url"), url);
+        const QByteArray payload = QJsonDocument(request).toJson(QJsonDocument::Compact);
+        const quint32 size = static_cast<quint32>(payload.size());
+        QByteArray frame;
+        for (int shift = 0; shift < 32; shift += 8)
+            frame.append(static_cast<char>((size >> shift) & 255));
+        frame += payload;
+        QCOMPARE(process.write(frame), frame.size());
+        process.closeWriteChannel();
+
+        if (expectPrompt) {
+            QTRY_COMPARE_WITH_TIMEOUT(prompts, 1, 3000);
+            QCOMPARE(process.state(), QProcess::Running);
+            QCOMPARE(process.bytesAvailable(), qint64(0));
+            QCOMPARE(directAdds, 0);
+            activation.finishPrompt(approve);
+        }
+        QTRY_VERIFY_WITH_TIMEOUT(process.state() == QProcess::NotRunning, 6000);
+        const QByteArray output = process.readAllStandardOutput();
+        QVERIFY(output.size() >= 4);
+        const quint32 length =
+            static_cast<quint8>(output[0])
+            | (static_cast<quint32>(static_cast<quint8>(output[1])) << 8)
+            | (static_cast<quint32>(static_cast<quint8>(output[2])) << 16)
+            | (static_cast<quint32>(static_cast<quint8>(output[3])) << 24);
+        QCOMPARE(static_cast<quint32>(output.size() - 4), length);
+        const QJsonObject reply = QJsonDocument::fromJson(output.mid(4)).object();
+        QCOMPARE(reply.value(QStringLiteral("ok")).toBool(), expectOk);
+        QCOMPARE(reply.value(QStringLiteral("requestId")).toString(), id);
+        QCOMPARE(prompts, expectPrompt ? 1 : 0);
+        QCOMPARE(directAdds, 0);
+        settings.sync();
+        QCOMPARE(settings.contains(seenKey),
+                 kind == QStringLiteral("ping") && expectOk);
+    }
+
     void nativeHostEndToEnd() {
         QString received;
         QString receivedFilename;
