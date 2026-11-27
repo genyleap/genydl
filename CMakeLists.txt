@@ -720,6 +720,26 @@ configure_file(
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/browser-extension/manifest.opera.json"
     "${GENYDL_BROWSER_STAGE}/opera/manifest.json" COPYONLY)
 
+# Store distribution must not pin the development identity. Keep the local
+# unpacked extension intact, but let Opera assign the published identity.
+file(MAKE_DIRECTORY "${GENYDL_BROWSER_STAGE}/opera-store")
+foreach(asset IN ITEMS options.html options.js popup.html popup.css popup.js icon16.png icon32.png icon64.png icon128.png)
+    configure_file("${CMAKE_CURRENT_SOURCE_DIR}/browser-extension/${asset}"
+        "${GENYDL_BROWSER_STAGE}/opera-store/${asset}" COPYONLY)
+endforeach()
+file(READ "${GENYDL_BROWSER_STAGE}/opera/manifest.json" genydl_opera_store_manifest)
+string(JSON genydl_opera_store_manifest REMOVE "${genydl_opera_store_manifest}" key)
+string(JSON genydl_opera_store_manifest SET "${genydl_opera_store_manifest}" short_name "\"GenyDL\"")
+file(CONFIGURE OUTPUT "${GENYDL_BROWSER_STAGE}/opera-store/manifest.json"
+    CONTENT "${genydl_opera_store_manifest}\n" @ONLY)
+# Explicit package identity, independent of the assigned ID or reduced UA.
+file(READ "${GENYDL_BROWSER_STAGE}/opera/background.js" genydl_opera_store_background)
+string(REPLACE "const GENYDL_PACKAGE_BROWSER = \"\";" "const GENYDL_PACKAGE_BROWSER = \"opera\";"
+    genydl_opera_store_background "${genydl_opera_store_background}")
+file(CONFIGURE OUTPUT "${GENYDL_BROWSER_STAGE}/opera-store/background.js"
+    CONTENT "${genydl_opera_store_background}" @ONLY)
+
+
 # Embed the unpacked distributions so installed GenyDL can export them too.
 set(genydl_extension_assets)
 foreach(browser IN ITEMS firefox chrome opera)
@@ -745,6 +765,11 @@ add_custom_target(browser-extension-zip
     COMMAND ${CMAKE_COMMAND} -E chdir "${GENYDL_BROWSER_STAGE}/opera"
         ${CMAKE_COMMAND} -E tar cf
         "${CMAKE_BINARY_DIR}/GenyDL-Opera-extension.zip" --format=zip
+        "manifest.json" "background.js" "options.html" "options.js"
+        "popup.html" "popup.css" "popup.js" "icon16.png" "icon32.png" "icon64.png" "icon128.png"
+    COMMAND ${CMAKE_COMMAND} -E chdir "${GENYDL_BROWSER_STAGE}/opera-store"
+        ${CMAKE_COMMAND} -E tar cf
+        "${CMAKE_BINARY_DIR}/GenyDL-Opera-store.zip" --format=zip
         "manifest.json" "background.js" "options.html" "options.js"
         "popup.html" "popup.css" "popup.js" "icon16.png" "icon32.png" "icon64.png" "icon128.png"
     COMMENT "Package Firefox, Chrome and Opera WebExtensions"

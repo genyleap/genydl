@@ -1,7 +1,6 @@
 # Publishing GenyDL browser extensions (2026)
 
-**Status:** Firefox 0.1.1 is published on AMO. The repository prepares a
-new update for owner submission; Chrome remains unpacked/developer-mode. Draft store listing text, privacy explanations and
+**Status:** Firefox 1.3.3 is published on AMO. Chrome and Opera remain unpacked/developer-mode until their store listings are verified. Draft store listing text, privacy explanations and
 reviewer instructions are in `docs/browser-store-submission-materials.md`.
 Do not create developer accounts, pay fees, upload, claim approval, or enable
 CI without explicit owner authorization.
@@ -12,6 +11,7 @@ CI without explicit owner authorization.
 | --- | --- | --- | --- |
 | Chrome Web Store | `GenyDL-Chrome-extension.zip` | Chrome, and compatible Brave/Vivaldi/Chromium variants | Configure the **real store-assigned ID** in GenyDL |
 | Firefox Add-ons (AMO) | `GenyDL-Firefox-extension.zip` | Firefox | Fixed `gecko.id`: `browser@genyleap.com` |
+| Opera Add-ons | `GenyDL-Opera-store.zip` | Opera | Configure the **real store-assigned ID** in GenyDL |
 | Microsoft Edge Add-ons | Chromium ZIP | Microsoft Edge | Configure its **own store-assigned ID** |
 | Apple distribution | **not yet built** | Safari on macOS only | Requires separately signed Safari App Extension |
 
@@ -82,6 +82,24 @@ https://extensionworkshop.com/documentation/develop/firefox-builtin-data-consent
 6. After review/signing, install from the official AMO listing and test its
    connection to the desktop native host. Unlisted self-distribution uses a
    different signing/update route and is not the desired consumer flow.
+
+### Opera Add-ons
+
+Official submission: https://addons.opera.com/developer/upload/
+Guidelines: https://help.opera.com/en/extensions/publishing-guidelines/
+
+Build the `browser-extension-zip` target and upload
+`GenyDL-Opera-store.zip`, not the unpacked-development ZIP.
+The store variant uses Manifest V3, omits the development-only key,
+and uses neutral GenyDL branding. Its background identifies the package
+as Opera regardless of its assigned ID. The unpacked package retains its
+pinned ID. Do not assume the upload server accepts the package merely
+because local ZIP/manifest checks pass.
+
+After Opera assigns an ID, set `GENYDL_OPERA_EXTENSION_ID` to that verified
+ID for the desktop build, and verify the native messaging connection.
+If the upload endpoint returns HTTP 400, inspect its Network response
+body for the actual validation error (never share session tokens).
 
 ### 4. Microsoft Edge Add-ons
 

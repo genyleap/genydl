@@ -54,7 +54,7 @@ To build the standalone add-on ZIPs from source (without compiling the desktop a
 cmake --build build --target browser-extension-zip
 ```
 
-Use an already configured build directory; the output files are `GenyDL-Firefox-extension.zip`, `GenyDL-Chrome-extension.zip` and `GenyDL-Opera-extension.zip`. Unpacked users must extract ZIPs before loading. These are not signed store packages.
+Use an already configured build directory; the output files are `GenyDL-Firefox-extension.zip`, `GenyDL-Chrome-extension.zip` and `GenyDL-Opera-extension.zip`. Unpacked users must extract ZIPs before loading. These are not signed store packages. For Opera Add-ons submission, use the separate `GenyDL-Opera-store.zip` (without the development key); see the store submission guide below.
 
 [Installation and troubleshooting](docs/browser-integration.md) · [Store submission guide](docs/browser-store-publication.md)
 

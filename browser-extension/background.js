@@ -186,7 +186,10 @@ function registerMenu() {
     EXT.contextMenus.removeAll().then(create).catch(console.warn);
   else EXT.contextMenus.removeAll(create);
 }
+const GENYDL_PACKAGE_BROWSER = "";
+
 async function browserCode() {
+  if (GENYDL_PACKAGE_BROWSER) return GENYDL_PACKAGE_BROWSER;
   if (typeof globalThis.browser !== "undefined"
       && typeof globalThis.browser.runtime.getBrowserInfo === "function")
     return "firefox";
